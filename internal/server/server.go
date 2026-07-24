@@ -704,12 +704,15 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				providerBody = translated
 			}
 		}
-		if sourceFormat == format.OpenAI && (provider.APIType == "claude" || provider.APIType == "anthropic") {
+		if sourceFormat == format.OpenAI && (provider.APIType == "claude" || provider.APIType == "anthropic" || (provider.APIType == "github" && strings.HasPrefix(strings.ToLower(model), "claude-"))) {
 			var openAI map[string]any
 			if json.Unmarshal(body, &openAI) == nil {
 				stream, _ := openAI["stream"].(bool)
 				providerBody, _ = json.Marshal(translator.OpenAIToClaudeRequest(model, openAI, stream))
 				providerPath = "/messages"
+				if provider.APIType == "github" {
+					providerPath = "/v1/messages"
+				}
 				if s.proxyTranslatedResponse(w, r, provider.BaseURL, providerPath, providerBody, provider.APIKey, true) {
 					return
 				}
