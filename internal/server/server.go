@@ -3377,7 +3377,7 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
 			return
 		}
-		baseURL := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
+		baseURL := providerProxyBaseURL(provider)
 		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
 			return
 		}
@@ -3385,6 +3385,16 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 	if !s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"})
 	}
+}
+
+func providerProxyBaseURL(provider providers.Provider) string {
+	if provider.ID == "xiaomi-tokenplan" {
+		regions := map[string]string{"sgp": "https://token-plan-sgp.xiaomimimo.com/v1", "cn": "https://token-plan-cn.xiaomimimo.com/v1", "ams": "https://token-plan-ams.xiaomimimo.com/v1"}
+		if region := stringValue(provider.ProviderSpecificData["region"]); regions[region] != "" {
+			return regions[region]
+		}
+	}
+	return strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
 }
 
 func (s *Server) proxyAzure(w http.ResponseWriter, incoming *http.Request, path string, body []byte, apiKey string, data map[string]any) bool {
