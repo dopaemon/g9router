@@ -34,10 +34,30 @@ func (m *Manager) Status() map[string]any {
 		installDir = filepath.Join(root, "g9router", "pxpipe")
 	}
 	installed := installDir != "" && fileExists(filepath.Join(installDir, "node_modules", "pxpipe-proxy", "package.json"))
-	return map[string]any{"installed": installed, "loaded": m.loaded, "available": false, "module": "go-fail-open", "installPath": installDir}
+	available := installed && fileExists(filepath.Join(installDir, "node_modules", "pxpipe-proxy", "dist", "core", "library.js"))
+	return map[string]any{"installed": installed, "loaded": m.loaded, "available": available, "module": "node-bridge", "installPath": installDir}
 }
 
 func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+func (m *Manager) Health(ctx context.Context) map[string]any {
+	status := m.Status()
+	checks := []map[string]any{{"name": "module", "ok": status["available"] == true}}
+	if status["available"] != true {
+		return map[string]any{"healthy": false, "checks": checks, "error": "PXPIPE module is not installed"}
+	}
+	installPath, _ := status["installPath"].(string)
+	entry := filepath.Join(installPath, "node_modules", "pxpipe-proxy", "dist", "core", "library.js")
+	script := `const m=await import(process.argv[1]);if(typeof m.transformAnthropicMessages!=="function")throw new Error("transformAnthropicMessages missing");const b=new TextEncoder().encode(JSON.stringify({model:"claude-fable-5",max_tokens:16,messages:[{role:"user",content:"ping"}]}));const r=await m.transformAnthropicMessages({body:b,model:"claude-fable-5"});if(!r||typeof r.applied!=="boolean")throw new Error("unexpected transform result");`
+	command := exec.CommandContext(ctx, "node", "--input-type=module", "-e", script, entry)
+	if output, err := command.CombinedOutput(); err != nil {
+		checks[0]["ok"] = false
+		checks = append(checks, map[string]any{"name": "transform", "ok": false, "detail": strings.TrimSpace(string(output))})
+		return map[string]any{"healthy": false, "checks": checks, "error": err.Error()}
+	}
+	checks = append(checks, map[string]any{"name": "transform", "ok": true})
+	return map[string]any{"healthy": true, "checks": checks, "error": nil}
+}
 
 func (m *Manager) Start() map[string]any {
 	m.mu.Lock()
