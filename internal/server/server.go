@@ -204,6 +204,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/clinepass/exchange", s.clineExchangeAPI)
 	mux.HandleFunc("/api/oauth/kilocode/device-code", s.kiloCodeDeviceCodeAPI)
 	mux.HandleFunc("/api/oauth/kilocode/poll", s.kiloCodePollAPI)
+	mux.HandleFunc("/api/oauth/codebuddy-cn/device-code", s.codeBuddyDeviceCodeAPI)
+	mux.HandleFunc("/api/oauth/codebuddy-cn/poll", s.codeBuddyPollAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
