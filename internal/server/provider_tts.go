@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -37,9 +38,53 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 		return s.genericTTSSpeech(w, r, providerID, apiKey, input)
 	case "deepgram", "nvidia", "huggingface":
 		return s.binaryTTSSpeech(w, r, providerID, apiKey, input)
+	case "minimax", "minimax-cn":
+		return s.minimaxSpeech(w, r, providerID, apiKey, input)
 	default:
 		return false
 	}
+}
+
+func (s *Server) minimaxSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+	text := stringValue(input["input"])
+	model := nonEmpty(stringValue(input["model"]), "speech-2.8-hd")
+	voice := nonEmpty(stringValue(input["voice"]), "English_expressive_narrator")
+	endpoint := "https://api.minimax.io/v1/t2a_v2"
+	if providerID == "minimax-cn" {
+		endpoint = "https://api.minimaxi.com/v1/t2a_v2"
+	}
+	body := map[string]any{"model": model, "text": text, "stream": false, "language_boost": "auto", "output_format": "hex", "voice_setting": map[string]any{"voice_id": voice, "speed": 1, "vol": 1, "pitch": 0}, "audio_setting": map[string]any{"sample_rate": 32000, "bitrate": 128000, "format": "mp3", "channel": 1}}
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	var payload struct {
+		Data struct {
+			Audio string `json:"audio"`
+		} `json:"data"`
+		BaseResp struct {
+			StatusCode int    `json:"status_code"`
+			StatusMsg  string `json:"status_msg"`
+		} `json:"base_resp"`
+	}
+	if json.Unmarshal(data, &payload) != nil || response.StatusCode < 200 || response.StatusCode >= 300 || payload.BaseResp.StatusCode != 0 || payload.Data.Audio == "" {
+		return false
+	}
+	audio, err := hex.DecodeString(payload.Data.Audio)
+	if err != nil || len(audio) == 0 {
+		return false
+	}
+	writeSpeechAudio(w, input, audio, "mp3")
+	return true
 }
 
 func (s *Server) binaryTTSSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
