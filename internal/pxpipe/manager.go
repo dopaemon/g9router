@@ -2,6 +2,8 @@ package pxpipe
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -57,6 +59,42 @@ func (m *Manager) Health(ctx context.Context) map[string]any {
 	}
 	checks = append(checks, map[string]any{"name": "transform", "ok": true})
 	return map[string]any{"healthy": true, "checks": checks, "error": nil}
+}
+
+func (m *Manager) Transform(ctx context.Context, body []byte, model string, minChars int) ([]byte, map[string]any, error) {
+	status := m.Status()
+	if status["available"] != true {
+		return nil, map[string]any{"applied": false, "reason": "not_installed"}, nil
+	}
+	installPath, _ := status["installPath"].(string)
+	entry := filepath.Join(installPath, "node_modules", "pxpipe-proxy", "dist", "core", "library.js")
+	input := map[string]any{"body": base64.StdEncoding.EncodeToString(body), "model": model, "minChars": minChars}
+	encoded, _ := json.Marshal(input)
+	script := `import fs from "node:fs";const input=JSON.parse(fs.readFileSync(0,"utf8"));const m=await import(process.argv[1]);const raw=Uint8Array.from(Buffer.from(input.body,"base64"));const r=await m.transformAnthropicMessages({body:raw,model:input.model,options:{minCompressChars:input.minChars}});process.stdout.write(JSON.stringify({applied:!!r?.applied,reason:r?.reason||"passthrough",body:r?.body?Buffer.from(r.body).toString("base64"):"",info:r?.info||{}}));`
+	command := exec.CommandContext(ctx, "node", "--input-type=module", "-e", script, entry)
+	command.Stdin = strings.NewReader(string(encoded))
+	output, err := command.Output()
+	if err != nil {
+		return nil, nil, err
+	}
+	var result struct {
+		Applied bool           `json:"applied"`
+		Reason  string         `json:"reason"`
+		Body    string         `json:"body"`
+		Info    map[string]any `json:"info"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, nil, err
+	}
+	summary := map[string]any{"applied": result.Applied, "reason": result.Reason}
+	for key, value := range result.Info {
+		summary[key] = value
+	}
+	if !result.Applied || result.Body == "" {
+		return nil, summary, nil
+	}
+	transformed, err := base64.StdEncoding.DecodeString(result.Body)
+	return transformed, summary, err
 }
 
 func (m *Manager) Start() map[string]any {

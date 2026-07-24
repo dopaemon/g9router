@@ -3242,6 +3242,26 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		body, _ = json.Marshal(request)
 	}
 	sourceFormat := format.Detect(request)
+	if sourceFormat == format.Claude {
+		values := s.settings.Get()
+		enabled, _ := values["pxpipeEnabled"].(bool)
+		if enabled {
+			minChars := 25000
+			if value, ok := values["pxpipeMinChars"].(int); ok && value > 0 {
+				minChars = value
+			}
+			if value, ok := values["pxpipeMinChars"].(float64); ok && value > 0 {
+				minChars = int(value)
+			}
+			transformContext, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			transformed, summary, transformErr := s.pxpipeManager.Transform(transformContext, body, model, minChars)
+			cancel()
+			if transformErr == nil && transformed != nil {
+				body = transformed
+				_ = summary
+			}
+		}
+	}
 	providers := s.store.Resolve(model)
 	if len(providers) == 0 {
 		s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey)
