@@ -40,7 +40,7 @@ func New(options Options) *Server {
 	if options.OAuthPath == "" {
 		options.OAuthPath = "oauth.json"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: &usage.Store{}, oauth: oauth.New(options.OAuthPath)}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("usage.json"), oauth: oauth.New(options.OAuthPath)}
 }
 
 func (s *Server) Run() error {
@@ -93,6 +93,14 @@ func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) usageAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		if err := s.usage.Reset(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "reset"})
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
