@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 
 	"g9router/internal/auth"
@@ -15,6 +17,7 @@ func main() {
 	port := flag.Int("port", 0, "port to run the server")
 	host := flag.String("host", "", "host to bind")
 	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
+	flag.BoolVar(noBrowser, "n", false, "do not open the dashboard")
 	version := flag.Bool("version", false, "show version")
 	flag.Parse()
 	if *version {
@@ -38,9 +41,25 @@ func main() {
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	log.Printf("g9router listening on %s", addr)
 	if !*noBrowser {
-		log.Printf("dashboard available at http://localhost:%s", portFromAddr(addr))
+		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
 	log.Fatal(http.ListenAndServe(addr, appHandler))
+}
+
+func openBrowser(target string) {
+	var command string
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+	case "windows":
+		command = "rundll32"
+		target = "url.dll,FileProtocolHandler " + target
+	default:
+		command = "xdg-open"
+	}
+	if err := exec.Command(command, target).Start(); err != nil {
+		log.Printf("dashboard available at %s", target)
+	}
 }
 
 func portFromAddr(addr string) string {
