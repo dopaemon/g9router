@@ -1722,6 +1722,10 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			continue
 		}
+		if strings.HasPrefix(line, ":event-type:") {
+			eventType = strings.TrimSpace(strings.TrimPrefix(line, ":event-type:"))
+			continue
+		}
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
