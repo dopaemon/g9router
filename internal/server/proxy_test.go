@@ -68,7 +68,14 @@ func TestClaudeMessagesTranslationRoundTrip(t *testing.T) {
 			return
 		}
 		messages, ok := request["messages"].([]any)
-		if !ok || len(messages) == 0 || messages[0].(map[string]any)["role"] != "user" {
+		foundUser := false
+		for _, raw := range messages {
+			message, _ := raw.(map[string]any)
+			if message["role"] == "user" {
+				foundUser = true
+			}
+		}
+		if !ok || !foundUser {
 			t.Errorf("unexpected translated request: %v", request)
 			return
 		}
@@ -82,7 +89,7 @@ func TestClaudeMessagesTranslationRoundTrip(t *testing.T) {
 	}
 	server := httptest.NewServer(app.Handler())
 	defer server.Close()
-	request, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", strings.NewReader(`{"model":"openai/gpt","messages":[{"role":"user","content":"hi"}]}`))
+	request, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", strings.NewReader(`{"model":"openai/gpt","system":"be concise","messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`))
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
