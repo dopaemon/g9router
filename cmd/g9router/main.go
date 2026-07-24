@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"g9router/internal/auth"
+	"g9router/internal/cli/tui"
 	"g9router/internal/cli/xai"
 	"g9router/internal/server"
 )
@@ -54,7 +55,12 @@ func main() {
 	log.Printf("g9router listening on %s", addr)
 	errors := make(chan error, 1)
 	go func() { errors <- http.ListenAndServe(addr, appHandler) }()
-	if !*noBrowser && waitReady(addr, 15*time.Second) {
+	ready := waitReady(addr, 15*time.Second)
+	if ready && tui.IsTerminal(os.Stdin) {
+		_ = tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout)
+		return
+	}
+	if ready && !*noBrowser {
 		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
 	log.Fatal(<-errors)
@@ -96,4 +102,12 @@ func portFromAddr(addr string) string {
 		}
 	}
 	return "20128"
+}
+
+func portNumber(addr string) int {
+	value, err := strconv.Atoi(portFromAddr(addr))
+	if err != nil {
+		return 20128
+	}
+	return value
 }
