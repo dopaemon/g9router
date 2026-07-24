@@ -13,6 +13,8 @@ Routes: `/healthz`, `/v1/models`, `/v1/chat/completions`, `/api/providers`, `/`.
 
 OAuth credentials are managed through `/api/oauth` (`GET`, `POST`, `PUT?id=...`) and persisted in `oauth.json`; secrets are omitted from API responses.
 
+OAuth flows that require public-client configuration read credentials from the environment: `G9ROUTER_GEMINI_CLIENT_ID`, `G9ROUTER_GEMINI_CLIENT_SECRET`, `G9ROUTER_ANTIGRAVITY_CLIENT_ID`, `G9ROUTER_ANTIGRAVITY_CLIENT_SECRET`, and `G9ROUTER_GROK_CLIENT_ID`. Device-code flows expose `/api/oauth/<provider>/device-code` and `/api/oauth/<provider>/poll`.
+
 ## Docker
 
 ```bash
