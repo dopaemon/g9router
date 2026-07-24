@@ -15,3 +15,12 @@ func TestAudioVoicesRejectsUnknownProvider(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestAudioVoicesAcceptsLocalDevice(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/audio/voices?provider=local-device", nil))
+	if recorder.Code == http.StatusBadGateway || strings.Contains(recorder.Body.String(), "not implemented") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
