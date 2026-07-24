@@ -123,6 +123,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/shutdown", s.shutdownAPI)
 	mux.HandleFunc("/api/translator/load", s.translatorLoadAPI)
 	mux.HandleFunc("/api/translator/save", s.translatorSaveAPI)
+	mux.HandleFunc("/api/translator/console-logs", s.consoleLogsAPI)
+	mux.HandleFunc("/api/translator/console-logs/stream", s.consoleLogsStreamAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
 	mux.HandleFunc("/api/usage/request-logs", s.usageLogsAPI)
@@ -3865,6 +3867,8 @@ func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
+		line := fmt.Sprintf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
+		log.Print(line)
+		addConsoleLog(line)
 	})
 }
