@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseEventStreamFrame(t *testing.T) {
-	headers := []byte{12, ':', 'e', 'v', 'e', 'n', 't', '-', 't', 'y', 'p', 'e', 7, 0, 4, 't', 'e', 's', 't'}
+	headers := []byte{11, ':', 'e', 'v', 'e', 'n', 't', '-', 't', 'y', 'p', 'e', 7, 0, 4, 't', 'e', 's', 't'}
 	payload := []byte(`{"content":"hi"}`)
 	total := 12 + len(headers) + len(payload) + 4
 	frame := make([]byte, total)
