@@ -2,7 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -19,6 +22,23 @@ func TestGeminiRequestMapping(t *testing.T) {
 	messages := request["messages"].([]map[string]any)
 	if len(messages) != 2 || messages[0]["role"] != "system" || messages[1]["content"] != "hello" {
 		t.Fatalf("unexpected messages: %#v", messages)
+	}
+}
+
+func TestGeminiModelResourceEndToEnd(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"model":"gemini/test","choices":[{"message":{"content":"pong"},"finish_reason":"stop"}]}`)
+	}))
+	defer upstream.Close()
+	app := New(Options{Upstream: upstream.URL, ProviderPath: t.TempDir() + "/providers.json", OAuthPath: os.TempDir() + "/gemini-test-oauth.json"})
+	request := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini/test:generateContent", strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"ping"}]}]}`))
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"candidates"`) || !strings.Contains(response.Body.String(), "pong") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
