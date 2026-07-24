@@ -36,6 +36,11 @@ func (s *Server) videoAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider, ok := s.store.Find("xai")
+	if ok && provider.OAuthID != "" {
+		if credential, found := s.oauth.Get(provider.OAuthID); found {
+			provider.APIKey = credential.AccessToken
+		}
+	}
 	if !ok || strings.TrimSpace(provider.APIKey) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No credentials for provider: xai"})
 		return
