@@ -24,6 +24,7 @@ import (
 	"g9router/internal/db"
 	"g9router/internal/executor"
 	"g9router/internal/format"
+	"g9router/internal/mcp"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
 	"g9router/internal/providers"
@@ -48,6 +49,7 @@ type Server struct {
 	settings   *settings.Store
 	sessions   *auth.Sessions
 	oidcConfig oidc.Config
+	mcpBridge  *mcp.Bridge
 }
 
 func New(options Options) *Server {
@@ -64,7 +66,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv)}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New()}
 }
 
 func (s *Server) Run() error {
@@ -844,7 +846,9 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 	plugin := parts[0]
 	envKey := "G9ROUTER_MCP_" + strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(plugin)) + "_URL"
 	target := strings.TrimSpace(os.Getenv(envKey))
-	if target == "" {
+	commandKey := "G9ROUTER_MCP_" + strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(plugin)) + "_COMMAND"
+	command := strings.TrimSpace(os.Getenv(commandKey))
+	if target == "" && command == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Unknown plugin: " + plugin})
 		return
 	}
@@ -856,6 +860,14 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 		if err != nil {
 			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		if command != "" {
+			if err := s.mcpBridge.Send(r.URL.Query().Get("sessionId"), json.RawMessage(body)); err != nil {
+				writeJSON(w, 404, map[string]string{"error": err.Error()})
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
 			return
 		}
 		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, strings.NewReader(string(body)))
@@ -875,6 +887,28 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if command != "" {
+		sessionID, lines, err := s.mcpBridge.Start(r.Context(), command)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache, no-transform")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		_, _ = io.WriteString(w, "event: endpoint\ndata: /api/mcp/"+plugin+"/message?sessionId="+sessionID+"\n\n")
+		flusher.Flush()
+		for line := range lines {
+			_, _ = io.WriteString(w, "data: "+line+"\n\n")
+			flusher.Flush()
+		}
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
