@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func (s *Server) transcriptionProvider(w http.ResponseWriter, r *http.Request) bool {
@@ -31,6 +33,10 @@ func (s *Server) transcriptionProvider(w http.ResponseWriter, r *http.Request) b
 			return s.deepgramSTT(w, r, provider.APIKey, model, file, header, r.FormValue("language"))
 		case "huggingface":
 			return s.huggingFaceSTT(w, r, provider.APIKey, strings.TrimPrefix(model, "huggingface/"), file, header)
+		case "assemblyai":
+			return s.assemblyAISTT(w, r, provider.APIKey, model, file, r.FormValue("language"))
+		case "nvidia":
+			return s.nvidiaSTT(w, r, provider.APIKey, model, file, header)
 		}
 	}
 	return false
@@ -182,4 +188,143 @@ func audioMIME(header *multipart.FileHeader) string {
 		return header.Header.Get("Content-Type")
 	}
 	return "application/octet-stream"
+}
+
+func (s *Server) assemblyAISTT(w http.ResponseWriter, r *http.Request, apiKey, model string, file multipart.File, language string) bool {
+	if apiKey == "" {
+		return false
+	}
+	audio, err := io.ReadAll(io.LimitReader(file, 64<<20))
+	if err != nil {
+		return false
+	}
+	upload, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.assemblyai.com/v2/upload", strings.NewReader(string(audio)))
+	if err != nil {
+		return false
+	}
+	upload.Header.Set("Authorization", apiKey)
+	upload.Header.Set("Content-Type", "application/octet-stream")
+	response, err := s.client.Do(upload)
+	if err != nil {
+		return false
+	}
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var uploaded struct {
+		URL string `json:"upload_url"`
+	}
+	if json.Unmarshal(data, &uploaded) != nil || uploaded.URL == "" {
+		return false
+	}
+	submitBody := map[string]any{"audio_url": uploaded.URL, "speech_models": []string{model}, "language_detection": true}
+	if language != "" {
+		submitBody["language_code"] = language
+	}
+	encoded, _ := json.Marshal(submitBody)
+	submit, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.assemblyai.com/v2/transcript", strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	submit.Header.Set("Authorization", apiKey)
+	submit.Header.Set("Content-Type", "application/json")
+	response, err = s.client.Do(submit)
+	if err != nil {
+		return false
+	}
+	data, _ = io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var job struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(data, &job) != nil || job.ID == "" {
+		return false
+	}
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-r.Context().Done():
+			return false
+		case <-time.After(2 * time.Second):
+		}
+		poll, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.assemblyai.com/v2/transcript/"+url.PathEscape(job.ID), nil)
+		poll.Header.Set("Authorization", apiKey)
+		response, err = s.client.Do(poll)
+		if err != nil {
+			return false
+		}
+		data, _ = io.ReadAll(io.LimitReader(response.Body, 4<<20))
+		response.Body.Close()
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			continue
+		}
+		var result struct {
+			Status string `json:"status"`
+			Text   string `json:"text"`
+			Error  string `json:"error"`
+		}
+		if json.Unmarshal(data, &result) != nil {
+			return false
+		}
+		if result.Status == "completed" {
+			writeJSON(w, http.StatusOK, map[string]string{"text": result.Text})
+			return true
+		}
+		if result.Status == "error" {
+			return false
+		}
+	}
+	return false
+}
+
+func (s *Server) nvidiaSTT(w http.ResponseWriter, r *http.Request, apiKey, model string, file multipart.File, header *multipart.FileHeader) bool {
+	if apiKey == "" {
+		return false
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", header.Filename)
+	if err != nil {
+		return false
+	}
+	audio, err := io.ReadAll(io.LimitReader(file, 64<<20))
+	if err != nil {
+		return false
+	}
+	_, _ = part.Write(audio)
+	_ = writer.WriteField("model", model)
+	_ = writer.Close()
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://integrate.api.nvidia.com/v1/audio/transcriptions", &body)
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var payload struct {
+		Text       string `json:"text"`
+		Transcript string `json:"transcript"`
+	}
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	text := payload.Text
+	if text == "" {
+		text = payload.Transcript
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"text": text})
+	return true
 }
