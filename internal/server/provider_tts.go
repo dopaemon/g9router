@@ -35,9 +35,59 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 		return s.googleTranslateSpeech(w, r, input)
 	case "inworld", "cartesia", "playht", "coqui", "tortoise":
 		return s.genericTTSSpeech(w, r, providerID, apiKey, input)
+	case "deepgram", "nvidia", "huggingface":
+		return s.binaryTTSSpeech(w, r, providerID, apiKey, input)
 	default:
 		return false
 	}
+}
+
+func (s *Server) binaryTTSSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+	text, _ := input["input"].(string)
+	model, _ := input["model"].(string)
+	if strings.Contains(model, "/") {
+		model = strings.SplitN(model, "/", 2)[1]
+	}
+	var endpoint string
+	var request *http.Request
+	var err error
+	switch providerID {
+	case "deepgram":
+		endpoint = "https://api.deepgram.com/v1/speak?model=" + url.QueryEscape(nonEmpty(model, "aura-asteria-en"))
+		request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(`{"text":`+strconv.Quote(text)+`}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Token "+apiKey)
+	case "nvidia":
+		body, _ := json.Marshal(map[string]any{"input": map[string]string{"text": text}, "voice": nonEmpty(asString(input["voice"]), "default"), "model": model})
+		request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, "https://integrate.api.nvidia.com/v1/audio/speech", strings.NewReader(string(body)))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	case "huggingface":
+		if model == "" || strings.Contains(model, "..") || strings.Contains(model, "//") {
+			return false
+		}
+		request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api-inference.huggingface.co/models/"+strings.TrimPrefix(model, "/"), strings.NewReader(`{"inputs":`+strconv.Quote(text)+`}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	if err != nil {
+		return false
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	audio, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 || len(audio) == 0 {
+		return false
+	}
+	format := "mp3"
+	if providerID == "nvidia" || providerID == "huggingface" {
+		format = "wav"
+	}
+	writeSpeechAudio(w, input, audio, format)
+	return true
 }
 
 func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
