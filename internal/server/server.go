@@ -35,7 +35,7 @@ func New(options Options) *Server {
 		options.Upstream = "https://api.openai.com/v1"
 	}
 	if options.ProviderPath == "" {
-		options.ProviderPath = "providers.json"
+		options.ProviderPath = "g9router.db"
 	}
 	if options.OAuthPath == "" {
 		options.OAuthPath = "oauth.json"

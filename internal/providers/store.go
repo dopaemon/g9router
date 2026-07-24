@@ -1,10 +1,13 @@
 package providers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"strings"
 	"sync"
+
+	"g9router/internal/db"
 )
 
 type Provider struct {
@@ -20,10 +23,11 @@ type Account struct {
 	RequestsUsed  int64 `json:"requestsUsed,omitempty"`
 }
 type Store struct {
-	mu    sync.RWMutex
-	path  string
-	items []Provider
-	next  map[string]int
+	mu       sync.RWMutex
+	path     string
+	items    []Provider
+	next     map[string]int
+	database *sql.DB
 }
 
 func (s *Store) Resolve(model string) []Provider {
@@ -64,6 +68,13 @@ func (s *Store) Enabled() []Provider {
 
 func New(path string) *Store {
 	store := &Store{path: path, next: map[string]int{}}
+	if strings.HasSuffix(path, ".db") {
+		if database, err := db.Open(path); err == nil {
+			store.database = database
+			_ = store.loadDB()
+			return store
+		}
+	}
 	_ = store.load()
 	return store
 }
@@ -110,6 +121,9 @@ func (s *Store) Upsert(provider Provider) error {
 		}
 	}
 	s.items = append(s.items, provider)
+	if s.database != nil {
+		return s.saveDB(provider)
+	}
 	return s.save()
 }
 func (s *Store) Delete(id string) error {
@@ -121,7 +135,38 @@ func (s *Store) Delete(id string) error {
 			break
 		}
 	}
+	if s.database != nil {
+		_, err := s.database.Exec(`DELETE FROM providers WHERE id=?`, id)
+		return err
+	}
 	return s.save()
+}
+
+func (s *Store) loadDB() error {
+	rows, err := s.database.Query(`SELECT payload FROM providers ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return err
+		}
+		var provider Provider
+		if json.Unmarshal([]byte(payload), &provider) == nil {
+			s.items = append(s.items, provider)
+		}
+	}
+	return rows.Err()
+}
+func (s *Store) saveDB(provider Provider) error {
+	payload, err := json.Marshal(provider)
+	if err != nil {
+		return err
+	}
+	_, err = s.database.Exec(`INSERT INTO providers(id,payload,updated_at) VALUES(?,?,unixepoch()) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, provider.ID, string(payload))
+	return err
 }
 func (s *Store) load() error {
 	data, err := os.ReadFile(s.path)
