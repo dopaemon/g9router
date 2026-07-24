@@ -3026,6 +3026,18 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"voices": filtered, "languages": []any{}, "byLang": map[string]any{}})
 		return
 	}
+	if provider == "gemini" {
+		voices := make([]map[string]any, 0, 30)
+		for _, name := range []string{"Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede", "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba", "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar", "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat"} {
+			voices = append(voices, map[string]any{"id": name, "name": name, "locale": "en", "lang": "en", "country": "", "countryName": "", "langName": "English", "gender": ""})
+		}
+		if filter := r.URL.Query().Get("lang"); filter != "" && filter != "en" {
+			voices = []map[string]any{}
+		}
+		byLang := map[string]any{"en": map[string]any{"code": "en", "name": "English", "voices": voices}}
+		writeJSON(w, http.StatusOK, map[string]any{"voices": voices, "languages": []any{byLang["en"]}, "byLang": byLang})
+		return
+	}
 	if provider == "elevenlabs" {
 		apiKey := r.URL.Query().Get("apiKey")
 		if apiKey == "" {
