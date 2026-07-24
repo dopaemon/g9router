@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,80 @@ import (
 )
 
 const vercelRelaySource = `export const config={runtime:"edge"};export default async function handler(req){const target=req.headers.get("x-relay-target");const path=req.headers.get("x-relay-path")||"/";if(!target)return new Response(JSON.stringify({error:"Missing x-relay-target header"}),{status:400,headers:{"content-type":"application/json"}});const headers=new Headers(req.headers);headers.delete("x-relay-target");headers.delete("x-relay-path");headers.delete("host");const response=await fetch(target.replace(/\/$/,"")+path,{method:req.method,headers,body:req.method!=="GET"&&req.method!=="HEAD"?req.body:undefined});return new Response(response.body,{status:response.status,headers:response.headers})}`
+
+const cloudflareRelaySource = `export default {async fetch(request){const target=request.headers.get("x-relay-target");const path=request.headers.get("x-relay-path")||"/";if(!target)return new Response(JSON.stringify({error:"Missing x-relay-target header"}),{status:400});const headers=new Headers(request.headers);headers.delete("x-relay-target");headers.delete("x-relay-path");headers.delete("host");try{return await fetch(target.replace(/\/$/,"")+path,{method:request.method,headers,body:request.method!=="GET"&&request.method!=="HEAD"?request.body:undefined})}catch(error){return new Response(JSON.stringify({error:error.message}),{status:502})}}}`
+
+func (s *Server) cloudflareDeployAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		AccountID string `json:"accountId"`
+		Token     string `json:"apiToken"`
+		Project   string `json:"projectName"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.Token) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Cloudflare Account ID and API Token are required"})
+		return
+	}
+	if strings.TrimSpace(input.Project) == "" {
+		input.Project = "relay-" + fmt.Sprint(time.Now().Unix())
+	}
+	endpoint := "https://api.cloudflare.com/client/v4/accounts/" + input.AccountID + "/workers/scripts/" + input.Project
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("index.js", "index.js")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	_, _ = part.Write([]byte(cloudflareRelaySource))
+	meta, _ := writer.CreateFormField("metadata")
+	metadata, _ := json.Marshal(map[string]any{"main_module": "index.js", "compatibility_date": "2024-03-20", "observability": map[string]bool{"enabled": true}})
+	_, _ = meta.Write(metadata)
+	_ = writer.Close()
+	request, _ := http.NewRequestWithContext(r.Context(), http.MethodPut, endpoint, &body)
+	request.Header.Set("Authorization", "Bearer "+input.Token)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeJSON(w, response.StatusCode, map[string]string{"error": strings.TrimSpace(string(data))})
+		return
+	}
+	subdomainReq, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.cloudflare.com/client/v4/accounts/"+input.AccountID+"/workers/subdomain", nil)
+	subdomainReq.Header.Set("Authorization", "Bearer "+input.Token)
+	subdomain, err := s.client.Do(subdomainReq)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer subdomain.Body.Close()
+	subData, _ := io.ReadAll(io.LimitReader(subdomain.Body, 1<<20))
+	var result struct {
+		Result struct {
+			Subdomain string `json:"subdomain"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal(subData, &result)
+	if result.Result.Subdomain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "workers.dev subdomain is not configured"})
+		return
+	}
+	deployURL := "https://" + input.Project + "." + result.Result.Subdomain + ".workers.dev"
+	pool, err := s.proxyPools.Create(proxypools.Pool{Name: input.Project, ProxyURL: deployURL, Type: "cloudflare", IsActive: true})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"proxyPool": pool, "deployUrl": deployURL})
+}
 
 func (s *Server) vercelDeployAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
