@@ -46,7 +46,7 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 		case "4":
 			err = ui.showJSON(reader, "/api/cli-tools/all-statuses")
 		case "5":
-			err = ui.showJSON(reader, "/api/settings")
+			err = ui.settings(reader)
 		default:
 			fmt.Fprintln(out, "Invalid selection")
 		}
@@ -106,6 +106,50 @@ type combo struct {
 	Name   string `json:"name"`
 	Models []any  `json:"models"`
 	Kind   string `json:"kind,omitempty"`
+}
+
+func (ui *UI) settings(reader *bufio.Reader) error {
+	for {
+		var values map[string]any
+		if err := ui.request(http.MethodGet, "/api/settings", nil, &values); err != nil {
+			return err
+		}
+		var tunnel map[string]any
+		_ = ui.request(http.MethodGet, "/api/tunnel/status", nil, &tunnel)
+		fmt.Fprintf(ui.Out, "\nSettings\nRTK: %v  Headroom: %v  Tunnel: %v\n", values["rtkEnabled"] != false, values["headroomEnabled"] == true, tunnel["enabled"] == true)
+		fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  b. Back")
+		fmt.Fprint(ui.Out, "Select action: ")
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "b", "0":
+			return nil
+		case "1":
+			if err := ui.request(http.MethodPut, "/api/settings", map[string]bool{"rtkEnabled": values["rtkEnabled"] == false}, nil); err != nil {
+				return err
+			}
+		case "2":
+			if err := ui.request(http.MethodPut, "/api/settings", map[string]bool{"headroomEnabled": values["headroomEnabled"] != true}, nil); err != nil {
+				return err
+			}
+		case "3":
+			if err := ui.request(http.MethodPost, "/api/tunnel/enable", nil, nil); err != nil {
+				return err
+			}
+		case "4":
+			if err := ui.request(http.MethodPost, "/api/tunnel/disable", nil, nil); err != nil {
+				return err
+			}
+		case "5":
+			if err := ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil); err != nil {
+				return err
+			}
+		default:
+			fmt.Fprintln(ui.Out, "Invalid selection")
+		}
+	}
 }
 
 func (ui *UI) combos(reader *bufio.Reader) error {
