@@ -129,7 +129,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	}
 	for _, provider := range providers {
 		providerBody := body
+		translateResponse := false
 		if path == "/messages" && provider.APIType == "openai" {
+			translateResponse = true
 			var claude map[string]any
 			if json.Unmarshal(body, &claude) == nil {
 				stream, _ := claude["stream"].(bool)
@@ -138,12 +140,62 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				providerBody = translated
 			}
 		}
+		if translateResponse {
+			if s.proxyTranslated(w, r, provider.BaseURL, path, providerBody, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if s.proxy(w, r, provider.BaseURL, path, http.MethodPost, providerBody, provider.APIKey) {
 			return
 		}
 	}
 	s.usage.Add(0, 1, int64(len(body)), 0)
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
+}
+
+func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
+	if incoming.Header.Get("Accept") == "text/event-stream" {
+		return s.proxy(w, incoming, baseURL, path, http.MethodPost, body, apiKey)
+	}
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if key := incoming.Header.Get("Authorization"); key != "" {
+		request.Header.Set("Authorization", key)
+	} else if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	if err != nil {
+		return false
+	}
+	var openAI map[string]any
+	if json.Unmarshal(raw, &openAI) != nil {
+		return false
+	}
+	translated := translator.OpenAIToClaudeResponse(openAI)
+	for key, values := range response.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_ = json.NewEncoder(w).Encode(translated)
+	return true
 }
 
 func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, path, method string, body []byte, apiKey string) bool {
