@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -643,6 +644,179 @@ func (s *Server) codexSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) opencodeSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir := filepath.Join(home, ".config", "opencode")
+	path := filepath.Join(dir, "opencode.json")
+	read := func() (map[string]any, error) {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return map[string]any{}, nil
+			}
+			return nil, err
+		}
+		var config map[string]any
+		if json.Unmarshal(raw, &config) != nil {
+			return map[string]any{}, nil
+		}
+		return config, nil
+	}
+	write := func(config map[string]any) error {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
+		raw, _ := json.MarshalIndent(config, "", "  ")
+		return os.WriteFile(path, raw, 0600)
+	}
+	switch r.Method {
+	case http.MethodGet:
+		config, _ := read()
+		_, cliErr := exec.LookPath("opencode")
+		_, fileErr := os.Stat(path)
+		provider, _ := config["provider"].(map[string]any)
+		entry, _ := provider["9router"].(map[string]any)
+		models := []string{}
+		if modelMap, ok := entry["models"].(map[string]any); ok {
+			for id := range modelMap {
+				models = append(models, id)
+			}
+		}
+		active := ""
+		if value, ok := config["model"].(string); ok && strings.HasPrefix(value, "9router/") {
+			active = strings.TrimPrefix(value, "9router/")
+		}
+		writeJSON(w, 200, map[string]any{"installed": cliErr == nil || fileErr == nil, "config": config, "has9Router": entry != nil, "configPath": path, "opencode": map[string]any{"models": models, "activeModel": active}})
+	case http.MethodPost:
+		var input struct {
+			BaseURL       string   `json:"baseUrl"`
+			APIKey        string   `json:"apiKey"`
+			Model         string   `json:"model"`
+			Models        []string `json:"models"`
+			ActiveModel   string   `json:"activeModel"`
+			SubagentModel string   `json:"subagentModel"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		models := input.Models
+		if len(models) == 0 && input.Model != "" {
+			models = []string{input.Model}
+		}
+		if input.BaseURL == "" || len(models) == 0 {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl and at least one model are required"})
+			return
+		}
+		if !strings.HasSuffix(input.BaseURL, "/v1") {
+			input.BaseURL = strings.TrimRight(input.BaseURL, "/") + "/v1"
+		}
+		config, _ := read()
+		provider, _ := config["provider"].(map[string]any)
+		if provider == nil {
+			provider = map[string]any{}
+		}
+		entry, _ := provider["9router"].(map[string]any)
+		if entry == nil {
+			entry = map[string]any{"npm": "@ai-sdk/openai-compatible"}
+		}
+		options, _ := entry["options"].(map[string]any)
+		if options == nil {
+			options = map[string]any{}
+		}
+		options["baseURL"] = input.BaseURL
+		options["apiKey"] = input.APIKey
+		if input.APIKey == "" {
+			options["apiKey"] = "sk_9router"
+		}
+		entry["options"] = options
+		modelMap, _ := entry["models"].(map[string]any)
+		if modelMap == nil {
+			modelMap = map[string]any{}
+		}
+		for _, model := range models {
+			if model != "" {
+				modelMap[model] = map[string]any{"name": model, "modalities": map[string]any{"input": []string{"text", "image"}, "output": []string{"text"}}}
+			}
+		}
+		entry["models"] = modelMap
+		provider["9router"] = entry
+		config["provider"] = provider
+		active := input.ActiveModel
+		if active == "" {
+			active = models[0]
+		}
+		if active != "" {
+			config["model"] = "9router/" + active
+		}
+		agent, _ := config["agent"].(map[string]any)
+		if agent == nil {
+			agent = map[string]any{}
+		}
+		sub := input.SubagentModel
+		if sub == "" {
+			sub = models[0]
+		}
+		agent["explorer"] = map[string]any{"description": "Fast explorer subagent for codebase exploration", "mode": "subagent", "model": "9router/" + sub}
+		config["agent"] = agent
+		if err := write(config); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "OpenCode settings applied successfully!", "configPath": path})
+	case http.MethodPatch:
+		var input struct {
+			Clear bool `json:"clearActiveModel"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input)
+		config, _ := read()
+		if input.Clear {
+			if model, ok := config["model"].(string); ok && strings.HasPrefix(model, "9router/") {
+				config["model"] = ""
+			}
+		}
+		if err := write(config); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Settings updated"})
+	case http.MethodDelete:
+		config, _ := read()
+		provider, _ := config["provider"].(map[string]any)
+		entry, _ := provider["9router"].(map[string]any)
+		if model := r.URL.Query().Get("model"); model != "" && entry != nil {
+			if models, ok := entry["models"].(map[string]any); ok {
+				delete(models, model)
+				if len(models) == 0 {
+					delete(provider, "9router")
+					delete(config, "model")
+				} else if config["model"] == "9router/"+model {
+					for id := range models {
+						config["model"] = "9router/" + id
+						break
+					}
+				}
+			}
+		} else {
+			delete(provider, "9router")
+			if model, ok := config["model"].(string); ok && strings.HasPrefix(model, "9router/") {
+				delete(config, "model")
+			}
+		}
+		if err := write(config); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed from OpenCode"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
