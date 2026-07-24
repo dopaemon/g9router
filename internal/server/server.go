@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/images/generations", s.images)
 	mux.HandleFunc("/v1/audio/transcriptions", s.transcriptions)
 	mux.HandleFunc("/v1/audio/speech", s.speech)
+	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
@@ -2574,6 +2575,16 @@ func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
 	s.forwardRaw(w, r, "/audio/transcriptions")
 }
 func (s *Server) speech(w http.ResponseWriter, r *http.Request) { s.forwardRaw(w, r, "/audio/speech") }
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	s.forwardRaw(w, r, "/search")
+}
 
 func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Method != http.MethodPost {
