@@ -29,6 +29,7 @@ import (
 	"g9router/internal/settings"
 	"g9router/internal/translator"
 	"g9router/internal/usage"
+	"g9router/internal/vertex"
 	"g9router/internal/web"
 )
 
@@ -832,6 +833,23 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 }
 
 func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, oauthToken bool, specific map[string]any) bool {
+	if !oauthToken && strings.HasPrefix(strings.TrimSpace(apiKey), "{") {
+		account, err := vertex.ParseServiceAccount(apiKey)
+		if err != nil {
+			return false
+		}
+		token, err := vertex.AccessToken(incoming.Context(), s.client, apiKey)
+		if err != nil {
+			return false
+		}
+		apiKey, oauthToken = token, true
+		if specific == nil {
+			specific = map[string]any{}
+		}
+		if specific["projectId"] == nil {
+			specific["projectId"] = account.ProjectID
+		}
+	}
 	body, err := json.Marshal(translator.OpenAIToVertex(model, request))
 	if err != nil {
 		return false
