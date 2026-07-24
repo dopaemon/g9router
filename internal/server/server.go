@@ -24,6 +24,7 @@ import (
 
 	"g9router/internal/auth"
 	"g9router/internal/chatcore"
+	comboStore "g9router/internal/combos"
 	"g9router/internal/cursor"
 	"g9router/internal/db"
 	"g9router/internal/executor"
@@ -58,6 +59,7 @@ type Server struct {
 	mcpBridge       *mcp.Bridge
 	headroomManager *headroom.Manager
 	keys            *keyStore.Store
+	combos          *comboStore.Store
 }
 
 func New(options Options) *Server {
@@ -74,7 +76,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json")}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json")}
 }
 
 func (s *Server) Run() error {
