@@ -37,6 +37,7 @@ import (
 	providerNodeStore "g9router/internal/providernodes"
 	"g9router/internal/providers"
 	"g9router/internal/proxypools"
+	"g9router/internal/pxpipe"
 	"g9router/internal/rtk"
 	"g9router/internal/settings"
 	"g9router/internal/translator"
@@ -67,6 +68,7 @@ type Server struct {
 	providerNodes   *providerNodeStore.Store
 	proxyPools      *proxypools.Store
 	tunnelManager   *tunnel.Manager
+	pxpipeManager   *pxpipe.Manager
 }
 
 func New(options Options) *Server {
@@ -83,7 +85,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), database: database}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), database: database}
 }
 
 func (s *Server) Run() error {
@@ -126,6 +128,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/translator/save", s.translatorSaveAPI)
 	mux.HandleFunc("/api/translator/console-logs", s.consoleLogsAPI)
 	mux.HandleFunc("/api/translator/console-logs/stream", s.consoleLogsStreamAPI)
+	mux.HandleFunc("/api/pxpipe/status", s.pxpipeStatusAPI)
+	mux.HandleFunc("/api/pxpipe/stats", s.pxpipeStatsAPI)
+	mux.HandleFunc("/api/pxpipe/logs", s.pxpipeLogsAPI)
+	mux.HandleFunc("/api/pxpipe/health", s.pxpipeHealthAPI)
+	mux.HandleFunc("/api/pxpipe/start", s.pxpipeStartAPI)
+	mux.HandleFunc("/api/pxpipe/stop", s.pxpipeStopAPI)
+	mux.HandleFunc("/api/pxpipe/restart", s.pxpipeRestartAPI)
 	mux.HandleFunc("/api/translator/translate", s.translatorAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
