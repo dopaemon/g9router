@@ -3740,11 +3740,19 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 	if err != nil {
 		return false
 	}
+	stream, _ := request["stream"].(bool)
+	action := ":generateContent"
+	if stream {
+		action = ":streamGenerateContent?alt=sse"
+	}
 	endpoint := strings.TrimRight(baseURL, "/")
 	if strings.Contains(endpoint, "{model}") {
 		endpoint = strings.ReplaceAll(endpoint, "{model}", model)
-	} else if !strings.HasSuffix(endpoint, ":generateContent") {
-		endpoint += "/models/" + model + ":generateContent"
+		endpoint = strings.TrimSuffix(endpoint, ":generateContent") + action
+	} else if strings.HasSuffix(endpoint, ":generateContent") {
+		endpoint = strings.TrimSuffix(endpoint, ":generateContent") + action
+	} else {
+		endpoint += "/models/" + model + action
 	}
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
@@ -3763,6 +3771,12 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 	defer response.Body.Close()
 	if response.StatusCode >= 500 {
 		return false
+	}
+	if stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(response.StatusCode)
+		_, _ = io.WriteString(w, antigravitySSE(response.Body, model))
+		return true
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 	if err != nil {
