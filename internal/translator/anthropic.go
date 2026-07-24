@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 )
@@ -141,5 +140,3 @@ func collapseText(parts []any) any {
 	return parts
 }
 func array(value any) []any { result, _ := value.([]any); return result }
-
-var _ = base64.StdEncoding
