@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/pricing", s.pricingAPI)
 	mux.HandleFunc("/api/pricing/", s.pricingAPI)
 	mux.HandleFunc("/api/shutdown", s.shutdownAPI)
+	mux.HandleFunc("/api/version/shutdown", s.shutdownAPI)
 	mux.HandleFunc("/api/translator/load", s.translatorLoadAPI)
 	mux.HandleFunc("/api/translator/save", s.translatorSaveAPI)
 	mux.HandleFunc("/api/translator/console-logs", s.consoleLogsAPI)
