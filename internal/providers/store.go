@@ -30,13 +30,15 @@ func (s *Store) Resolve(model string) []Provider {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var matched, fallback []Provider
-	for _, item := range s.items {
+	for index := range s.items {
+		item := s.items[index]
 		if !item.Enabled {
 			continue
 		}
 		selected := item
 		if len(item.Accounts) > 0 {
-			selected.APIKey, selected.Accounts = s.accountKeyLocked(item)
+			selected.APIKey = s.accountKeyLocked(index)
+			selected.Accounts = s.items[index].Accounts
 		}
 		if strings.HasPrefix(model, item.ID+"/") {
 			matched = append(matched, selected)
@@ -66,10 +68,11 @@ func (s *Store) List() []Provider {
 	return result
 }
 
-func (s *Store) accountKeyLocked(provider Provider) (string, []Account) {
+func (s *Store) accountKeyLocked(providerIndex int) string {
+	provider := &s.items[providerIndex]
 	accounts := provider.Accounts
 	if len(accounts) == 0 {
-		return provider.APIKey, accounts
+		return provider.APIKey
 	}
 	start := s.next[provider.ID] % len(accounts)
 	for offset := 0; offset < len(accounts); offset++ {
@@ -78,11 +81,11 @@ func (s *Store) accountKeyLocked(provider Provider) (string, []Account) {
 		if !account.Enabled || (account.RequestsLimit > 0 && account.RequestsUsed >= account.RequestsLimit) {
 			continue
 		}
-		accounts[index].RequestsUsed++
+		provider.Accounts[index].RequestsUsed++
 		s.next[provider.ID] = index + 1
-		return account.APIKey, accounts
+		return account.APIKey
 	}
-	return "", accounts
+	return ""
 }
 func (s *Store) Upsert(provider Provider) error {
 	s.mu.Lock()
