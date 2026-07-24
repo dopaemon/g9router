@@ -6,6 +6,14 @@ import (
 	"encoding/hex"
 )
 
+type Response struct {
+	Text     string
+	Thinking string
+	ToolID   string
+	ToolName string
+	ToolArgs string
+}
+
 const (
 	wireVarint = 0
 	wireBytes  = 2
@@ -98,4 +106,81 @@ func Body(messages []map[string]string, modelName string, agentic bool) []byte {
 	binary.BigEndian.PutUint32(frame[1:5], uint32(len(payload)))
 	copy(frame[5:], payload)
 	return frame
+}
+
+func readFields(payload []byte) map[uint64][][]byte {
+	fields := map[uint64][][]byte{}
+	for offset := 0; offset < len(payload); {
+		tag, next := readVarint(payload, offset)
+		if next <= offset {
+			break
+		}
+		offset = next
+		number, kind := tag>>3, tag&7
+		if kind == wireVarint {
+			_, offset = readVarint(payload, offset)
+			continue
+		}
+		if kind != wireBytes {
+			break
+		}
+		length, next := readVarint(payload, offset)
+		if next <= offset || next+int(length) > len(payload) {
+			break
+		}
+		offset = next
+		fields[number] = append(fields[number], payload[offset:offset+int(length)])
+		offset += int(length)
+	}
+	return fields
+}
+
+func readVarint(payload []byte, offset int) (uint64, int) {
+	var value uint64
+	for shift := uint(0); offset < len(payload) && shift < 64; shift += 7 {
+		part := payload[offset]
+		offset++
+		value |= uint64(part&0x7f) << shift
+		if part < 0x80 {
+			return value, offset
+		}
+	}
+	return 0, offset
+}
+
+func ParseFrame(frame []byte) (Response, int, bool) {
+	if len(frame) < 5 {
+		return Response{}, 0, false
+	}
+	length := int(binary.BigEndian.Uint32(frame[1:5]))
+	if length < 0 || 5+length > len(frame) {
+		return Response{}, 0, false
+	}
+	fields := readFields(frame[5 : 5+length])
+	result := Response{}
+	if values := fields[1]; len(values) > 0 {
+		tool := readFields(values[0])
+		if ids := tool[3]; len(ids) > 0 {
+			result.ToolID = string(ids[0])
+		}
+		if names := tool[9]; len(names) > 0 {
+			result.ToolName = string(names[0])
+		}
+		if args := tool[10]; len(args) > 0 {
+			result.ToolArgs = string(args[0])
+		}
+	}
+	if values := fields[2]; len(values) > 0 {
+		response := readFields(values[0])
+		if texts := response[1]; len(texts) > 0 {
+			result.Text = string(texts[0])
+		}
+		if thinking := response[25]; len(thinking) > 0 {
+			inner := readFields(thinking[0])
+			if values := inner[1]; len(values) > 0 {
+				result.Thinking = string(values[0])
+			}
+		}
+	}
+	return result, 5 + length, true
 }
