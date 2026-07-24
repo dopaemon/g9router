@@ -9,6 +9,10 @@ import (
 )
 
 func (s *Server) genericOAuthAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		s.genericOAuthExchangeAPI(w, r)
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
