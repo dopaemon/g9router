@@ -13,7 +13,7 @@ func (s *Server) antigravityMITMAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		status := s.mitmManager.Status()
-		writeJSON(w, http.StatusOK, map[string]any{"running": status.Running, "pid": status.PID, "certExists": status.CertExists, "certTrusted": status.CertTrusted, "dnsStatus": map[string]bool{}, "isWin": false, "isAdmin": false, "listenAddress": status.ListenAddress, "mitmRouterBaseUrl": status.RouterBaseURL})
+		writeJSON(w, http.StatusOK, map[string]any{"running": status.Running, "pid": status.PID, "certExists": status.CertExists, "certTrusted": status.CertTrusted, "dnsStatus": s.mitmManager.DNSStatus(), "isWin": false, "isAdmin": false, "listenAddress": status.ListenAddress, "mitmRouterBaseUrl": status.RouterBaseURL})
 	case http.MethodPost:
 		var input struct {
 			APIKey        string `json:"apiKey"`
@@ -42,7 +42,28 @@ func (s *Server) antigravityMITMAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "running": false})
 	case http.MethodPatch:
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "DNS tool integration requires OS-specific privileged configuration"})
+		var input struct {
+			Tool         string `json:"tool"`
+			Action       string `json:"action"`
+			SudoPassword string `json:"sudoPassword"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || strings.TrimSpace(input.Tool) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tool and action required"})
+			return
+		}
+		if input.Action == "trust-cert" {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "automatic certificate trust is OS-specific"})
+			return
+		}
+		if input.Action != "enable" && input.Action != "disable" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be enable or disable"})
+			return
+		}
+		if err := s.mitmManager.SetDNS(input.Tool, input.SudoPassword, input.Action == "enable"); err != nil {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "dnsStatus": s.mitmManager.DNSStatus()})
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
