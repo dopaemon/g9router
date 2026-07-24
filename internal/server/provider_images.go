@@ -26,6 +26,10 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.bflImage(w, r, apiKey, input)
 		case "runwayml":
 			return s.runwayImage(w, r, apiKey, input)
+		case "sdwebui":
+			return s.sdWebUIImage(w, r, input)
+		case "nanobanana":
+			return s.nanoBananaImage(w, r, apiKey, input)
 		default:
 			return false
 		}
@@ -82,6 +86,122 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
 	return true
+}
+
+func (s *Server) sdWebUIImage(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
+	size := strings.SplitN(stringValue(input["size"]), "x", 2)
+	width, height := 512, 512
+	if len(size) == 2 {
+		width, _ = strconv.Atoi(size[0])
+		height, _ = strconv.Atoi(size[1])
+	}
+	body := map[string]any{"prompt": input["prompt"], "width": width, "height": height, "steps": 20, "batch_size": numberOr(input["n"], 1)}
+	return s.postImageJSON(w, r, "http://localhost:7860/sdapi/v1/txt2img", "", body, func(data []byte) (any, bool) {
+		var payload struct {
+			Images []string `json:"images"`
+		}
+		if json.Unmarshal(data, &payload) != nil {
+			return nil, false
+		}
+		images := make([]map[string]string, 0, len(payload.Images))
+		for _, image := range payload.Images {
+			images = append(images, map[string]string{"b64_json": image})
+		}
+		return imageResult(images), true
+	})
+}
+
+func (s *Server) nanoBananaImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
+	body := map[string]any{"prompt": input["prompt"], "type": "TEXTTOIAMGE", "numImages": numberOr(input["n"], 1), "image_size": imageAspectRatio(stringValue(input["size"])), "callBackUrl": "https://localhost/callback"}
+	var images []string
+	if image := stringValue(input["image"]); image != "" {
+		body["type"] = "IMAGETOIAMGE"
+		images = append(images, image)
+	}
+	if values, ok := input["images"].([]any); ok {
+		for _, value := range values {
+			if image := stringValue(value); image != "" {
+				images = append(images, image)
+			}
+		}
+	}
+	if len(images) > 0 {
+		body["type"] = "IMAGETOIAMGE"
+		body["imageUrls"] = images
+	}
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.nanobananaapi.ai/api/v1/nanobanana/generate", strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var submitted struct {
+		Code int `json:"code"`
+		Data struct {
+			TaskID string `json:"taskId"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(data, &submitted) != nil || submitted.Code != 200 || submitted.Data.TaskID == "" {
+		return false
+	}
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-r.Context().Done():
+			return false
+		case <-time.After(1500 * time.Millisecond):
+		}
+		poll, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.nanobananaapi.ai/api/v1/nanobanana/record-info?taskId="+url.QueryEscape(submitted.Data.TaskID), nil)
+		if apiKey != "" {
+			poll.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+		result, err := s.client.Do(poll)
+		if err != nil {
+			return false
+		}
+		pollData, _ := io.ReadAll(io.LimitReader(result.Body, 8<<20))
+		result.Body.Close()
+		var status struct {
+			Data struct {
+				SuccessFlag  int    `json:"successFlag"`
+				ErrorMessage string `json:"errorMessage"`
+				Response     struct {
+					ResultImageURL string `json:"resultImageUrl"`
+					OriginImageURL string `json:"originImageUrl"`
+				} `json:"response"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(pollData, &status) != nil {
+			return false
+		}
+		if status.Data.SuccessFlag == 1 {
+			image := status.Data.Response.ResultImageURL
+			if image == "" {
+				image = status.Data.Response.OriginImageURL
+			}
+			if image == "" {
+				return false
+			}
+			writeJSON(w, http.StatusOK, imageResult([]map[string]string{{"url": image, "revised_prompt": stringValue(input["prompt"])}}))
+			return true
+		}
+		if status.Data.SuccessFlag == 2 || status.Data.SuccessFlag == 3 {
+			return false
+		}
+	}
+	return false
 }
 
 func (s *Server) falImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
