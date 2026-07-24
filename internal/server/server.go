@@ -18,6 +18,7 @@ import (
 	"g9router/internal/auth"
 	"g9router/internal/db"
 	"g9router/internal/executor"
+	"g9router/internal/format"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
 	"g9router/internal/providers"
@@ -421,6 +422,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		body, _ = json.Marshal(request)
 	}
 	model, _ := request["model"].(string)
+	sourceFormat := format.Detect(request)
 	providers := s.store.Resolve(model)
 	if len(providers) == 0 {
 		s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey)
@@ -428,6 +430,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	}
 	for _, provider := range providers {
 		providerBody := body
+		providerPath := path
 		translateResponse := false
 		if path == "/responses" && provider.APIType == "openai-chat" {
 			var responsesBody map[string]any
@@ -445,8 +448,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
-		if path == "/messages" && provider.APIType == "openai" {
+		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
+			providerPath = "/chat/completions"
 			var claude map[string]any
 			if json.Unmarshal(body, &claude) == nil {
 				stream, _ := claude["stream"].(bool)
@@ -456,12 +460,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 		}
 		if translateResponse {
-			if s.proxyTranslated(w, r, provider.BaseURL, path, providerBody, provider.APIKey) {
+			if s.proxyTranslated(w, r, provider.BaseURL, providerPath, providerBody, provider.APIKey) {
 				return
 			}
 			continue
 		}
-		if s.proxy(w, r, provider.BaseURL, path, http.MethodPost, providerBody, provider.APIKey) {
+		if s.proxy(w, r, provider.BaseURL, providerPath, http.MethodPost, providerBody, provider.APIKey) {
 			return
 		}
 	}
