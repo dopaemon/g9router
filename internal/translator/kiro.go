@@ -2,6 +2,7 @@ package translator
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 	"time"
@@ -45,8 +46,12 @@ func OpenAIToKiro(model string, body map[string]any, stream bool) map[string]any
 	}
 	currentMessage := current["userInputMessage"].(map[string]any)
 	currentMessage["content"] = "[Context: Current time is " + time.Now().UTC().Format(time.RFC3339Nano) + "]\n\n" + stringValue(currentMessage["content"])
-	conversationID := randomID()
-	state := map[string]any{"chatTriggerType": "MANUAL", "conversationId": conversationID, "agentContinuationId": conversationID, "agentTaskType": "vibe", "currentMessage": current, "history": history}
+	conversationID := kiroConversationID(body, history)
+	continuationID := stringValue(body["agent_continuation_id"])
+	if continuationID == "" {
+		continuationID = conversationID
+	}
+	state := map[string]any{"chatTriggerType": "MANUAL", "conversationId": conversationID, "agentContinuationId": continuationID, "agentTaskType": "vibe", "currentMessage": current, "history": history}
 	result := map[string]any{"conversationState": state, "agentMode": "vibe", "inferenceConfig": map[string]any{"maxTokens": 32000}}
 	if agentic {
 		result["systemPrompt"] = kiroAgenticSystemPrompt
@@ -62,6 +67,26 @@ func OpenAIToKiro(model string, body map[string]any, stream bool) map[string]any
 	}
 	_ = stream
 	return result
+}
+
+func kiroConversationID(body map[string]any, history []any) string {
+	for _, key := range []string{"conversation_id", "conversationId", "session_id", "sessionId"} {
+		if value := stringValue(body[key]); value != "" {
+			return value
+		}
+	}
+	seed := stringValue(body["user_id"])
+	if seed == "" {
+		seed = stringValue(body["metadata"])
+	}
+	if seed == "" {
+		seed = stringValue(body["model"]) + ":" + stringValue(body["system"])
+	}
+	if seed == "" {
+		seed = stringValue(history)
+	}
+	sum := sha256.Sum256([]byte(seed))
+	return hex.EncodeToString(sum[:16])
 }
 
 const kiroAgenticSystemPrompt = "# CRITICAL: CHUNKED WRITE PROTOCOL (MANDATORY)\n\nYou MUST follow chunked write operations for file changes to avoid server timeouts."
