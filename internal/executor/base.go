@@ -68,6 +68,8 @@ func Execute(ctx context.Context, client *http.Client, config Config, path strin
 				if config.Format == "claude" {
 					request.Header.Set("x-api-key", config.APIKey)
 					request.Header.Set("anthropic-version", "2023-06-01")
+				} else if config.Format == "gemini" {
+					request.Header.Set("X-Goog-Api-Key", config.APIKey)
 				} else {
 					request.Header.Set("Authorization", "Bearer "+config.APIKey)
 				}
