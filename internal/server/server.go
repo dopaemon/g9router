@@ -59,6 +59,7 @@ type Server struct {
 	oidcConfig      oidc.Config
 	mcpBridge       *mcp.Bridge
 	headroomManager *headroom.Manager
+	database        *sql.DB
 	keys            *keyStore.Store
 	combos          *comboStore.Store
 	providerNodes   *providerNodeStore.Store
@@ -78,7 +79,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json")}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), database: database}
 }
 
 func (s *Server) Run() error {
@@ -112,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
 	mux.HandleFunc("/api/settings/require-login", s.requireLoginAPI)
+	mux.HandleFunc("/api/settings/database", s.databaseSettingsAPI)
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
@@ -372,6 +374,35 @@ func (s *Server) requireLoginAPI(w http.ResponseWriter, r *http.Request) {
 		dashboardAccess = true
 	}
 	writeJSON(w, 200, map[string]any{"requireLogin": requireLogin, "tunnelDashboardAccess": dashboardAccess, "tunnelUrl": anyString(values["tunnelUrl"]), "tailscaleUrl": anyString(values["tailscaleUrl"])})
+}
+
+func (s *Server) databaseSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	if s.database == nil {
+		writeJSON(w, 500, map[string]string{"error": "database unavailable"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		backup, err := db.Export(s.database)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, backup)
+	case http.MethodPost:
+		var backup db.Backup
+		if json.NewDecoder(io.LimitReader(r.Body, 32<<20)).Decode(&backup) != nil || !backup.Valid() {
+			writeJSON(w, 400, map[string]string{"error": "invalid database backup"})
+			return
+		}
+		if err := db.Import(s.database, backup); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"success": true})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (s *Server) modelAliasAPI(w http.ResponseWriter, r *http.Request) {
