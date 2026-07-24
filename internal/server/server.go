@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/audio/voices", s.audioVoicesAPI)
 	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/v1/videos/", s.videoAPI)
+	mux.HandleFunc("/v1/web/fetch", s.webFetchAPI)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/providers/validate", s.validateProviderAPI)
 	mux.HandleFunc("/api/providers/test-batch", s.providerBatchTestAPI)
