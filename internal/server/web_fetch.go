@@ -50,6 +50,9 @@ func (s *Server) webFetchAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	provider, _ := s.store.Find(input.Provider)
 	apiKey := provider.APIKey
+	if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+		apiKey = credential.AccessToken
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	started := time.Now()
@@ -65,6 +68,20 @@ func (s *Server) webFetchAPI(w http.ResponseWriter, r *http.Request) {
 		request.Header.Set("Content-Type", "application/json")
 		if apiKey != "" {
 			request.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+	} else if input.Provider == "tavily" {
+		body, _ := json.Marshal(map[string]any{"urls": []string{input.URL}, "extract_depth": "basic"})
+		request, err = http.NewRequestWithContext(ctx, http.MethodPost, "https://api.tavily.com/extract", strings.NewReader(string(body)))
+		request.Header.Set("Content-Type", "application/json")
+		if apiKey != "" {
+			request.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+	} else if input.Provider == "exa" {
+		body, _ := json.Marshal(map[string]any{"ids": []string{input.URL}, "text": true})
+		request, err = http.NewRequestWithContext(ctx, http.MethodPost, "https://api.exa.ai/contents", strings.NewReader(string(body)))
+		request.Header.Set("Content-Type", "application/json")
+		if apiKey != "" {
+			request.Header.Set("x-api-key", apiKey)
 		}
 	} else {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Unsupported provider: " + input.Provider})
@@ -105,6 +122,25 @@ func (s *Server) webFetchAPI(w http.ResponseWriter, r *http.Request) {
 			if text == "" {
 				text = string(data)
 			}
+		}
+	} else if input.Provider == "tavily" {
+		var payload struct {
+			Results []struct {
+				RawContent string `json:"raw_content"`
+			} `json:"results"`
+		}
+		if json.Unmarshal(data, &payload) == nil && len(payload.Results) > 0 {
+			text = payload.Results[0].RawContent
+		}
+	} else if input.Provider == "exa" {
+		var payload struct {
+			Results []struct {
+				Title string `json:"title"`
+				Text  string `json:"text"`
+			} `json:"results"`
+		}
+		if json.Unmarshal(data, &payload) == nil && len(payload.Results) > 0 {
+			text = payload.Results[0].Text
 		}
 	}
 	if input.MaxCharacters > 0 && len(text) > input.MaxCharacters {
