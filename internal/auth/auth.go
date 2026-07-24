@@ -32,6 +32,14 @@ func Middleware(next http.Handler, key string) http.Handler {
 }
 
 func MiddlewareWithValidator(next http.Handler, key string, validator func(string) bool, enabled bool) http.Handler {
+	return middleware(next, key, validator, enabled, nil)
+}
+
+func MiddlewareWithSession(next http.Handler, key string, validator func(string) bool, enabled bool, sessions *Sessions) http.Handler {
+	return middleware(next, key, validator, enabled, sessions)
+}
+
+func middleware(next http.Handler, key string, validator func(string) bool, enabled bool, sessions *Sessions) http.Handler {
 	if key == "" && !enabled {
 		return next
 	}
@@ -47,6 +55,11 @@ func MiddlewareWithValidator(next http.Handler, key string, validator func(strin
 		valid := key != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(key)) == 1
 		if !valid && validator != nil {
 			valid = validator(provided)
+		}
+		if !valid && sessions != nil {
+			if cookie, err := r.Cookie("g9router_session"); err == nil {
+				valid = sessions.Valid(cookie.Value)
+			}
 		}
 		if !valid {
 			w.Header().Set("WWW-Authenticate", "Bearer")

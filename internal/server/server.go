@@ -254,7 +254,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/oidc/test", s.oidcTestAPI)
 	mux.Handle("/", web.Handler())
 	handler := logging(mux)
-	return auth.MiddlewareWithValidator(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, s.keys.HasActive())
+	return auth.MiddlewareWithSession(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, s.keys.HasActive(), s.sessions)
 }
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
