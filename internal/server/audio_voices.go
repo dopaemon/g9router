@@ -12,6 +12,8 @@ var audioVoiceAliases = map[string]string{
 	"elevenlabs":   "el",
 	"deepgram":     "dg",
 	"inworld":      "iw",
+	"minimax":      "minimax",
+	"minimax-cn":   "minimax-cn",
 	"edge-tts":     "edge-tts",
 	"local-device": "local-device",
 }
@@ -36,6 +38,14 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if provider == "deepgram" {
 		s.deepgramVoicesAPI(w, r, alias)
+		return
+	}
+	if provider == "inworld" {
+		s.inworldVoicesAPI(w, r, alias)
+		return
+	}
+	if provider == "minimax" || provider == "minimax-cn" {
+		s.minimaxVoicesAPI(w, r, alias)
 		return
 	}
 	if provider != "edge-tts" && provider != "elevenlabs" {
@@ -76,6 +86,122 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		data = append(data, map[string]any{"id": id, "name": name, "lang": lang, "gender": gender, "model": alias + "/" + id})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+}
+
+func (s *Server) inworldVoicesAPI(w http.ResponseWriter, r *http.Request, alias string) {
+	provider, ok := s.store.Find("inworld")
+	if !ok || provider.APIKey == "" {
+		writeJSON(w, 400, map[string]string{"error": "No Inworld connection found"})
+		return
+	}
+	request, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.inworld.ai/tts/v1/voices", nil)
+	request.Header.Set("Authorization", "Basic "+provider.APIKey)
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeJSON(w, 502, map[string]string{"error": "Inworld API error"})
+		return
+	}
+	var payload struct {
+		Voices []struct {
+			VoiceID     string   `json:"voiceId"`
+			DisplayName string   `json:"displayName"`
+			Gender      string   `json:"gender"`
+			Languages   []string `json:"languages"`
+		} `json:"voices"`
+	}
+	if json.Unmarshal(data, &payload) != nil {
+		writeJSON(w, 502, map[string]string{"error": "invalid Inworld voice catalog"})
+		return
+	}
+	langFilter := r.URL.Query().Get("lang")
+	voices := []map[string]any{}
+	for _, item := range payload.Voices {
+		langs := item.Languages
+		if len(langs) == 0 {
+			langs = []string{"en"}
+		}
+		for _, lang := range langs {
+			if langFilter != "" && lang != langFilter {
+				continue
+			}
+			voices = append(voices, map[string]any{"id": item.VoiceID, "name": item.DisplayName, "lang": lang, "gender": item.Gender, "model": alias + "/" + item.VoiceID})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"object": "list", "data": voices})
+}
+
+func (s *Server) minimaxVoicesAPI(w http.ResponseWriter, r *http.Request, alias string) {
+	provider := r.URL.Query().Get("provider")
+	if provider != "minimax-cn" {
+		provider = "minimax"
+	}
+	connection, ok := s.store.Find(provider)
+	if !ok || connection.APIKey == "" {
+		writeJSON(w, 400, map[string]string{"error": "No " + provider + " connection found"})
+		return
+	}
+	endpoint := "https://api.minimax.io/v1/get_voice"
+	if provider == "minimax-cn" {
+		endpoint = "https://api.minimaxi.com/v1/get_voice"
+	}
+	body, _ := json.Marshal(map[string]string{"voice_type": nonEmpty(r.URL.Query().Get("voice_type"), "all")})
+	request, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(string(body)))
+	request.Header.Set("Authorization", "Bearer "+connection.APIKey)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeJSON(w, 502, map[string]string{"error": "MiniMax API error"})
+		return
+	}
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		writeJSON(w, 502, map[string]string{"error": "invalid MiniMax voice catalog"})
+		return
+	}
+	langFilter := r.URL.Query().Get("lang")
+	voices := []map[string]any{}
+	groups := []string{"system_voice", "voice_cloning", "voice_generation", "music_generation"}
+	for _, group := range groups {
+		items, _ := payload[group].([]any)
+		for _, raw := range items {
+			item, _ := raw.(map[string]any)
+			id := stringValue(item["voice_id"])
+			if id == "" {
+				id = stringValue(item["voiceId"])
+			}
+			if id == "" {
+				continue
+			}
+			lang := "Custom"
+			if group == "system_voice" && strings.Contains(id, "_") {
+				lang = strings.SplitN(id, "_", 2)[0]
+			}
+			if langFilter != "" && lang != langFilter {
+				continue
+			}
+			name := stringValue(item["voice_name"])
+			if name == "" {
+				name = stringValue(item["voiceName"])
+			}
+			if name == "" {
+				name = id
+			}
+			voices = append(voices, map[string]any{"id": id, "name": name, "lang": lang, "category": group, "model": alias + "/" + id})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"object": "list", "data": voices})
 }
 
 func (s *Server) deepgramVoicesAPI(w http.ResponseWriter, r *http.Request, alias string) {
