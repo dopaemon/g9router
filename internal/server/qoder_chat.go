@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,16 @@ import (
 
 const qoderChatURL = "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
 const qoderModelListURL = "https://api3.qoder.sh/algo/api/v2/model/list"
+
+type qoderModelCacheEntry struct {
+	config    map[string]any
+	expiresAt time.Time
+}
+
+var qoderModelCache = struct {
+	sync.RWMutex
+	items map[string]qoderModelCacheEntry
+}{items: map[string]qoderModelCacheEntry{}}
 
 func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, accessToken string, providerData map[string]any) bool {
 	var input map[string]any
@@ -110,7 +121,15 @@ func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, 
 }
 
 func (s *Server) qoderModelConfig(r *http.Request, token string, providerData map[string]any, model string) (map[string]any, error) {
-	credentials := qoderCOSYCredentials{UserID: stringValue(providerData["userId"]), AuthToken: token, Name: stringValue(providerData["name"]), Email: stringValue(providerData["email"]), MachineID: stringValue(providerData["machineId"])}
+	userID := stringValue(providerData["userId"])
+	cacheKey := userID + ":" + model
+	qoderModelCache.RLock()
+	entry, cached := qoderModelCache.items[cacheKey]
+	qoderModelCache.RUnlock()
+	if cached && time.Now().Before(entry.expiresAt) {
+		return cloneMap(entry.config), nil
+	}
+	credentials := qoderCOSYCredentials{UserID: userID, AuthToken: token, Name: stringValue(providerData["name"]), Email: stringValue(providerData["email"]), MachineID: stringValue(providerData["machineId"])}
 	headers, err := qoderCOSYHeaders(nil, qoderModelListURL, credentials)
 	if err != nil {
 		return nil, err
@@ -140,6 +159,9 @@ func (s *Server) qoderModelConfig(r *http.Request, token string, providerData ma
 	}
 	for _, config := range payload.Chat {
 		if stringValue(config["key"]) == model {
+			qoderModelCache.Lock()
+			qoderModelCache.items[cacheKey] = qoderModelCacheEntry{config: cloneMap(config), expiresAt: time.Now().Add(5 * time.Minute)}
+			qoderModelCache.Unlock()
 			return config, nil
 		}
 	}
