@@ -27,7 +27,7 @@ func (s *Server) antigravityMITMAPI(w http.ResponseWriter, r *http.Request) {
 		if base == "" {
 			base = "http://localhost:20128"
 		}
-		status, err := s.mitmManager.Start(base)
+		status, err := s.mitmManager.Start(base, input.APIKey)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
