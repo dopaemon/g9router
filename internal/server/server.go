@@ -160,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
+	mux.HandleFunc("/api/auth/reset-password", s.resetPasswordAPI)
 	mux.HandleFunc("/api/auth/oidc/start", s.oidcStart)
 	mux.HandleFunc("/api/auth/oidc/callback", s.oidcCallback)
 	mux.Handle("/", web.Handler())
@@ -502,6 +503,18 @@ func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "g9router_session", Value: "", Path: "/", MaxAge: -1})
 	writeJSON(w, 200, map[string]bool{"success": true})
+}
+
+func (s *Server) resetPasswordAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if err := s.settings.Update(map[string]any{"password": nil}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request) {
