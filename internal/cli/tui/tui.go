@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -44,7 +45,7 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 		case "3":
 			err = ui.combos(reader)
 		case "4":
-			err = ui.showJSON(reader, "/api/cli-tools/all-statuses")
+			err = ui.cliTools(reader)
 		case "5":
 			err = ui.settings(reader)
 		default:
@@ -106,6 +107,79 @@ type combo struct {
 	Name   string `json:"name"`
 	Models []any  `json:"models"`
 	Kind   string `json:"kind,omitempty"`
+}
+
+func (ui *UI) cliTools(reader *bufio.Reader) error {
+	paths := map[string]string{"claude": "/api/cli-tools/claude-settings", "codex": "/api/cli-tools/codex-settings", "opencode": "/api/cli-tools/opencode-settings", "copilot": "/api/cli-tools/copilot-settings", "droid": "/api/cli-tools/droid-settings", "cline": "/api/cli-tools/cline-settings", "kilo": "/api/cli-tools/kilo-settings", "openclaw": "/api/cli-tools/openclaw-settings", "deepseek-tui": "/api/cli-tools/deepseek-tui-settings", "grok-build": "/api/cli-tools/grok-build-settings", "hermes": "/api/cli-tools/hermes-settings", "jcode": "/api/cli-tools/jcode-settings", "cowork": "/api/cli-tools/cowork-settings"}
+	for {
+		var statuses map[string]any
+		if err := ui.request(http.MethodGet, "/api/cli-tools/all-statuses", nil, &statuses); err != nil {
+			return err
+		}
+		fmt.Fprintln(ui.Out, "\nCLI Tools")
+		keys := make([]string, 0, len(statuses))
+		for name := range statuses {
+			keys = append(keys, name)
+		}
+		sort.Strings(keys)
+		for i, name := range keys {
+			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, name, statuses[name])
+		}
+		fmt.Fprintln(ui.Out, "s. Show settings  a. Apply JSON  r. Reset  b. Back")
+		fmt.Fprint(ui.Out, "Select action: ")
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return err
+		}
+		action := strings.ToLower(strings.TrimSpace(line))
+		if action == "b" || action == "0" {
+			return nil
+		}
+		if action != "s" && action != "a" && action != "r" {
+			fmt.Fprintln(ui.Out, "Invalid selection")
+			continue
+		}
+		fmt.Fprint(ui.Out, "Tool number: ")
+		line, err = reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		index, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || index < 1 || index > len(keys) {
+			fmt.Fprintln(ui.Out, "Invalid tool number")
+			continue
+		}
+		path := paths[keys[index-1]]
+		if path == "" {
+			fmt.Fprintln(ui.Out, "Tool settings are not available")
+			continue
+		}
+		if action == "s" {
+			if err := ui.showJSON(reader, path); err != nil {
+				return err
+			}
+			continue
+		}
+		if action == "r" {
+			if err := ui.request(http.MethodDelete, path, nil, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		fmt.Fprint(ui.Out, "JSON body: ")
+		body, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		var payload any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &payload); err != nil {
+			fmt.Fprintln(ui.Out, "Invalid JSON")
+			continue
+		}
+		if err := ui.request(http.MethodPost, path, payload, nil); err != nil {
+			return err
+		}
+	}
 }
 
 func (ui *UI) settings(reader *bufio.Reader) error {
