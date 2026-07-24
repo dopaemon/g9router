@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os/exec"
 	"runtime"
@@ -125,7 +127,36 @@ func (s *Server) tailscaleInstallAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "automatic Tailscale installation is unavailable; install it from tailscale.com"})
+	if runtime.GOOS == "windows" {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "automatic Windows installation is unavailable"})
+		return
+	}
+	var input struct {
+		SudoPassword string `json:"sudoPassword"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input)
+	}
+	if strings.ContainsAny(input.SudoPassword, "\r\n") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid sudo password"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	download := exec.CommandContext(ctx, "curl", "-fsSL", "https://tailscale.com/install.sh")
+	script, err := download.Output()
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to download Tailscale installer"})
+		return
+	}
+	command := exec.CommandContext(ctx, "sudo", "-S", "sh")
+	command.Stdin = bytes.NewBuffer(append([]byte(input.SudoPassword+"\n"), script...))
+	output, err := command.CombinedOutput()
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": strings.TrimSpace(string(output))})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "installed": tailscaleInstalled(), "output": strings.TrimSpace(string(output))})
 }
 
 type tailscaleStatus struct {
