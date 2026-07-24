@@ -3524,13 +3524,21 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "github" {
 			if copilotToken, _ := provider.ProviderSpecificData["copilotToken"].(string); copilotToken != "" && !copilotTokenExpired(provider.ProviderSpecificData["copilotTokenExpiresAt"]) {
 				provider.APIKey = copilotToken
-			} else if token, expiresAt, err := s.refreshGithubCopilotToken(r.Context(), provider.APIKey); err == nil {
-				provider.APIKey = token
-				if provider.ProviderSpecificData == nil {
-					provider.ProviderSpecificData = map[string]any{}
+			} else {
+				githubToken := provider.APIKey
+				if provider.OAuthID != "" {
+					if credential, found := s.oauth.Get(provider.OAuthID); found && credential.AccessToken != "" {
+						githubToken = credential.AccessToken
+					}
 				}
-				provider.ProviderSpecificData["copilotToken"], provider.ProviderSpecificData["copilotTokenExpiresAt"] = token, expiresAt
-				_ = s.store.Upsert(provider)
+				if token, expiresAt, err := s.refreshGithubCopilotToken(r.Context(), githubToken); err == nil {
+					provider.APIKey = token
+					if provider.ProviderSpecificData == nil {
+						provider.ProviderSpecificData = map[string]any{}
+					}
+					provider.ProviderSpecificData["copilotToken"], provider.ProviderSpecificData["copilotTokenExpiresAt"] = token, expiresAt
+					_ = s.store.Upsert(provider)
+				}
 			}
 		}
 		providerBody := body
