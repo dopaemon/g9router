@@ -465,6 +465,18 @@ func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		result["claude"] = map[string]any{"installed": cliErr == nil || readErr == nil, "configured": configured, "available": cliErr == nil || readErr == nil}
+		codexPath := filepath.Join(home, ".codex", "config.toml")
+		codexRaw, codexReadErr := os.ReadFile(codexPath)
+		_, codexCLIErr := exec.LookPath("codex")
+		codexInstalled := codexCLIErr == nil || codexReadErr == nil
+		codexConfigured := strings.Contains(string(codexRaw), `[model_providers.9router]`) || strings.Contains(string(codexRaw), `model_provider = "9router"`)
+		result["codex"] = map[string]any{"installed": codexInstalled, "configured": codexConfigured, "available": codexInstalled}
+		opencodePath := filepath.Join(home, ".config", "opencode", "opencode.json")
+		opencodeRaw, opencodeReadErr := os.ReadFile(opencodePath)
+		_, opencodeCLIErr := exec.LookPath("opencode")
+		opencodeInstalled := opencodeCLIErr == nil || opencodeReadErr == nil
+		opencodeConfigured := strings.Contains(string(opencodeRaw), `"9router"`)
+		result["opencode"] = map[string]any{"installed": opencodeInstalled, "configured": opencodeConfigured, "available": opencodeInstalled}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
