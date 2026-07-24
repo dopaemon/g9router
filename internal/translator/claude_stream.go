@@ -3,6 +3,7 @@ package translator
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -177,7 +178,8 @@ func openAIFinish(reason string) string {
 }
 func addUsage(raw string, usage map[string]int) string {
 	var value map[string]any
-	if json.Unmarshal([]byte(raw), &value) != nil {
+	payload := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "data:"))
+	if json.Unmarshal([]byte(payload), &value) != nil {
 		return raw
 	}
 	value["usage"] = usage
