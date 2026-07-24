@@ -3580,6 +3580,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "perplexity-web" && path == "/chat/completions" && s.perplexityWebChat(w, r, request, provider.APIKey) {
 			return
 		}
+		if provider.ID == "grok-web" && path == "/chat/completions" && s.grokWebChat(w, r, request, provider.APIKey) {
+			return
+		}
 		if (provider.ID == "opencode" || provider.ID == "opencode-go") && path == "/chat/completions" && s.openCodeChat(w, r, body, provider.ID) {
 			return
 		}
