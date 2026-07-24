@@ -13,7 +13,6 @@ func TestHandlerServesDashboardRoutes(t *testing.T) {
 		Handler().ServeHTTP(recorder, request)
 		if recorder.Code == http.StatusMovedPermanently {
 			location := recorder.Header().Get("Location")
-			t.Logf("path %s redirected to %s", path, location)
 			if location == "/" {
 				continue
 			}
