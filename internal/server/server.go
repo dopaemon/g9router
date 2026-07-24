@@ -17,7 +17,7 @@ import (
 )
 
 type Options struct {
-	Addr, Upstream, APIKey string
+	Addr, Upstream, APIKey, ProviderPath string
 }
 
 type Server struct {
@@ -31,7 +31,10 @@ func New(options Options) *Server {
 	if options.Upstream == "" {
 		options.Upstream = "https://api.openai.com/v1"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New("providers.json"), usage: &usage.Store{}}
+	if options.ProviderPath == "" {
+		options.ProviderPath = "providers.json"
+	}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: &usage.Store{}}
 }
 
 func (s *Server) Run() error {
@@ -188,6 +191,9 @@ func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, 
 	}
 	translated := translator.OpenAIToClaudeResponse(openAI)
 	for key, values := range response.Header {
+		if key == "Content-Length" || key == "Content-Encoding" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
@@ -225,6 +231,9 @@ func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, p
 		return false
 	}
 	for key, values := range response.Header {
+		if key == "Content-Length" || key == "Content-Encoding" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
