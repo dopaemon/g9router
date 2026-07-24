@@ -110,6 +110,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/responses/compact", s.responsesCompactAPI)
 	mux.HandleFunc("/api/v1/responses/compact", s.responsesCompactAPI)
 	mux.HandleFunc("/api/v1/responses", s.responses)
+	mux.HandleFunc("/v1/api/chat", s.ollamaChatAPI)
+	mux.HandleFunc("/api/v1/api/chat", s.ollamaChatAPI)
 	mux.HandleFunc("/v1/messages", s.messages)
 	mux.HandleFunc("/v1/messages/count_tokens", s.countTokensAPI)
 	mux.HandleFunc("/api/v1/messages/count_tokens", s.countTokensAPI)
