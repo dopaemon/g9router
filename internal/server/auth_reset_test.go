@@ -18,6 +18,7 @@ func TestResetPasswordAPI(t *testing.T) {
 
 func TestSettingsPasswordChangeAndLogin(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	t.Cleanup(func() { _ = app.settings.Update(map[string]any{"password": nil}) })
 	change := httptest.NewRecorder()
 	app.Handler().ServeHTTP(change, httptest.NewRequest(http.MethodPatch, "/api/settings", strings.NewReader(`{"currentPassword":"123456","newPassword":"new-secret"}`)))
 	if change.Code != http.StatusOK {
