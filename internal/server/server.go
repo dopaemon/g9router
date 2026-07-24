@@ -3249,6 +3249,11 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 	s.forwardRaw(w, r, "/images/generations")
 }
 func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
+		if s.transcriptionProvider(w, r) {
+			return
+		}
+	}
 	s.forwardRaw(w, r, "/audio/transcriptions")
 }
 func (s *Server) speech(w http.ResponseWriter, r *http.Request) {
