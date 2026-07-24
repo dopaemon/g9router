@@ -20,6 +20,7 @@ import (
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
 	"g9router/internal/providers"
+	"g9router/internal/rtk"
 	"g9router/internal/settings"
 	"g9router/internal/translator"
 	"g9router/internal/usage"
@@ -357,6 +358,10 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model is required"})
 		return
 	}
+	if os.Getenv("G9ROUTER_RTK") == "1" {
+		rtk.CompressMessages(arrayValue(request["messages"]))
+		body, _ = json.Marshal(request)
+	}
 	model, _ := request["model"].(string)
 	providers := s.store.Resolve(model)
 	if len(providers) == 0 {
@@ -405,6 +410,8 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	s.usage.Add(0, 1, int64(len(body)), 0)
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
 }
+
+func arrayValue(value any) []any { values, _ := value.([]any); return values }
 
 func (s *Server) proxyResponses(w http.ResponseWriter, incoming *http.Request, baseURL string, body []byte, apiKey string) bool {
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
