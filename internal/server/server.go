@@ -1786,7 +1786,10 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 		model = "default"
 	}
 	machineID, _ := specific["machineId"].(string)
-	ghostMode, _ := specific["ghostMode"].(bool)
+	ghostMode := true
+	if value, ok := specific["ghostMode"].(bool); ok {
+		ghostMode = value
+	}
 	requestBody := cursor.Body(messages, model, ghostMode)
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
