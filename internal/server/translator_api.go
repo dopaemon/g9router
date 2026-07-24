@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"g9router/internal/format"
+	"g9router/internal/providers"
 	"g9router/internal/translator"
 )
 
@@ -46,6 +47,26 @@ func (s *Server) translatorAPI(w http.ResponseWriter, r *http.Request) {
 			result = translator.ResponsesToChat(clientBody)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": map[string]any{"body": result}})
+	case 3:
+		providerName, _ := input.Body["provider"].(string)
+		if providerName == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "provider and model required"})
+			return
+		}
+		descriptor, ok := providers.Lookup(providerName)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "unknown provider"})
+			return
+		}
+		result := clientBody
+		if source == format.Responses {
+			result = translator.ResponsesToChat(clientBody)
+		}
+		headers := map[string]string{"Content-Type": "application/json"}
+		for key, value := range descriptor.Headers {
+			headers[key] = value
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": map[string]any{"url": descriptor.BaseURL, "headers": headers, "body": result}})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid step (1-3)"})
 	}
