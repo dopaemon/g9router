@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"g9router/internal/providers"
+	"g9router/internal/usage"
 	"g9router/internal/web"
 )
 
@@ -22,13 +23,14 @@ type Server struct {
 	options Options
 	client  *http.Client
 	store   *providers.Store
+	usage   *usage.Store
 }
 
 func New(options Options) *Server {
 	if options.Upstream == "" {
 		options.Upstream = "https://api.openai.com/v1"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New("providers.json")}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New("providers.json"), usage: &usage.Store{}}
 }
 
 func (s *Server) Run() error {
@@ -44,8 +46,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/responses", s.responses)
 	mux.HandleFunc("/v1/messages", s.messages)
 	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) usageAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.usage.Snapshot())
 }
 
 func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +101,7 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) { s.forwardJS
 func (s *Server) messages(w http.ResponseWriter, r *http.Request)  { s.forwardJSON(w, r, "/messages") }
 
 func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string) {
+	s.usage.Add(1, 0, 0, 0)
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -119,6 +131,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			return
 		}
 	}
+	s.usage.Add(0, 1, int64(len(body)), 0)
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
 }
 
