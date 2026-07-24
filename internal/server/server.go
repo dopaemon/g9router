@@ -107,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
 	mux.HandleFunc("/api/headroom/stop", s.headroomStopAPI)
 	mux.HandleFunc("/api/headroom/restart", s.headroomRestartAPI)
+	mux.HandleFunc("/api/headroom/proxy/", s.headroomProxyAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -1003,6 +1004,47 @@ func (s *Server) headroomRestartAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"success": true, "pid": pid, "port": port})
+}
+
+func (s *Server) headroomProxyAPI(w http.ResponseWriter, r *http.Request) {
+	base := "http://127.0.0.1:8787"
+	if configured, ok := s.settings.Get()["headroomUrl"].(string); ok && configured != "" {
+		base = strings.TrimRight(configured, "/")
+	}
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/headroom/proxy")
+	target, err := url.Parse(base + suffix)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	target.RawQuery = r.URL.RawQuery
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), r.Method, target.String(), strings.NewReader(string(body)))
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	request.Header = r.Header.Clone()
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	for key, values := range response.Header {
+		if key == "Content-Length" {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
 }
 
 func replaceTOMLLine(content, prefix, replacement string) string {
