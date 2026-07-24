@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"g9router/internal/providers"
 )
 
 func (s *Server) tavilySearch(w http.ResponseWriter, r *http.Request) bool {
@@ -261,4 +263,166 @@ func (s *Server) exaSearch(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Server) serperSearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "serper", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		endpoint := "search"
+		if input.SearchType == "news" {
+			endpoint = "news"
+		}
+		body := map[string]any{"q": strings.TrimSpace(input.Query), "num": boundedSearchResults(input.MaxResults)}
+		if input.Country != "" {
+			body["gl"] = strings.ToLower(input.Country)
+		}
+		if input.Language != "" {
+			body["hl"] = input.Language
+		}
+		return newSearchRequest(r, http.MethodPost, "https://google.serper.dev/"+endpoint, provider.APIKey, body, "X-API-Key")
+	})
+}
+
+func (s *Server) googlePSESearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "google-pse", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		cx := ""
+		if value, ok := provider.ProviderSpecificData["cx"].(string); ok {
+			cx = value
+		}
+		if cx == "" {
+			return nil, nil
+		}
+		query := url.Values{"key": {provider.APIKey}, "cx": {cx}, "q": {strings.TrimSpace(input.Query)}, "num": {strconv.Itoa(minSearchResults(input.MaxResults, 10))}}
+		if input.Country != "" {
+			query.Set("gl", strings.ToLower(input.Country))
+		}
+		if input.Language != "" {
+			query.Set("hl", input.Language)
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://www.googleapis.com/customsearch/v1?"+query.Encode(), nil)
+		if err == nil {
+			request.Header.Set("Accept", "application/json")
+		}
+		return request, err
+	})
+}
+
+func (s *Server) searxngSearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "searxng", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		baseURL := strings.TrimRight(provider.BaseURL, "/")
+		if !strings.HasSuffix(baseURL, "/search") {
+			baseURL += "/search"
+		}
+		query := url.Values{"q": {strings.TrimSpace(input.Query)}, "format": {"json"}, "categories": {"general"}}
+		if input.SearchType == "news" {
+			query.Set("categories", "news")
+		}
+		if input.Language != "" {
+			query.Set("language", input.Language)
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, baseURL+"?"+query.Encode(), nil)
+		if err == nil {
+			request.Header.Set("Accept", "application/json")
+		}
+		return request, err
+	})
+}
+
+type searchInput struct {
+	Model, Query, SearchType, Country, Language string
+	MaxResults                                  int `json:"max_results"`
+}
+
+func boundedSearchResults(value int) int { return minSearchResults(value, 20) }
+
+func minSearchResults(value, maximum int) int {
+	if value <= 0 {
+		return 5
+	}
+	if value > maximum {
+		return maximum
+	}
+	return value
+}
+
+func newSearchRequest(r *http.Request, method, endpoint, token string, body map[string]any, tokenHeader string) (*http.Request, error) {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequestWithContext(r.Context(), method, endpoint, strings.NewReader(string(encoded)))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(tokenHeader, token)
+	return request, nil
+}
+
+func (s *Server) searchJSONProvider(w http.ResponseWriter, r *http.Request, id string, build func(searchInput, providers.Provider) (*http.Request, error)) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	if err != nil {
+		return false
+	}
+	var input searchInput
+	if json.Unmarshal(data, &input) != nil || strings.TrimSpace(input.Query) == "" {
+		return false
+	}
+	for _, provider := range s.store.Resolve(input.Model) {
+		if provider.ID != id || (id != "searxng" && provider.APIKey == "") {
+			continue
+		}
+		if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+			provider.APIKey = credential.AccessToken
+		}
+		request, err := build(input, provider)
+		if err != nil || request == nil {
+			return false
+		}
+		response, err := s.client.Do(request)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		responseData, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return false
+		}
+		var payload struct {
+			Items []struct {
+				Title, URL, Link, Snippet, Description, Content string
+				Published                                       string `json:"publishedDate"`
+			} `json:"items"`
+			Results []struct {
+				Title, URL, Content, Snippet string
+			} `json:"results"`
+		}
+		if json.Unmarshal(responseData, &payload) != nil {
+			return false
+		}
+		results := make([]map[string]any, 0)
+		if id == "searxng" {
+			for index, item := range payload.Results {
+				results = append(results, map[string]any{"title": item.Title, "url": item.URL, "snippet": firstSearchText(item.Content, item.Snippet), "position": index + 1, "citation": map[string]any{"provider": id}})
+			}
+		} else {
+			for index, item := range payload.Items {
+				results = append(results, map[string]any{"title": item.Title, "url": firstSearchText(item.Link, item.URL), "snippet": firstSearchText(item.Snippet, item.Description), "position": index + 1, "citation": map[string]any{"provider": id}})
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"provider": id, "query": input.Query, "results": results, "answer": nil, "usage": map[string]any{"queries_used": 1}, "errors": []any{}})
+		return true
+	}
+	return false
+}
+
+func firstSearchText(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
