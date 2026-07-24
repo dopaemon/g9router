@@ -609,7 +609,7 @@ func (s *Server) proxyTranslatedResponse(w http.ResponseWriter, incoming *http.R
 	}
 	translated := translator.OpenAIToClaudeResponse(openAI)
 	if claudeResponse {
-		translated = translator.ClaudeToOpenAI("", openAI, false)
+		translated = translator.ClaudeResponseToOpenAI(openAI)
 	}
 	for key, values := range response.Header {
 		if key == "Content-Length" || key == "Content-Encoding" {
