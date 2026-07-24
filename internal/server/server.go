@@ -3599,6 +3599,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "mimo-free" && path == "/chat/completions" && s.mimoFreeChat(w, r, body, request) {
 			return
 		}
+		if provider.ID == "qoder" && path == "/chat/completions" && s.qoderChat(w, r, body, provider.APIKey, provider.ProviderSpecificData) {
+			return
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
