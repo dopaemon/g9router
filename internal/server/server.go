@@ -857,7 +857,7 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 	hasConfig := func(settings map[string]any) bool {
 		models, _ := settings["customModels"].([]any)
 		for _, raw := range models {
-			if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+			if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(anyString(entry["id"]), "custom:9Router") {
 				return true
 			}
 		}
@@ -897,7 +897,7 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		existing, _ := settings["customModels"].([]any)
 		filtered := make([]any, 0, len(existing)+len(models))
 		for _, raw := range existing {
-			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(anyString(entry["id"]), "custom:9Router") {
 				filtered = append(filtered, raw)
 			}
 		}
@@ -928,7 +928,7 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			for index, raw := range filtered {
-				if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+				if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(anyString(entry["id"]), "custom:9Router") {
 					entry["index"] = index
 				}
 			}
@@ -953,7 +953,7 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		models, _ := settings["customModels"].([]any)
 		filtered := make([]any, 0, len(models))
 		for _, raw := range models {
-			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(anyString(entry["id"]), "custom:9Router") {
 				filtered = append(filtered, raw)
 			}
 		}
@@ -971,6 +971,11 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func anyString(value any) string {
+	text, _ := value.(string)
+	return text
 }
 
 func (s *Server) opencodeSettingsAPI(w http.ResponseWriter, r *http.Request) {
