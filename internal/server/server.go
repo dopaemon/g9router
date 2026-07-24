@@ -96,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -554,6 +555,144 @@ func (s *Server) claudeSettingsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) codexSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir := filepath.Join(home, ".codex")
+	configPath, authPath := filepath.Join(dir, "config.toml"), filepath.Join(dir, "auth.json")
+	switch r.Method {
+	case http.MethodGet:
+		raw, readErr := os.ReadFile(configPath)
+		_, cliErr := exec.LookPath("codex")
+		installed := cliErr == nil || readErr == nil
+		config := string(raw)
+		writeJSON(w, 200, map[string]any{"installed": installed, "config": config, "has9Router": strings.Contains(config, `model_provider = "9router"`) || strings.Contains(config, "[model_providers.9router]"), "configPath": configPath})
+	case http.MethodPost:
+		var input struct {
+			BaseURL       string `json:"baseUrl"`
+			APIKey        string `json:"apiKey"`
+			Model         string `json:"model"`
+			SubagentModel string `json:"subagentModel"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.APIKey == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl, apiKey and model are required"})
+			return
+		}
+		if !strings.HasSuffix(input.BaseURL, "/v1") {
+			input.BaseURL = strings.TrimRight(input.BaseURL, "/") + "/v1"
+		}
+		raw, _ := os.ReadFile(configPath)
+		config := string(raw)
+		config = replaceTOMLLine(config, "model =", `model = "`+input.Model+`"`)
+		config = replaceTOMLLine(config, "model_provider =", `model_provider = "9router"`)
+		config = upsertTOMLSection(config, "[model_providers.9router]", []string{`name = "9Router"`, `base_url = "` + input.BaseURL + `"`, `wire_api = "responses"`})
+		subagent := input.SubagentModel
+		if subagent == "" {
+			subagent = input.Model
+		}
+		config = upsertTOMLSection(config, "[agents.subagent]", []string{`model = "` + subagent + `"`})
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		auth := map[string]any{}
+		if raw, readErr := os.ReadFile(authPath); readErr == nil {
+			_ = json.Unmarshal(raw, &auth)
+		}
+		auth["OPENAI_API_KEY"], auth["auth_mode"] = input.APIKey, "apikey"
+		encoded, _ := json.MarshalIndent(auth, "", "  ")
+		_ = os.WriteFile(authPath, encoded, 0600)
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Codex settings applied successfully!", "configPath": configPath})
+	case http.MethodDelete:
+		raw, readErr := os.ReadFile(configPath)
+		if os.IsNotExist(readErr) {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No config file to reset"})
+			return
+		}
+		if readErr != nil {
+			writeJSON(w, 500, map[string]string{"error": readErr.Error()})
+			return
+		}
+		config := string(raw)
+		config = removeTOMLSection(config, "[model_providers.9router]")
+		config = removeTOMLSection(config, "[agents.subagent]")
+		config = removeTOMLLine(config, "model_provider = \"9router\"")
+		if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if raw, readErr := os.ReadFile(authPath); readErr == nil {
+			auth := map[string]any{}
+			if json.Unmarshal(raw, &auth) == nil {
+				delete(auth, "OPENAI_API_KEY")
+				delete(auth, "auth_mode")
+				if len(auth) == 0 {
+					_ = os.Remove(authPath)
+				} else if encoded, marshalErr := json.MarshalIndent(auth, "", "  "); marshalErr == nil {
+					_ = os.WriteFile(authPath, encoded, 0600)
+				}
+			}
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func replaceTOMLLine(content, prefix, replacement string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
+			lines[i] = replacement
+			return strings.Join(lines, "\n")
+		}
+	}
+	return strings.TrimRight(content, "\n") + "\n" + replacement + "\n"
+}
+func upsertTOMLSection(content, section string, lines []string) string {
+	content = removeTOMLSection(content, section)
+	return strings.TrimRight(content, "\n") + "\n\n" + section + "\n" + strings.Join(lines, "\n") + "\n"
+}
+func removeTOMLSection(content, section string) string {
+	lines := strings.Split(content, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == section {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return content
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			end = i
+			break
+		}
+	}
+	return strings.Join(append(lines[:start], lines[end:]...), "\n")
+}
+func removeTOMLLine(content, target string) string {
+	lines := strings.Split(content, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.TrimSpace(line) != target {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
