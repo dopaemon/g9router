@@ -157,6 +157,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/proxy-pools", s.proxyPoolsAPI)
 	mux.HandleFunc("/api/proxy-pools/", s.proxyPoolResourceAPI)
 	mux.HandleFunc("/api/proxy-pools/vercel-deploy", s.vercelDeployAPI)
+	mux.HandleFunc("/api/proxy-pools/cloudflare-deploy", s.cloudflareDeployAPI)
 	mux.HandleFunc("/api/tunnel/status", s.tunnelStatusAPI)
 	mux.HandleFunc("/api/tunnel/enable", s.tunnelEnableAPI)
 	mux.HandleFunc("/api/tunnel/disable", s.tunnelDisableAPI)
