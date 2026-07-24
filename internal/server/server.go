@@ -3,15 +3,19 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"g9router/internal/auth"
 	"g9router/internal/db"
 	"g9router/internal/oauth"
 	"g9router/internal/providers"
@@ -32,6 +36,7 @@ type Server struct {
 	usage    *usage.Store
 	oauth    *oauth.Manager
 	settings *settings.Store
+	sessions *auth.Sessions
 }
 
 func New(options Options) *Server {
@@ -48,7 +53,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database)}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions()}
 }
 
 func (s *Server) Run() error {
@@ -71,8 +76,50 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
+	mux.HandleFunc("/api/auth/status", s.authStatus)
+	mux.HandleFunc("/api/auth/login", s.authLogin)
+	mux.HandleFunc("/api/auth/logout", s.authLogout)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
+	token, _ := r.Cookie("g9router_session")
+	writeJSON(w, 200, map[string]any{"authenticated": token != nil && s.sessions.Valid(token.Value), "passwordConfigured": os.Getenv("G9ROUTER_PASSWORD") != ""})
+}
+func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		Password string `json:"password"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Password == "" {
+		writeJSON(w, 400, map[string]string{"error": "password is required"})
+		return
+	}
+	expected := os.Getenv("G9ROUTER_PASSWORD")
+	if expected == "" || input.Password != expected {
+		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "session generation failed"})
+		return
+	}
+	token := hex.EncodeToString(raw)
+	s.sessions.Create(token)
+	http.SetCookie(w, &http.Cookie{Name: "g9router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	writeJSON(w, 200, map[string]bool{"success": true})
+}
+func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("g9router_session"); err == nil {
+		s.sessions.Delete(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{Name: "g9router_session", Value: "", Path: "/", MaxAge: -1})
+	writeJSON(w, 200, map[string]bool{"success": true})
 }
 
 func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
