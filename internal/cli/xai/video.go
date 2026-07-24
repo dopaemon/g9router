@@ -141,19 +141,47 @@ func parseArgs(args []string) (Options, string, error) {
 		}
 		switch arg {
 		case "--prompt":
-			opts.Prompt, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Prompt = v
 		case "--output", "-o":
-			opts.Output, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Output = v
 		case "--model":
-			opts.Model, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Model = v
 		case "--aspect-ratio":
-			opts.AspectRatio, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.AspectRatio = v
 		case "--resolution":
-			opts.Resolution, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Resolution = v
 		case "--image":
-			opts.Image, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Image = v
 		case "--api-key":
-			opts.APIKey, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.APIKey = v
 		case "--port", "-p":
 			v, err := value()
 			if err != nil {
@@ -193,7 +221,11 @@ func parseArgs(args []string) (Options, string, error) {
 			}
 			opts.PollInterval = time.Duration(ms) * time.Millisecond
 		case "--host", "-H":
-			opts.Host, _ = value()
+			v, err := value()
+			if err != nil {
+				return opts, "", err
+			}
+			opts.Host = v
 		default:
 			return opts, "", fmt.Errorf("unknown option: %s", arg)
 		}
