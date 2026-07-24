@@ -3563,6 +3563,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.APIType == "gemini-cli" && path == "/chat/completions" {
+			if s.proxyGeminiCLI(w, r, provider.BaseURL, model, request, provider.APIKey, provider.ProviderSpecificData) {
+				return
+			}
+			continue
+		}
 		if provider.APIType == "vertex" {
 			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey, provider.OAuthID != "", provider.ProviderSpecificData) {
 				return
