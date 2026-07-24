@@ -14,6 +14,9 @@ type commandCodeState struct {
 	ID, Model string
 	Created   int64
 	Text      strings.Builder
+	Tools     map[string]int
+	ToolCount int
+	Chunks    int
 }
 
 func (s *Server) commandCodeChat(w http.ResponseWriter, r *http.Request, body []byte, apiKey string, request map[string]any) bool {
@@ -39,7 +42,7 @@ func (s *Server) commandCodeChat(w http.ResponseWriter, r *http.Request, body []
 	}
 	defer response.Body.Close()
 	model := stringValue(request["model"])
-	state := commandCodeState{ID: "chatcmpl-" + uuidToken(model+fmt.Sprint(time.Now().UnixNano())), Model: model, Created: time.Now().Unix()}
+	state := commandCodeState{ID: "chatcmpl-" + uuidToken(model+fmt.Sprint(time.Now().UnixNano())), Model: model, Created: time.Now().Unix(), Tools: map[string]int{}}
 	stream, _ := request["stream"].(bool)
 	flusher, canFlush := w.(http.Flusher)
 	if stream && canFlush {
@@ -83,10 +86,64 @@ func commandCodeChunks(state *commandCodeState, event map[string]any) []string {
 			return nil
 		}
 		state.Text.WriteString(text)
-		delta := map[string]any{"content": text}
-		if state.Text.Len() == len(text) {
+		delta := map[string]any{}
+		if eventType == "reasoning-delta" {
+			delta["reasoning_content"] = text
+		} else {
+			delta["content"] = text
+			state.Text.WriteString(text)
+		}
+		if state.Chunks == 0 {
 			delta["role"] = "assistant"
 		}
+		state.Chunks++
+		return []string{commandCodeChunk(state, delta, nil)}
+	}
+	if eventType == "tool-input-start" {
+		id := nonEmpty(stringValue(event["id"]), nonEmpty(stringValue(event["toolCallId"]), "call_"+uuidToken(fmt.Sprint(state.ToolCount))))
+		index, ok := state.Tools[id]
+		if !ok {
+			index = state.ToolCount
+			state.ToolCount++
+			state.Tools[id] = index
+		}
+		delta := map[string]any{"tool_calls": []any{map[string]any{"index": index, "id": id, "type": "function", "function": map[string]string{"name": stringValue(event["toolName"]), "arguments": ""}}}}
+		if state.Chunks == 0 {
+			delta["role"] = "assistant"
+		}
+		state.Chunks++
+		return []string{commandCodeChunk(state, delta, nil)}
+	}
+	if eventType == "tool-input-delta" {
+		id := nonEmpty(stringValue(event["id"]), stringValue(event["toolCallId"]))
+		index, ok := state.Tools[id]
+		if !ok {
+			return nil
+		}
+		arguments := nonEmpty(stringValue(event["delta"]), stringValue(event["inputTextDelta"]))
+		return []string{commandCodeChunk(state, map[string]any{"tool_calls": []any{map[string]any{"index": index, "function": map[string]string{"arguments": arguments}}}}, nil)}
+	}
+	if eventType == "tool-call" {
+		id := stringValue(event["toolCallId"])
+		if id == "" {
+			id = "call_" + uuidToken(fmt.Sprint(state.ToolCount))
+		}
+		if _, exists := state.Tools[id]; exists {
+			return nil
+		}
+		index := state.ToolCount
+		state.ToolCount++
+		state.Tools[id] = index
+		arguments := event["input"]
+		encoded, _ := json.Marshal(arguments)
+		if text, ok := arguments.(string); ok {
+			encoded = []byte(text)
+		}
+		delta := map[string]any{"tool_calls": []any{map[string]any{"index": index, "id": id, "type": "function", "function": map[string]string{"name": stringValue(event["toolName"]), "arguments": string(encoded)}}}}
+		if state.Chunks == 0 {
+			delta["role"] = "assistant"
+		}
+		state.Chunks++
 		return []string{commandCodeChunk(state, delta, nil)}
 	}
 	if eventType == "finish" || eventType == "finish-step" {
