@@ -122,6 +122,28 @@ func (s *Store) Delete(id string) (bool, error) {
 	}
 	return false, nil
 }
+
+func (s *Store) Valid(value string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, item := range s.items {
+		if item.IsActive && item.Key == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) HasActive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, item := range s.items {
+		if item.IsActive {
+			return true
+		}
+	}
+	return false
+}
 func mask(value string) string {
 	if len(value) < 8 {
 		return "********"
