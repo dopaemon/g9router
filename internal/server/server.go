@@ -3301,6 +3301,9 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 				provider.APIKey = credential.AccessToken
 			}
 		}
+		if path == "/audio/speech" && s.providerSpeech(w, r, provider.ID, provider.APIKey, input) {
+			return
+		}
 		baseURL := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
 		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
 			return
