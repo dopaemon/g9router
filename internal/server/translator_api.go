@@ -71,3 +71,41 @@ func (s *Server) translatorAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "Invalid step (1-3)"})
 	}
 }
+
+func (s *Server) translatorSendAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		Provider string         `json:"provider"`
+		Model    string         `json:"model"`
+		Body     map[string]any `json:"body"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 32<<20)).Decode(&input) != nil || input.Provider == "" || input.Model == "" || input.Body == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "provider, model, and body required"})
+		return
+	}
+	body, err := json.Marshal(input.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": err.Error()})
+		return
+	}
+	for _, provider := range s.store.Resolve(input.Provider + "/" + input.Model) {
+		if provider.ID != input.Provider && !strings.HasPrefix(provider.ID, input.Provider) {
+			continue
+		}
+		if provider.OAuthID != "" {
+			if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+				provider.APIKey = credential.AccessToken
+			}
+		}
+		if stream, _ := input.Body["stream"].(bool); stream {
+			r.Header.Set("Accept", "text/event-stream")
+		}
+		if s.proxyWithExecutor(w, r, provider.BaseURL, "", body, provider.APIKey) {
+			return
+		}
+	}
+	writeJSON(w, http.StatusBadGateway, map[string]any{"success": false, "error": "provider request failed"})
+}

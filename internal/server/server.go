@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/pxpipe/stop", s.pxpipeStopAPI)
 	mux.HandleFunc("/api/pxpipe/restart", s.pxpipeRestartAPI)
 	mux.HandleFunc("/api/translator/translate", s.translatorAPI)
+	mux.HandleFunc("/api/translator/send", s.translatorSendAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
 	mux.HandleFunc("/api/usage/request-logs", s.usageLogsAPI)
