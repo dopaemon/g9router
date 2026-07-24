@@ -31,7 +31,9 @@ func NormalizeCodexRequest(body map[string]any) map[string]any {
 			if id, ok := item["id"].(string); ok && (strings.HasPrefix(id, "rs_") || strings.HasPrefix(id, "fc_") || strings.HasPrefix(id, "resp_") || strings.HasPrefix(id, "msg_")) {
 				delete(item, "id")
 			}
-			if role, _ := item["role"].(string); role == "system" {
+			kind, _ := item["type"].(string)
+			role, _ := item["role"].(string)
+			if role == "system" && (kind == "" || kind == "message") {
 				item["role"] = "developer"
 			}
 			clean = append(clean, item)
@@ -76,7 +78,7 @@ func normalizeCodexTools(tools []any) []any {
 		}
 		kind, _ := tool["type"].(string)
 		if kind != "function" {
-			if kind == "custom" || kind == "web_search" || kind == "web_search_preview" || kind == "file_search" || kind == "computer" || kind == "code_interpreter" || kind == "mcp" {
+			if kind == "namespace" || kind == "custom" || kind == "web_search" || kind == "web_search_preview" || kind == "file_search" || kind == "computer" || kind == "computer_use_preview" || kind == "code_interpreter" || kind == "mcp" || kind == "local_shell" || kind == "tool_search" {
 				result = append(result, tool)
 			}
 			continue

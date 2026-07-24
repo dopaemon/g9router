@@ -22,3 +22,21 @@ func TestNormalizeCodexRequest(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestNormalizeCodexRequestPreservesNonMessageSystemItems(t *testing.T) {
+	out := NormalizeCodexRequest(map[string]any{
+		"input": []any{map[string]any{"type": "reasoning", "role": "system", "content": "keep"}},
+		"tools": []any{
+			map[string]any{"type": "namespace"},
+			map[string]any{"type": "local_shell"},
+			map[string]any{"type": "tool_search"},
+		},
+	})
+	item := out["input"].([]any)[0].(map[string]any)
+	if item["role"] != "system" {
+		t.Fatalf("item role = %#v", item["role"])
+	}
+	if len(out["tools"].([]any)) != 3 {
+		t.Fatalf("tools = %#v", out["tools"])
+	}
+}
