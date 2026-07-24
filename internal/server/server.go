@@ -594,6 +594,9 @@ func (s *Server) proxyTranslatedResponse(w http.ResponseWriter, incoming *http.R
 		return false
 	}
 	if incoming.Header.Get("Accept") == "text/event-stream" {
+		if claudeResponse {
+			return s.proxyClaudeToOpenAIStream(w, response)
+		}
 		return s.proxyClaudeStream(w, response)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
@@ -620,6 +623,31 @@ func (s *Server) proxyTranslatedResponse(w http.ResponseWriter, incoming *http.R
 	w.WriteHeader(response.StatusCode)
 	_ = json.NewEncoder(w).Encode(translated)
 	return true
+}
+
+func (s *Server) proxyClaudeToOpenAIStream(w http.ResponseWriter, response *http.Response) bool {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(response.StatusCode)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return false
+	}
+	state := &translator.ClaudeStreamState{}
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 4096), 16<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		for _, output := range translator.ClaudeChunkToOpenAISSE([]byte(payload), state) {
+			_, _ = io.WriteString(w, output)
+			flusher.Flush()
+		}
+	}
+	return scanner.Err() == nil
 }
 
 func (s *Server) proxyClaudeStream(w http.ResponseWriter, response *http.Response) bool {
