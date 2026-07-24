@@ -7,8 +7,23 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
+
+var googleTranslateToken struct {
+	sync.Mutex
+	fSID, bl string
+	at       time.Time
+}
+
+var googleTranslateSID = regexp.MustCompile(`"FdrFJe":"(.*?)"`)
+var googleTranslateBL = regexp.MustCompile(`"cfb2h":"(.*?)"`)
+var googleTranslateIndex atomic.Uint64
 
 func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
 	switch providerID {
@@ -16,9 +31,111 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 		return s.elevenLabsSpeech(w, r, apiKey, input)
 	case "gemini":
 		return s.geminiSpeech(w, r, apiKey, input)
+	case "google-tts":
+		return s.googleTranslateSpeech(w, r, input)
 	default:
 		return false
 	}
+}
+
+func (s *Server) googleTranslateSpeech(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
+	model, _ := input["model"].(string)
+	lang := model
+	if strings.Contains(lang, "/") {
+		lang = strings.TrimPrefix(lang, "google-tts/")
+	}
+	if lang == "" || lang == "google-tts" {
+		lang = "en"
+	}
+	text, _ := input["input"].(string)
+	fSID, bl, ok := s.googleTranslateToken(r)
+	if !ok {
+		return false
+	}
+	requestID := googleTranslateIndex.Add(1)*100000 + uint64(time.Now().UnixNano()%9000) + 1000
+	query := url.Values{"rpcids": {"jQ1olc"}, "f.sid": {fSID}, "bl": {bl}, "hl": {lang}, "soc-app": {"1"}, "soc-platform": {"1"}, "soc-device": {"1"}, "_reqid": {strconv.FormatUint(requestID, 10)}, "rt": {"c"}}
+	clean := strings.NewReplacer("@", " ", "^", " ", "*", " ", "(", " ", ")", " ", `\`, " ", "/", " ", "-", " ", "_", " ", "+", " ", "=", " ", ">", " ", "<", " ", `"`, " ", "'", " ", "“", " ", "”", " ", "【", " ", "】", " ").Replace(text)
+	clean = strings.ReplaceAll(clean, ", ", ". ")
+	payload, _ := json.Marshal([]any{clean, lang, nil, "undefined", []int{0}})
+	form := url.Values{}
+	outerPayload, _ := json.Marshal([]any{[][]any{{"jQ1olc", string(payload), nil, "generic"}}})
+	form.Set("f.req", string(outerPayload))
+	endpoint := "https://translate.google.com/_/TranslateWebserverUi/data/batchexecute?" + query.Encode()
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Referer", "https://translate.google.com/")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	lines := strings.Split(string(data), "\n")
+	if len(lines) < 4 {
+		return false
+	}
+	var outer []any
+	if json.Unmarshal([]byte(lines[3]), &outer) != nil || len(outer) == 0 {
+		return false
+	}
+	row, ok := outer[0].([]any)
+	if !ok || len(row) < 3 {
+		return false
+	}
+	encoded, ok := row[2].(string)
+	if !ok {
+		return false
+	}
+	var parts []any
+	if json.Unmarshal([]byte(encoded), &parts) != nil || len(parts) == 0 {
+		return false
+	}
+	value, ok := parts[0].(string)
+	if !ok || len(value) < 100 {
+		return false
+	}
+	audio, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return false
+	}
+	writeSpeechAudio(w, input, audio, "mp3")
+	return true
+}
+
+func (s *Server) googleTranslateToken(r *http.Request) (string, string, bool) {
+	googleTranslateToken.Lock()
+	if googleTranslateToken.fSID != "" && time.Since(googleTranslateToken.at) < 11*time.Minute {
+		fSID, bl := googleTranslateToken.fSID, googleTranslateToken.bl
+		googleTranslateToken.Unlock()
+		return fSID, bl, true
+	}
+	googleTranslateToken.Unlock()
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://translate.google.com/", nil)
+	if err != nil {
+		return "", "", false
+	}
+	request.Header.Set("User-Agent", "Mozilla/5.0")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return "", "", false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	fSIDMatch, blMatch := googleTranslateSID.FindSubmatch(data), googleTranslateBL.FindSubmatch(data)
+	if response.StatusCode < 200 || response.StatusCode >= 300 || len(fSIDMatch) < 2 || len(blMatch) < 2 {
+		return "", "", false
+	}
+	fSID, bl := string(fSIDMatch[1]), string(blMatch[1])
+	googleTranslateToken.Lock()
+	googleTranslateToken.fSID, googleTranslateToken.bl, googleTranslateToken.at = fSID, bl, time.Now()
+	googleTranslateToken.Unlock()
+	return fSID, bl, true
 }
 
 func (s *Server) elevenLabsSpeech(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
