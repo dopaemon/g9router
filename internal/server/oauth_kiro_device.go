@@ -93,7 +93,7 @@ func (s *Server) kiroPollAPI(w http.ResponseWriter, r *http.Request) {
 	expiresIn := kiroDeviceInt64(payload, "expiresIn", 3600)
 	credentialID := "kiro-oauth"
 	providerData := map[string]any{"profileArn": payload["profileArn"], "clientId": input.ClientID, "clientSecret": input.ClientSecret, "region": region, "authMethod": input.AuthMethod, "startUrl": input.StartURL}
-	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: "kiro", AccessToken: accessToken, RefreshToken: kiroDeviceString(payload, "refreshToken"), TokenURL: "https://oidc." + region + ".amazonaws.com/token", ClientID: input.ClientID, ExpiresAt: time.Now().Add(time.Duration(expiresIn) * time.Second).UnixMilli()}); err != nil {
+	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: "kiro", AccessToken: accessToken, RefreshToken: kiroDeviceString(payload, "refreshToken"), TokenURL: "https://oidc." + region + ".amazonaws.com/token", ClientID: input.ClientID, ExpiresAt: time.Now().Add(time.Duration(expiresIn) * time.Second).UnixMilli(), ProviderSpecificData: providerData}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
