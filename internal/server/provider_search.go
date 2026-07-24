@@ -181,3 +181,84 @@ func (s *Server) braveSearch(w http.ResponseWriter, r *http.Request) bool {
 	}
 	return false
 }
+
+func (s *Server) exaSearch(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	if err != nil {
+		return false
+	}
+	var input struct {
+		Model, Query, SearchType string
+		MaxResults               int `json:"max_results"`
+	}
+	if json.Unmarshal(data, &input) != nil || strings.TrimSpace(input.Query) == "" {
+		return false
+	}
+	for _, provider := range s.store.Resolve(input.Model) {
+		if provider.ID != "exa" {
+			continue
+		}
+		if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+			provider.APIKey = credential.AccessToken
+		}
+		if provider.APIKey == "" {
+			return false
+		}
+		count := input.MaxResults
+		if count <= 0 {
+			count = 5
+		}
+		if count > 20 {
+			count = 20
+		}
+		body := map[string]any{
+			"query":          strings.TrimSpace(input.Query),
+			"numResults":     count,
+			"type":           "auto",
+			"text":           true,
+			"highlights":     true,
+			"includeDomains": []string{},
+			"excludeDomains": []string{},
+			"category":       "news",
+		}
+		encoded, _ := json.Marshal(body)
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.exa.ai/search", strings.NewReader(string(encoded)))
+		if err != nil {
+			return false
+		}
+		request.Header.Set("x-api-key", provider.APIKey)
+		request.Header.Set("Content-Type", "application/json")
+		response, err := s.client.Do(request)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		responseData, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return false
+		}
+		var payload struct {
+			Results []struct {
+				Title, URL, Text string
+				Highlights       []string `json:"highlights"`
+			} `json:"results"`
+		}
+		if json.Unmarshal(responseData, &payload) != nil {
+			return false
+		}
+		results := make([]map[string]any, 0, len(payload.Results))
+		for index, result := range payload.Results {
+			snippet := result.Text
+			if snippet == "" && len(result.Highlights) > 0 {
+				snippet = strings.Join(result.Highlights, " ")
+			}
+			results = append(results, map[string]any{"title": result.Title, "url": result.URL, "snippet": snippet, "position": index + 1, "citation": map[string]any{"provider": "exa"}})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"provider": "exa", "query": input.Query, "results": results, "answer": nil, "usage": map[string]any{"queries_used": 1}, "errors": []any{}})
+		return true
+	}
+	return false
+}
