@@ -194,6 +194,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/kimi/poll", s.kimiPollAPI)
 	mux.HandleFunc("/api/oauth/gemini-cli/authorize", s.geminiAuthorizeAPI)
 	mux.HandleFunc("/api/oauth/gemini-cli/exchange", s.geminiExchangeAPI)
+	mux.HandleFunc("/api/oauth/antigravity/authorize", s.antigravityAuthorizeAPI)
+	mux.HandleFunc("/api/oauth/antigravity/exchange", s.antigravityExchangeAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
