@@ -3593,6 +3593,13 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "kimchi" && path == "/chat/completions" {
 			providerBody = prepareKimchiBody(request)
 		}
+		if provider.ID == "xiaomi-tokenplan" && sourceFormat == format.Claude && path == "/chat/completions" {
+			base := strings.TrimSuffix(providerProxyBaseURL(provider), "/chat/completions") + "/anthropic/v1/messages"
+			if s.proxy(w, r, base, "", http.MethodPost, body, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if provider.APIType == "vertex" {
 			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey, provider.OAuthID != "", provider.ProviderSpecificData) {
 				return
