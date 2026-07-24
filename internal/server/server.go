@@ -262,6 +262,10 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		s.providerTestAPI(w, r, strings.TrimSuffix(id, "/test"))
 		return
 	}
+	if strings.HasSuffix(id, "/test-models") {
+		s.providerTestModelsAPI(w, r, strings.TrimSuffix(id, "/test-models"))
+		return
+	}
 	if strings.HasSuffix(id, "/models") {
 		s.providerModelsAPI(w, r, strings.TrimSuffix(id, "/models"))
 		return
