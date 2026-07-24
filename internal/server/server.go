@@ -107,6 +107,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/responses", s.responses)
 	mux.HandleFunc("/api/v1/responses", s.responses)
 	mux.HandleFunc("/v1/messages", s.messages)
+	mux.HandleFunc("/v1/messages/count_tokens", s.countTokensAPI)
+	mux.HandleFunc("/api/v1/messages/count_tokens", s.countTokensAPI)
 	mux.HandleFunc("/api/v1/messages", s.messages)
 	mux.HandleFunc("/v1/embeddings", s.embeddings)
 	mux.HandleFunc("/api/v1/embeddings", s.embeddings)
