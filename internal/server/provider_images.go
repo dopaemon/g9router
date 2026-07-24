@@ -36,6 +36,8 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.nanoBananaImage(w, r, apiKey, input)
 		case "antigravity":
 			return s.antigravityImage(w, r, apiKey, providerData, input)
+		case "openai", "minimax", "openrouter", "recraft", "vercel-ai-gateway", "xai":
+			return s.openAICompatibleImage(w, r, providerID, apiKey, input)
 		default:
 			return false
 		}
@@ -91,6 +93,64 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 		images = append(images, map[string]string{"b64_json": "", "revised_prompt": prompt})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
+	return true
+}
+
+func (s *Server) openAICompatibleImage(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+	if apiKey == "" {
+		return false
+	}
+	endpoint := map[string]string{
+		"openai":            "https://api.openai.com/v1/images/generations",
+		"minimax":           "https://api.minimaxi.com/v1/images/generations",
+		"openrouter":        "https://openrouter.ai/api/v1/images/generations",
+		"recraft":           "https://external.api.recraft.ai/v1/images/generations",
+		"vercel-ai-gateway": "https://ai-gateway.vercel.sh/v1/images/generations",
+		"xai":               "https://api.x.ai/v1/images/generations",
+	}[providerID]
+	model := stringValue(input["model"])
+	prompt := stringValue(input["prompt"])
+	if endpoint == "" || model == "" || prompt == "" {
+		return false
+	}
+	body := map[string]any{"model": model, "prompt": prompt, "n": inputNumber(input["n"], 1), "size": nonEmpty(stringValue(input["size"]), "1024x1024")}
+	for _, key := range []string{"quality", "style", "response_format"} {
+		if value, ok := input[key]; ok && value != nil && value != "" {
+			body[key] = value
+		}
+	}
+	if providerID == "xai" {
+		for key := range body {
+			if key != "model" && key != "prompt" && key != "n" && key != "response_format" {
+				delete(body, key)
+			}
+		}
+	}
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	if providerID == "openrouter" {
+		request.Header.Set("HTTP-Referer", "https://endpoint-proxy.local")
+		request.Header.Set("X-Title", "Endpoint Proxy")
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	writeJSON(w, response.StatusCode, payload)
 	return true
 }
 
