@@ -53,6 +53,7 @@ func init() {
 		"cline":          {ID: "cline", Alias: "cline", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
 		"clinepass":      {ID: "clinepass", Alias: "clinepass", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
 		"codebuddy-cn":   {ID: "codebuddy-cn", Alias: "codebuddy-cn", BaseURL: "https://copilot.tencent.com/v2/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"perplexity-web": {ID: "perplexity-web", Alias: "perplexity-web", BaseURL: "https://www.perplexity.ai/rest/sse/perplexity_ask", Format: "perplexity-web", Services: []string{"llm", "webSearch"}, Models: []Model{{ID: "pplx-auto", Name: "Perplexity Auto"}, {ID: "pplx-sonar", Name: "Perplexity Sonar"}, {ID: "pplx-gpt", Name: "GPT via Perplexity"}, {ID: "pplx-gemini", Name: "Gemini via Perplexity"}, {ID: "pplx-sonnet", Name: "Claude Sonnet via Perplexity"}, {ID: "pplx-opus", Name: "Claude Opus via Perplexity"}, {ID: "pplx-nemotron", Name: "Nemotron via Perplexity"}}},
 		"azure":          {ID: "azure", Alias: "azure", BaseURL: "", Format: "openai", Services: []string{"llm", "embedding", "image", "tts", "stt"}},
 		"comfyui":        {ID: "comfyui", Alias: "comfyui", BaseURL: "http://localhost:8188", Format: "comfyui", Services: []string{"image"}, Models: []Model{{ID: "flux-dev", Name: "FLUX Dev", Kind: "image"}, {ID: "sdxl", Name: "SDXL", Kind: "image"}}},
 	} {
