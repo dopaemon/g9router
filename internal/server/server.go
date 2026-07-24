@@ -3324,6 +3324,22 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			if s.searxngSearch(w, specialized) {
 				return
 			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.perplexitySearch(w, specialized) {
+				return
+			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.linkupSearch(w, specialized) {
+				return
+			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.searchAPISearch(w, specialized) {
+				return
+			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.youComSearch(w, specialized) {
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewReader(data))
 		}
 	}

@@ -327,6 +327,65 @@ func (s *Server) searxngSearch(w http.ResponseWriter, r *http.Request) bool {
 	})
 }
 
+func (s *Server) perplexitySearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "perplexity", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		body := map[string]any{"query": strings.TrimSpace(input.Query), "max_results": boundedSearchResults(input.MaxResults)}
+		if input.Country != "" {
+			body["country"] = input.Country
+		}
+		if input.Language != "" {
+			body["search_language_filter"] = []string{input.Language}
+		}
+		return newSearchRequest(r, http.MethodPost, "https://api.perplexity.ai/search", provider.APIKey, body, "Authorization")
+	})
+}
+
+func (s *Server) linkupSearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "linkup", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		body := map[string]any{"q": strings.TrimSpace(input.Query), "depth": "standard", "outputType": "searchResults", "maxResults": boundedSearchResults(input.MaxResults)}
+		return newSearchRequest(r, http.MethodPost, "https://api.linkup.so/v1/search", provider.APIKey, body, "Authorization")
+	})
+}
+
+func (s *Server) searchAPISearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "searchapi", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		engine := "google"
+		if input.SearchType == "news" {
+			engine = "google_news"
+		}
+		query := url.Values{"engine": {engine}, "q": {strings.TrimSpace(input.Query)}, "api_key": {provider.APIKey}}
+		if input.Country != "" {
+			query.Set("gl", strings.ToLower(input.Country))
+		}
+		if input.Language != "" {
+			query.Set("hl", input.Language)
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://www.searchapi.io/api/v1/search?"+query.Encode(), nil)
+		if err == nil {
+			request.Header.Set("Accept", "application/json")
+		}
+		return request, err
+	})
+}
+
+func (s *Server) youComSearch(w http.ResponseWriter, r *http.Request) bool {
+	return s.searchJSONProvider(w, r, "youcom", func(input searchInput, provider providers.Provider) (*http.Request, error) {
+		query := url.Values{"query": {strings.TrimSpace(input.Query)}, "count": {strconv.Itoa(boundedSearchResults(input.MaxResults))}}
+		if input.Country != "" {
+			query.Set("country", input.Country)
+		}
+		if input.Language != "" {
+			query.Set("language", input.Language)
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://ydc-index.io/v1/search?"+query.Encode(), nil)
+		if err == nil {
+			request.Header.Set("Accept", "application/json")
+			request.Header.Set("X-API-Key", provider.APIKey)
+		}
+		return request, err
+	})
+}
+
 type searchInput struct {
 	Model, Query, SearchType, Country, Language string
 	MaxResults                                  int `json:"max_results"`
