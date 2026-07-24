@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/cline-settings", s.clineSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/kilo-settings", s.kiloSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/openclaw-settings", s.openclawSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/deepseek-tui-settings", s.deepSeekTUISettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -1318,6 +1319,69 @@ func (s *Server) openclawSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) deepSeekTUISettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir, path := filepath.Join(home, ".deepseek"), filepath.Join(home, ".deepseek", "config.toml")
+	switch r.Method {
+	case http.MethodGet:
+		raw, readErr := os.ReadFile(path)
+		_, cliErr := exec.LookPath("deepseek")
+		if os.IsNotExist(readErr) && cliErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "DeepSeek TUI is not installed"})
+			return
+		}
+		config := map[string]any{"raw": string(raw), "provider": "deepseek"}
+		if strings.Contains(string(raw), "provider = \"openai\"") {
+			config["provider"] = "openai"
+		}
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": config, "has9Router": config["provider"] == "openai" && (strings.Contains(string(raw), "localhost") || strings.Contains(string(raw), "127.0.0.1") || strings.Contains(string(raw), "0.0.0.0")), "configPath": path})
+	case http.MethodPost:
+		var input struct {
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+			Model   string `json:"model"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl and model are required"})
+			return
+		}
+		base := strings.TrimRight(input.BaseURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		key := input.APIKey
+		if key == "" {
+			key = "sk_9router"
+		}
+		raw := fmt.Sprintf("provider = \"openai\"\n\n[providers.openai]\nbase_url = \"%s\"\napi_key = \"%s\"\nmodel = \"%s\"\n", base, key, input.Model)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "DeepSeek TUI settings applied successfully!", "configPath": path})
+	case http.MethodDelete:
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No config file to reset"})
+			return
+		}
+		if err := os.WriteFile(path, []byte("provider = \"deepseek\"\n"), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9router config reset to DeepSeek defaults"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
