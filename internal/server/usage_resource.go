@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
+
+	"g9router/internal/providers"
 )
 
 func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
@@ -38,14 +41,17 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	connectionID := parts[0]
 	providerName := ""
+	var selected providers.Provider
 	for _, provider := range s.store.List() {
 		if provider.ID == connectionID {
 			providerName = provider.ID
+			selected = provider
 			break
 		}
 		for _, account := range provider.Accounts {
 			if account.ID == connectionID {
 				providerName = provider.ID
+				selected = provider
 				break
 			}
 		}
@@ -56,6 +62,18 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	if providerName == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
+	}
+	if selected.OAuthID != "" {
+		if credential, ok := s.oauth.Get(selected.OAuthID); ok {
+			if credential.ExpiringSoon(time.Now()) && credential.RefreshToken != "" {
+				if refreshed, err := s.oauth.Refresh(r.Context(), selected.OAuthID); err != nil {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Credential refresh failed: " + err.Error()})
+					return
+				} else {
+					selected.APIKey = refreshed.AccessToken
+				}
+			}
+		}
 	}
 	logs := s.usage.Recent(1000)
 	var requests, input, output, errors int64
