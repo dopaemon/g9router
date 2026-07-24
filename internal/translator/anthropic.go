@@ -33,6 +33,41 @@ func ClaudeToOpenAI(model string, body map[string]any, stream bool) map[string]a
 	return out
 }
 
+func OpenAIToClaudeResponse(body map[string]any) map[string]any {
+	choiceList := array(body["choices"])
+	message := map[string]any{}
+	if len(choiceList) > 0 {
+		if choice, ok := choiceList[0].(map[string]any); ok {
+			message, _ = choice["message"].(map[string]any)
+		}
+	}
+	content := []any{}
+	if text, ok := message["content"].(string); ok && text != "" {
+		content = append(content, map[string]any{"type": "text", "text": text})
+	}
+	for _, raw := range array(message["tool_calls"]) {
+		call, _ := raw.(map[string]any)
+		function, _ := call["function"].(map[string]any)
+		var input any = map[string]any{}
+		_ = json.Unmarshal([]byte(stringValue(function["arguments"])), &input)
+		content = append(content, map[string]any{"type": "tool_use", "id": call["id"], "name": function["name"], "input": input})
+	}
+	stopReason := "end_turn"
+	if len(choiceList) > 0 {
+		if choice, ok := choiceList[0].(map[string]any); ok {
+			if reason, ok := choice["finish_reason"].(string); ok && reason == "tool_calls" {
+				stopReason = "tool_use"
+			}
+		}
+	}
+	usage := map[string]any{"input_tokens": 0, "output_tokens": 0}
+	if source, ok := body["usage"].(map[string]any); ok {
+		usage["input_tokens"] = source["prompt_tokens"]
+		usage["output_tokens"] = source["completion_tokens"]
+	}
+	return map[string]any{"id": body["id"], "type": "message", "role": "assistant", "model": body["model"], "content": content, "stop_reason": stopReason, "stop_sequence": nil, "usage": usage}
+}
+
 func claudeMessage(message map[string]any) []any {
 	role, _ := message["role"].(string)
 	if role == "tool" {
@@ -131,6 +166,7 @@ func textValue(value any) string {
 	}
 	return result
 }
+func stringValue(value any) string { text, _ := value.(string); return text }
 func collapseText(parts []any) any {
 	if len(parts) == 1 {
 		if part, ok := parts[0].(map[string]any); ok && part["type"] == "text" {
