@@ -90,7 +90,7 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 			text = text[len(full):]
 		}
 		full += text
-		text = cleanPerplexityText(text)
+		text = cleanPerplexityDelta(text)
 		if stream && text != "" {
 			chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": text}, "finish_reason": nil}}})
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
@@ -124,7 +124,11 @@ func perplexityBlockText(event map[string]any) string {
 }
 
 func cleanPerplexityText(value string) string {
+	return strings.TrimSpace(cleanPerplexityDelta(value))
+}
+
+func cleanPerplexityDelta(value string) string {
 	value = strings.ReplaceAll(value, "[1]", "")
 	value = strings.ReplaceAll(value, "[2]", "")
-	return strings.TrimSpace(value)
+	return value
 }
