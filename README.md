@@ -28,4 +28,4 @@ Provider records persist in `providers.json`; API keys are never returned by the
 
 `cmd/g9router` contains the executable. `internal/server`, `internal/providers`, and `internal/web` contain private application modules. `web` is reserved for future external assets.
 
-Provider-specific translators, automatic fallback, quota tracking, OAuth, SQLite, and RTK remain future parity work.
+Provider-specific translators cover OpenAI, Claude, Gemini, Vertex, Codex, Kiro, and Cursor. The server also includes provider fallback, quota tracking, OAuth persistence, SQLite storage, model aliases/custom models, MCP bridges, Headroom APIs, CLI settings APIs, and RTK compression.
