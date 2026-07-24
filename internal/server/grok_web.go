@@ -17,12 +17,29 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 	}
 	model := stringValue(request["model"])
 	modelName, modelMode := "grok-4.1-thinking-1129", "MODEL_MODE_FAST"
-	if model == "grok-4" {
-		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4"
-	} else if model == "grok-3" {
+	switch model {
+	case "grok-3":
 		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3"
-	} else if model == "grok-4-thinking" {
+	case "grok-3-mini":
+		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3_MINI_THINKING"
+	case "grok-3-thinking":
+		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3_THINKING"
+	case "grok-4":
+		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4"
+	case "grok-4-mini":
+		modelName, modelMode = "grok-4-mini", "MODEL_MODE_GROK_4_MINI_THINKING"
+	case "grok-4-thinking":
 		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4_THINKING"
+	case "grok-4-heavy":
+		modelName, modelMode = "grok-4", "MODEL_MODE_HEAVY"
+	case "grok-4.1-fast":
+		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_FAST"
+	case "grok-4.1-expert":
+		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_EXPERT"
+	case "grok-4.1-thinking":
+		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_GROK_4_1_THINKING"
+	case "grok-4.2", "grok-4.20", "grok-4.20-beta":
+		modelName, modelMode = "grok-420", "MODEL_MODE_GROK_420"
 	}
 	parts := make([]string, 0, len(messages))
 	lastUser := -1
