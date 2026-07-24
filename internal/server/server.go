@@ -3578,6 +3578,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.ID == "iflow" && path == "/chat/completions" {
+			if s.proxyIFlow(w, r, provider.BaseURL, request, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if provider.APIType == "vertex" {
 			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey, provider.OAuthID != "", provider.ProviderSpecificData) {
 				return
