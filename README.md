@@ -13,6 +13,13 @@ Routes: `/healthz`, `/v1/models`, `/v1/chat/completions`, `/api/providers`, `/`.
 
 OAuth credentials are managed through `/api/oauth` (`GET`, `POST`, `PUT?id=...`) and persisted in `oauth.json`; secrets are omitted from API responses.
 
+## Docker
+
+```bash
+docker build -t g9router:dev .
+docker run --rm -p 20128:20128 -e G9ROUTER_UPSTREAM=https://api.openai.com/v1 -e G9ROUTER_API_KEY=sk-... g9router:dev
+```
+
 Client `Authorization` overrides `G9ROUTER_API_KEY`. SSE responses stream through without buffering.
 
 Provider records persist in `providers.json`; API keys are never returned by the list endpoint.

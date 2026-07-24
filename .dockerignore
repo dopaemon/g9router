@@ -1,0 +1,7 @@
+.git
+*.db
+*.db-shm
+*.db-wal
+providers.json
+oauth.json
+usage.json
