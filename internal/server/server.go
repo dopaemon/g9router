@@ -21,6 +21,7 @@ import (
 
 	"g9router/internal/auth"
 	"g9router/internal/chatcore"
+	"g9router/internal/cursor"
 	"g9router/internal/db"
 	"g9router/internal/executor"
 	"g9router/internal/format"
@@ -1497,6 +1498,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.APIType == "cursor" {
+			if s.proxyCursor(w, r, provider.BaseURL, model, request, provider.APIKey, provider.ProviderSpecificData) {
+				return
+			}
+			continue
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
@@ -1736,6 +1743,87 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 		}
 	}
 	return scanner.Err() == nil
+}
+
+func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, specific map[string]any) bool {
+	messages := make([]map[string]string, 0)
+	for _, raw := range arrayValue(request["messages"]) {
+		message, _ := raw.(map[string]any)
+		role, _ := message["role"].(string)
+		content := textValue(message["content"])
+		if content != "" {
+			messages = append(messages, map[string]string{"role": role, "content": content})
+		}
+	}
+	model = strings.TrimPrefix(model, "cursor/")
+	if model == "" {
+		model = "default"
+	}
+	machineID, _ := specific["machineId"].(string)
+	ghostMode, _ := specific["ghostMode"].(bool)
+	requestBody := cursor.Body(messages, model, ghostMode)
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/"), strings.NewReader(string(requestBody)))
+	if err != nil {
+		return false
+	}
+	for key, value := range cursor.Headers(apiKey, machineID, ghostMode) {
+		request.Header.Set(key, value)
+	}
+	response, err := s.client.Do(request)
+	if err != nil || response == nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(response.StatusCode)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return false
+	}
+	state := "chatcmpl-" + randomHex(12)
+	created := time.Now().Unix()
+	all := make([]byte, 0)
+	buffer := make([]byte, 32*1024)
+	for {
+		count, readErr := response.Body.Read(buffer)
+		all = append(all, buffer[:count]...)
+		for len(all) >= 5 {
+			decoded, consumed, valid := cursor.ParseFrame(all)
+			if !valid {
+				break
+			}
+			all = all[consumed:]
+			if decoded.Text == "" && decoded.Thinking == "" && decoded.ToolName == "" {
+				continue
+			}
+			delta := map[string]any{}
+			if decoded.Text != "" {
+				delta["content"] = decoded.Text
+			}
+			if decoded.Thinking != "" {
+				delta["reasoning_content"] = decoded.Thinking
+			}
+			if decoded.ToolName != "" {
+				delta["tool_calls"] = []any{map[string]any{"index": 0, "id": decoded.ToolID, "type": "function", "function": map[string]any{"name": decoded.ToolName, "arguments": decoded.ToolArgs}}}
+			}
+			chunk := map[string]any{"id": state, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": nil}}}
+			encoded, _ := json.Marshal(chunk)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", encoded)
+			flusher.Flush()
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	_, _ = io.WriteString(w, fmt.Sprintf("data: %s\n\ndata: [DONE]\n\n", fmt.Sprintf(`{"id":%q,"object":"chat.completion.chunk","created":%d,"model":%q,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, state, created, model)))
+	flusher.Flush()
+	return response.StatusCode < 400
 }
 
 func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
