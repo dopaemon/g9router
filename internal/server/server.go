@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"g9router/internal/auth"
+	"g9router/internal/chatcore"
 	"g9router/internal/db"
 	"g9router/internal/executor"
 	"g9router/internal/format"
@@ -419,6 +420,14 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	}
 	if os.Getenv("G9ROUTER_RTK") == "1" {
 		rtk.CompressMessages(arrayValue(request["messages"]))
+		body, _ = json.Marshal(request)
+	}
+	if messages, ok := request["messages"].([]any); ok {
+		request["messages"] = chatcore.FixMissingToolResponses(messages)
+		if tools, ok := request["tools"].([]any); ok {
+			request["tools"] = chatcore.DedupeTools(tools).Tools
+		}
+		request = chatcore.NormalizeThinking(request, os.Getenv("G9ROUTER_THINKING_MODE"))
 		body, _ = json.Marshal(request)
 	}
 	model, _ := request["model"].(string)
