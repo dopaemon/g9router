@@ -29,6 +29,7 @@ import (
 	"g9router/internal/executor"
 	"g9router/internal/format"
 	"g9router/internal/headroom"
+	keyStore "g9router/internal/keys"
 	"g9router/internal/mcp"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
@@ -56,6 +57,7 @@ type Server struct {
 	oidcConfig      oidc.Config
 	mcpBridge       *mcp.Bridge
 	headroomManager *headroom.Manager
+	keys            *keyStore.Store
 }
 
 func New(options Options) *Server {
@@ -72,7 +74,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND"))}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json")}
 }
 
 func (s *Server) Run() error {
@@ -98,6 +100,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
+	mux.HandleFunc("/api/keys", s.keysAPI)
+	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
