@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"g9router/internal/oauth"
 	"g9router/internal/providers"
 )
 
@@ -68,11 +69,17 @@ func (s *Server) kiroExternalImportAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	expiresAt := externalExpiresAt(raw, accessToken)
-	if err := s.store.Upsert(providers.Provider{ID: "kiro", Name: "Kiro", BaseURL: "https://runtime."+region+".kiro.dev", APIKey: accessToken, APIType: "kiro", Enabled: true, TestStatus: "active", ProviderSpecificData: map[string]any{"profileArn": profileARN, "region": region, "authMethod": "external_idp", "provider": "CLIProxyAPI", "clientId": clientID, "tokenEndpoint": parsed.String(), "scope": scope, "refreshToken": refreshToken, "expiresAt": expiresAt, "email": email}}); err != nil {
+	providerData := map[string]any{"profileArn": profileARN, "region": region, "authMethod": "external_idp", "provider": "CLIProxyAPI", "clientId": clientID, "tokenEndpoint": parsed.String(), "scope": scope, "refreshToken": refreshToken, "expiresAt": expiresAt, "email": email}
+	credentialID := "kiro-external-idp"
+	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: "kiro", AccessToken: accessToken, RefreshToken: refreshToken, TokenURL: parsed.String(), ClientID: clientID, ProviderSpecificData: providerData}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "provider": "kiro", "email": email, "expiresAt": expiresAt})
+	if err := s.store.Upsert(providers.Provider{ID: "kiro", Name: "Kiro", BaseURL: "https://runtime." + region + ".kiro.dev", APIKey: accessToken, APIType: "kiro", OAuthID: credentialID, Enabled: true, TestStatus: "active", ProviderSpecificData: providerData}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "provider": "kiro", "email": email, "expiresAt": expiresAt, "connection": map[string]string{"provider": "kiro", "id": credentialID}})
 }
 
 func normalizeExternalScope(values ...any) string {
