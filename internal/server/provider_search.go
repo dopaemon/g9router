@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -92,6 +94,89 @@ func (s *Server) tavilySearch(w http.ResponseWriter, r *http.Request) bool {
 			results = append(results, map[string]any{"title": result.Title, "url": result.URL, "snippet": result.Content, "position": index + 1, "score": result.Score, "published_at": result.Published, "citation": map[string]any{"provider": "tavily"}})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"provider": "tavily", "query": input.Query, "results": results, "answer": nil, "usage": map[string]any{"queries_used": 1}, "errors": []any{}})
+		return true
+	}
+	return false
+}
+
+func (s *Server) braveSearch(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	if err != nil {
+		return false
+	}
+	var input struct {
+		Model, Query, SearchType, Country, Language string
+		MaxResults                                  int `json:"max_results"`
+	}
+	if json.Unmarshal(data, &input) != nil || strings.TrimSpace(input.Query) == "" {
+		return false
+	}
+	for _, provider := range s.store.Resolve(input.Model) {
+		if provider.ID != "brave-search" {
+			continue
+		}
+		if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+			provider.APIKey = credential.AccessToken
+		}
+		if provider.APIKey == "" {
+			return false
+		}
+		count := input.MaxResults
+		if count <= 0 {
+			count = 5
+		}
+		if count > 20 {
+			count = 20
+		}
+		endpoint := "https://api.search.brave.com/res/v1/web/search"
+		if input.SearchType == "news" {
+			endpoint = "https://api.search.brave.com/res/v1/news/search"
+		}
+		query := url.Values{"q": {strings.TrimSpace(input.Query)}, "count": {strconv.Itoa(count)}}
+		if input.Country != "" {
+			query.Set("country", input.Country)
+		}
+		if input.Language != "" {
+			query.Set("search_lang", input.Language)
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint+"?"+query.Encode(), nil)
+		if err != nil {
+			return false
+		}
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("X-Subscription-Token", provider.APIKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		responseData, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return false
+		}
+		var payload struct {
+			Web struct {
+				Results []struct{ Title, URL, Description string } `json:"results"`
+			} `json:"web"`
+			News struct {
+				Results []struct{ Title, URL, Description string } `json:"results"`
+			} `json:"news"`
+		}
+		if json.Unmarshal(responseData, &payload) != nil {
+			return false
+		}
+		raw := payload.Web.Results
+		if input.SearchType == "news" {
+			raw = payload.News.Results
+		}
+		results := make([]map[string]any, 0, len(raw))
+		for index, result := range raw {
+			results = append(results, map[string]any{"title": result.Title, "url": result.URL, "snippet": result.Description, "position": index + 1, "citation": map[string]any{"provider": "brave-search"}})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"provider": "brave-search", "query": input.Query, "results": results, "answer": nil, "usage": map[string]any{"queries_used": 1}, "errors": []any{}})
 		return true
 	}
 	return false
