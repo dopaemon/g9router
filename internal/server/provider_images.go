@@ -548,7 +548,7 @@ func (s *Server) cloudflareMultipartImage(w http.ResponseWriter, r *http.Request
 		}
 	}
 	_ = writer.Close()
-	endpoint := "https://api.cloudflare.com/client/v4/accounts/" + url.PathEscape(accountID) + "/ai/run/" + url.PathEscape(model)
+	endpoint := "https://api.cloudflare.com/client/v4/accounts/" + url.PathEscape(accountID) + "/ai/run/" + modelPath(model)
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, &body)
 	if err != nil {
 		return false
@@ -620,13 +620,15 @@ func (s *Server) stabilityImage(w http.ResponseWriter, r *http.Request, apiKey s
 func (s *Server) huggingFaceImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
 	model, _ := input["model"].(string)
 	body := map[string]string{"inputs": stringValue(input["prompt"])}
-	return s.postImageJSON(w, r, "https://api-inference.huggingface.co/models/"+url.PathEscape(model), apiKey, body, func(data []byte) (any, bool) {
+	return s.postImageJSON(w, r, "https://api-inference.huggingface.co/models/"+modelPath(model), apiKey, body, func(data []byte) (any, bool) {
 		if len(data) == 0 {
 			return nil, false
 		}
 		return map[string]any{"created": time.Now().Unix(), "data": []map[string]string{{"b64_json": base64.StdEncoding.EncodeToString(data)}}}, true
 	})
 }
+
+func modelPath(model string) string { return strings.Trim(strings.TrimPrefix(model, "models/"), "/") }
 
 func (s *Server) postImageJSON(w http.ResponseWriter, r *http.Request, endpoint, apiKey string, body any, normalize func([]byte) (any, bool)) bool {
 	encoded, _ := json.Marshal(body)
