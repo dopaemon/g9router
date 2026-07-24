@@ -36,6 +36,14 @@ func init() {
 		"aws-polly":      {ID: "aws-polly", Alias: "aws-polly", BaseURL: "https://polly.{region}.amazonaws.com/v1/speech", Format: "aws-polly", Services: []string{"tts"}},
 		"google-tts":     {ID: "google-tts", Alias: "google-tts", BaseURL: "google-tts", Format: "google-tts", Services: []string{"tts"}},
 		"local-device":   {ID: "local-device", Alias: "local-device", BaseURL: "local-device", Format: "local-device", Services: []string{"tts"}},
+		"blackbox":       {ID: "blackbox", Alias: "blackbox", BaseURL: "https://api.blackbox.ai/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"commandcode":    {ID: "commandcode", Alias: "commandcode", BaseURL: "https://api.commandcode.ai/alpha/generate", Format: "commandcode", Services: []string{"llm"}},
+		"grok-web":       {ID: "grok-web", Alias: "grok-web", BaseURL: "https://grok.com/rest/app-chat/conversations/new", Format: "grok-web", Services: []string{"llm"}},
+		"kilocode":       {ID: "kilocode", Alias: "kc", BaseURL: "https://api.kilo.ai/api/openrouter/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"vertex-partner": {ID: "vertex-partner", Alias: "vertex-partner", BaseURL: "https://aiplatform.googleapis.com", Format: "vertex", Services: []string{"llm", "imageToText"}},
+		"voyage-ai":      {ID: "voyage-ai", Alias: "voyage-ai", BaseURL: "https://api.voyageai.com/v1/embeddings", Format: "voyage-ai", Services: []string{"embedding"}},
+		"topaz":          {ID: "topaz", Alias: "topaz", BaseURL: "https://api.topazlabs.com/image/v1/enhance", Format: "topaz", Services: []string{"image"}},
+		"mmf":            {ID: "mmf", Alias: "mmf", BaseURL: "https://api.xiaomimimo.com/api/free-ai/openai/chat", Format: "openai", Services: []string{"llm"}},
 	} {
 		if _, exists := Registry[id]; !exists {
 			Registry[id] = descriptor
