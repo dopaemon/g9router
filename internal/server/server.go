@@ -664,6 +664,17 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		return
 	}
 	for _, provider := range providers {
+		if provider.OAuthID != "" {
+			credential, ok := s.oauth.Get(provider.OAuthID)
+			if ok && credential.ExpiringSoon(time.Now()) && credential.RefreshToken != "" {
+				if refreshed, err := s.oauth.Refresh(r.Context(), provider.OAuthID); err == nil {
+					credential = refreshed
+				}
+			}
+			if ok {
+				provider.APIKey = credential.AccessToken
+			}
+		}
 		providerBody := body
 		providerPath := path
 		translateResponse := false
