@@ -706,7 +706,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			continue
 		}
 		if provider.APIType == "vertex" {
-			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey) {
+			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey, provider.OAuthID != "", provider.ProviderSpecificData) {
 				return
 			}
 			continue
@@ -831,13 +831,23 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 	return true
 }
 
-func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
+func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, oauthToken bool, specific map[string]any) bool {
 	body, err := json.Marshal(translator.OpenAIToVertex(model, request))
 	if err != nil {
 		return false
 	}
 	endpoint := strings.TrimRight(baseURL, "/") + "/v1/publishers/google/models/" + model + ":generateContent"
-	if apiKey != "" {
+	if oauthToken {
+		project, _ := specific["projectId"].(string)
+		location, _ := specific["location"].(string)
+		if location == "" {
+			location = "us-central1"
+		}
+		if project == "" {
+			return false
+		}
+		endpoint = strings.TrimRight(baseURL, "/") + "/v1/projects/" + url.PathEscape(project) + "/locations/" + url.PathEscape(location) + "/publishers/google/models/" + url.PathEscape(model) + ":generateContent"
+	} else if apiKey != "" {
 		endpoint += "?key=" + url.QueryEscape(apiKey)
 	}
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
@@ -847,6 +857,9 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if oauthToken && apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	response, err := s.client.Do(req)
 	if err != nil {
 		return false

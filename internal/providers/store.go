@@ -12,8 +12,9 @@ import (
 
 type Provider struct {
 	ID, Name, BaseURL, APIKey, APIType, OAuthID string
-	Enabled                                     bool      `json:"enabled"`
-	Accounts                                    []Account `json:"accounts,omitempty"`
+	Enabled                                     bool           `json:"enabled"`
+	Accounts                                    []Account      `json:"accounts,omitempty"`
+	ProviderSpecificData                        map[string]any `json:"providerSpecificData,omitempty"`
 }
 
 type Account struct {
