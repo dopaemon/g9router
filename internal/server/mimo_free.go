@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -101,7 +102,7 @@ func (s *Server) mimoJWT(r *http.Request) (string, error) {
 	if current, err := user.Current(); err == nil {
 		name = current.Username
 	}
-	seed := fmt.Sprintf("%s|%s|%s|%s", host, os.GOOS, os.Getenv("GOARCH"), name)
+	seed := fmt.Sprintf("%s|%s|%s|%s", host, runtime.GOOS, runtime.GOARCH, name)
 	hash := sha256.Sum256([]byte(seed))
 	body, _ := json.Marshal(map[string]string{"client": fmt.Sprintf("%x", hash[:])})
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.xiaomimimo.com/api/free-ai/bootstrap", strings.NewReader(string(body)))
