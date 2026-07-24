@@ -44,8 +44,11 @@ func AgentBody(messages []map[string]string, modelName string) []byte {
 		if message["role"] == "assistant" {
 			role = 2
 		}
-		history = append(history, agentMessage(2, agentMessage(1, agentMessage(1, agentMessage(1, agentString(1, content))))))
-		_ = role
+		entry := agentMessage(1, agentMessage(1, agentString(1, content)))
+		if role == 2 {
+			entry = agentMessage(2, agentMessage(1, agentString(1, content)))
+		}
+		history = append(history, entry)
 	}
 	userText := "Continue."
 	if current >= 0 && current < len(chat) && chat[current]["content"] != "" {
