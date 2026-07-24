@@ -333,4 +333,22 @@ func download(ctx context.Context, client *http.Client, target, output string) e
 	return errors.New("too many redirects")
 }
 
-func helpText() string { return "Usage: 9router xai video --prompt \"...\" [options]" }
+func helpText() string {
+	return `Usage: 9router xai video --prompt "..." [options]
+
+Generate a Grok Imagine video through the local g9router gateway.
+
+Options:
+  --prompt <text>         Video description (required)
+  --output <file>         Output MP4 path (default: video.mp4)
+  --model <id>            Model (default: xai/grok-imagine-video)
+  --duration <seconds>    Video duration
+  --aspect-ratio <ratio>  For example: 16:9, 9:16, 1:1
+  --resolution <res>      480p, 720p, or 1080p
+  --image <path-or-url>   Image input for image-to-video
+  --timeout <seconds>     Maximum wait time (default: 600)
+  --port <port>           Gateway port (default: 20128)
+  --host <host>           Gateway host (default: 127.0.0.1)
+  --api-key <key>         Gateway API key
+  -h, --help              Show this help`
+}
