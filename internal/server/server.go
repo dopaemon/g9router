@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -97,6 +98,10 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	if strings.HasSuffix(id, "/test") {
+		s.providerTestAPI(w, r, strings.TrimSuffix(id, "/test"))
+		return
+	}
 	if strings.HasSuffix(id, "/models") {
 		s.providerModelsAPI(w, r, strings.TrimSuffix(id, "/models"))
 		return
@@ -142,6 +147,47 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+}
+
+func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var provider *providers.Provider
+	for _, item := range s.store.List() {
+		if item.ID == id {
+			copy := item
+			provider = &copy
+			break
+		}
+	}
+	if provider == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"valid": false, "error": err.Error()})
+		return
+	}
+	if provider.APIType == "claude" || provider.APIType == "anthropic" {
+		request.Header.Set("x-api-key", provider.APIKey)
+		request.Header.Set("anthropic-version", "2023-06-01")
+	} else if provider.APIKey != "" {
+		request.Header.Set("Authorization", "Bearer "+provider.APIKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": err.Error(), "refreshed": false})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		writeJSON(w, http.StatusOK, map[string]any{"valid": true, "error": nil, "refreshed": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": fmt.Sprintf("upstream status %d", response.StatusCode), "refreshed": false})
 }
 
 func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id string) {
