@@ -178,6 +178,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	for _, provider := range providers {
 		providerBody := body
 		translateResponse := false
+		if provider.APIType == "gemini" {
+			if s.proxyGemini(w, r, provider.BaseURL, model, request, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if path == "/messages" && provider.APIType == "openai" {
 			translateResponse = true
 			var claude map[string]any
@@ -200,6 +206,51 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	}
 	s.usage.Add(0, 1, int64(len(body)), 0)
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
+}
+
+func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
+	body := translator.OpenAIToGemini(model, request)
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return false
+	}
+	endpoint := strings.TrimRight(baseURL, "/")
+	if strings.Contains(endpoint, "{model}") {
+		endpoint = strings.ReplaceAll(endpoint, "{model}", model)
+	} else if !strings.HasSuffix(endpoint, ":generateContent") {
+		endpoint += "/models/" + model + ":generateContent"
+	}
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-Goog-Api-Key", apiKey)
+	}
+	response, err := s.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	if err != nil {
+		return false
+	}
+	var gemini map[string]any
+	if json.Unmarshal(raw, &gemini) != nil {
+		return false
+	}
+	result := translator.GeminiToOpenAI(model, gemini)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_ = json.NewEncoder(w).Encode(result)
+	return true
 }
 
 func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
