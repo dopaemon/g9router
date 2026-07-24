@@ -36,6 +36,18 @@ func (s *Server) versionAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"currentVersion": current, "latestVersion": latest, "hasUpdate": latest != "" && compareVersions(latest, current) > 0})
 }
 
+func (s *Server) versionUpdateAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !strings.EqualFold(os.Getenv("NODE_ENV"), "production") {
+		writeJSON(w, http.StatusForbidden, map[string]any{"success": false, "message": "Update is only available in production build"})
+		return
+	}
+	writeJSON(w, http.StatusNotImplemented, map[string]any{"success": false, "message": "Automatic updater is not available in the Go build"})
+}
+
 func (s *Server) latestVersion(parent context.Context) string {
 	versionCache.Lock()
 	defer versionCache.Unlock()

@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/init", s.initAPI)
 	mux.HandleFunc("/api/version", s.versionAPI)
+	mux.HandleFunc("/api/version/update", s.versionUpdateAPI)
 	mux.HandleFunc("/api/locale", s.localeAPI)
 	mux.HandleFunc("/api/tags", s.tagsAPI)
 	mux.HandleFunc("/api/pricing", s.pricingAPI)
