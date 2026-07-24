@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -93,6 +95,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
+	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -448,6 +451,95 @@ func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
 		result[tool] = map[string]any{"installed": false, "configured": false, "available": false}
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) claudeSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	switch r.Method {
+	case http.MethodGet:
+		_, cliErr := exec.LookPath("claude")
+		raw, readErr := os.ReadFile(settingsPath)
+		settings := map[string]any(nil)
+		if readErr == nil {
+			_ = json.Unmarshal(raw, &settings)
+		}
+		installed := cliErr == nil || readErr == nil
+		hasRouter := false
+		if env, ok := settings["env"].(map[string]any); ok {
+			_, hasRouter = env["ANTHROPIC_BASE_URL"]
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"installed": installed, "settings": settings, "has9Router": hasRouter, "exaMcpEnabled": false, "settingsPath": settingsPath})
+	case http.MethodPost:
+		var input struct {
+			Env map[string]any `json:"env"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Env == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid env object"})
+			return
+		}
+		if base, ok := input.Env["ANTHROPIC_BASE_URL"].(string); ok && base != "" && !strings.HasSuffix(base, "/v1") {
+			input.Env["ANTHROPIC_BASE_URL"] = strings.TrimRight(base, "/") + "/v1"
+		}
+		current := map[string]any{}
+		if raw, readErr := os.ReadFile(settingsPath); readErr == nil {
+			_ = json.Unmarshal(raw, &current)
+		}
+		current["hasCompletedOnboarding"] = true
+		env, _ := current["env"].(map[string]any)
+		if env == nil {
+			env = map[string]any{}
+		}
+		for key, value := range input.Env {
+			env[key] = value
+		}
+		current["env"] = env
+		if err := os.MkdirAll(filepath.Dir(settingsPath), 0700); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		encoded, _ := json.MarshalIndent(current, "", "  ")
+		if err := os.WriteFile(settingsPath, encoded, 0600); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Settings updated successfully"})
+	case http.MethodDelete:
+		raw, readErr := os.ReadFile(settingsPath)
+		if os.IsNotExist(readErr) {
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "No settings file to reset"})
+			return
+		}
+		if readErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": readErr.Error()})
+			return
+		}
+		current := map[string]any{}
+		if json.Unmarshal(raw, &current) != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid settings JSON"})
+			return
+		}
+		if env, ok := current["env"].(map[string]any); ok {
+			for _, key := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "API_TIMEOUT_MS"} {
+				delete(env, key)
+			}
+			if len(env) == 0 {
+				delete(current, "env")
+			}
+		}
+		encoded, _ := json.MarshalIndent(current, "", "  ")
+		if err := os.WriteFile(settingsPath, encoded, 0600); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Settings reset successfully"})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
