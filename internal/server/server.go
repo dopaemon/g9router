@@ -3243,6 +3243,9 @@ func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
 func (s *Server) responses(w http.ResponseWriter, r *http.Request) { s.forwardJSON(w, r, "/responses") }
 func (s *Server) messages(w http.ResponseWriter, r *http.Request)  { s.forwardJSON(w, r, "/messages") }
 func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
+	if s.geminiEmbedding(w, r) {
+		return
+	}
 	s.forwardRaw(w, r, "/embeddings")
 }
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {
