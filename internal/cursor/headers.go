@@ -1,7 +1,6 @@
 package cursor
 
 import (
-	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
@@ -66,5 +65,3 @@ func Headers(accessToken, machineID string, ghostMode bool) map[string]string {
 		"x-amzn-trace-id": "Root=" + traceID, "x-client-key": hash(accessToken, ""), "x-cursor-checksum": checksum(machineID), "x-cursor-client-version": "3.12.17", "x-cursor-client-commit": "0fb762053c34788bb7760d5673f8a6d4c8589d50", "x-cursor-client-type": "ide", "x-cursor-client-os": osName, "x-cursor-client-arch": arch, "x-cursor-client-device-type": "desktop", "x-cursor-config-version": configID, "x-cursor-timezone": "UTC", "x-ghost-mode": fmt.Sprintf("%t", ghostMode), "x-request-id": requestID, "x-session-id": sessionID(accessToken),
 	}
 }
-
-var _ = rand.Reader
