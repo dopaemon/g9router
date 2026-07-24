@@ -190,6 +190,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/github/poll", s.githubPollAPI)
 	mux.HandleFunc("/api/oauth/qwen/device-code", s.qwenDeviceCodeAPI)
 	mux.HandleFunc("/api/oauth/qwen/poll", s.qwenPollAPI)
+	mux.HandleFunc("/api/oauth/kimi/device-code", s.kimiDeviceCodeAPI)
+	mux.HandleFunc("/api/oauth/kimi/poll", s.kimiPollAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
