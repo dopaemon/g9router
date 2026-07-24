@@ -24,6 +24,7 @@ func (s *Server) proxyPoolsAPI(w http.ResponseWriter, r *http.Request) {
 			active = &parsed
 		}
 		items := s.proxyPools.List(active)
+		items = s.withProxyBindingCounts(items)
 		writeJSON(w, http.StatusOK, map[string]any{"proxyPools": items})
 	case http.MethodPost:
 		var input struct {
@@ -93,6 +94,7 @@ func (s *Server) proxyPoolResourceAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Proxy pool not found"})
 		return
 	}
+	item.BoundConnectionCount = s.proxyBindingCount(id)
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{"proxyPool": item})
@@ -125,6 +127,26 @@ func (s *Server) proxyPoolResourceAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) withProxyBindingCounts(items []proxypools.Pool) []proxypools.Pool {
+	for index := range items {
+		items[index].BoundConnectionCount = s.proxyBindingCount(items[index].ID)
+	}
+	return items
+}
+
+func (s *Server) proxyBindingCount(id string) int {
+	count := 0
+	for _, provider := range s.store.List() {
+		if provider.ProviderSpecificData == nil {
+			continue
+		}
+		if bound, _ := provider.ProviderSpecificData["proxyPoolId"].(string); bound == id {
+			count++
+		}
+	}
+	return count
 }
 
 func validateProxyUpdates(updates map[string]any) error {
