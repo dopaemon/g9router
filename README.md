@@ -11,6 +11,8 @@ G9ROUTER_UPSTREAM=https://api.openai.com/v1 G9ROUTER_API_KEY=sk-... go run .
 Defaults: `:20128`, upstream `https://api.openai.com/v1`.
 Routes: `/healthz`, `/v1/models`, `/v1/chat/completions`, `/api/providers`, `/`.
 
+OAuth credentials are managed through `/api/oauth` (`GET`, `POST`, `PUT?id=...`) and persisted in `oauth.json`; secrets are omitted from API responses.
+
 Client `Authorization` overrides `G9ROUTER_API_KEY`. SSE responses stream through without buffering.
 
 Provider records persist in `providers.json`; API keys are never returned by the list endpoint.
