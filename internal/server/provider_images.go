@@ -11,13 +11,15 @@ import (
 	"time"
 )
 
-func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerID, apiKey string, providerData map[string]any, input map[string]any) bool {
 	if providerID != "gemini" || apiKey == "" {
 		switch providerID {
 		case "stability-ai":
 			return s.stabilityImage(w, r, apiKey, input)
 		case "huggingface":
 			return s.huggingFaceImage(w, r, apiKey, input)
+		case "cloudflare-ai":
+			return s.cloudflareImage(w, r, apiKey, providerData, input)
 		default:
 			return false
 		}
@@ -74,6 +76,48 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
 	return true
+}
+
+func (s *Server) cloudflareImage(w http.ResponseWriter, r *http.Request, apiKey string, providerData map[string]any, input map[string]any) bool {
+	accountID := stringValue(providerData["accountId"])
+	model := stringValue(input["model"])
+	if accountID == "" || model == "" || apiKey == "" {
+		return false
+	}
+	body := map[string]any{"prompt": input["prompt"]}
+	if size := stringValue(input["size"]); size != "" {
+		parts := strings.SplitN(size, "x", 2)
+		if len(parts) == 2 {
+			if width, err := strconv.Atoi(parts[0]); err == nil {
+				body["width"] = width
+			}
+			if height, err := strconv.Atoi(parts[1]); err == nil {
+				body["height"] = height
+			}
+		}
+	}
+	for _, key := range []string{"negative_prompt", "guidance", "seed", "num_steps", "steps", "strength"} {
+		if value, ok := input[key]; ok && value != nil && value != "" {
+			body[key] = value
+		}
+	}
+	endpoint := "https://api.cloudflare.com/client/v4/accounts/" + url.PathEscape(accountID) + "/ai/run/" + strings.TrimPrefix(model, "models/")
+	return s.postImageJSON(w, r, endpoint, apiKey, body, func(data []byte) (any, bool) {
+		var payload map[string]any
+		if json.Unmarshal(data, &payload) != nil {
+			return nil, false
+		}
+		result := payload["result"]
+		if result == nil {
+			result = payload
+		}
+		if resultMap, ok := result.(map[string]any); ok {
+			if image, ok := resultMap["image"].(string); ok && image != "" {
+				return map[string]any{"created": time.Now().Unix(), "data": []map[string]string{{"b64_json": image}}}, true
+			}
+		}
+		return nil, false
+	})
 }
 
 func (s *Server) stabilityImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
