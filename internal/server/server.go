@@ -2067,6 +2067,85 @@ func (s *Server) keyResourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) combosAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, 200, map[string]any{"combos": s.combos.List()})
+	case http.MethodPost:
+		var input struct {
+			Name   string `json:"name"`
+			Models []any  `json:"models"`
+			Kind   string `json:"kind"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Name == "" {
+			writeJSON(w, 400, map[string]string{"error": "Name is required"})
+			return
+		}
+		item, err := s.combos.Create(input.Name, input.Models, input.Kind)
+		if err != nil {
+			status := 500
+			if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "exists") {
+				status = 400
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 201, item)
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) comboResourceAPI(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/combos/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, 404, map[string]string{"error": "Combo not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		item, ok := s.combos.Get(id)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Combo not found"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodPut:
+		var input comboStore.Combo
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		item, ok, err := s.combos.Update(id, input)
+		if err != nil {
+			status := 500
+			if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "exists") {
+				status = 400
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Combo not found"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		ok, err := s.combos.Delete(id)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Combo not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"success": true})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
