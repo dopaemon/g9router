@@ -40,7 +40,7 @@ func New(options Options) *Server {
 	if options.OAuthPath == "" {
 		options.OAuthPath = "oauth.json"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("usage.json"), oauth: oauth.New(options.OAuthPath)}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath)}
 }
 
 func (s *Server) Run() error {

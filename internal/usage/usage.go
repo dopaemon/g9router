@@ -1,9 +1,13 @@
 package usage
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
+
+	"g9router/internal/db"
 )
 
 type Snapshot struct {
@@ -16,10 +20,18 @@ type Store struct {
 	mu       sync.RWMutex
 	snapshot Snapshot
 	path     string
+	database *sql.DB
 }
 
 func New(path string) *Store {
 	store := &Store{path: path}
+	if strings.HasSuffix(path, ".db") {
+		if database, err := db.Open(path); err == nil {
+			store.database = database
+			_ = store.loadDB()
+			return store
+		}
+	}
 	if data, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(data, &store.snapshot)
 	}
@@ -43,6 +55,14 @@ func (s *Store) Reset() error {
 	return s.saveLocked()
 }
 func (s *Store) saveLocked() error {
+	if s.database != nil {
+		payload, err := json.Marshal(s.snapshot)
+		if err != nil {
+			return err
+		}
+		_, err = s.database.Exec(`INSERT INTO usage(id,payload,updated_at) VALUES(1,?,unixepoch()) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, string(payload))
+		return err
+	}
 	if s.path == "" {
 		return nil
 	}
@@ -51,4 +71,12 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	return os.WriteFile(s.path, data, 0600)
+}
+func (s *Store) loadDB() error {
+	var payload string
+	err := s.database.QueryRow(`SELECT payload FROM usage WHERE id=1`).Scan(&payload)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(payload), &s.snapshot)
 }
