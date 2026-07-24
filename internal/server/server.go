@@ -2149,6 +2149,73 @@ func (s *Server) comboResourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) providerNodesAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, 200, map[string]any{"nodes": s.providerNodes.List()})
+	case http.MethodPost:
+		var input providerNodeStore.Node
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		item, err := s.providerNodes.Create(input)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 201, map[string]any{"node": item})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) providerNodeResourceAPI(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/provider-nodes/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		item, ok := s.providerNodes.Get(id)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodPut:
+		var input providerNodeStore.Node
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		item, ok, err := s.providerNodes.Update(id, input)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"node": item})
+	case http.MethodDelete:
+		ok, err := s.providerNodes.Delete(id)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"success": true})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
