@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
@@ -38,6 +39,8 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.antigravityImage(w, r, apiKey, providerData, input)
 		case "openai", "minimax", "openrouter", "recraft", "vercel-ai-gateway", "xai":
 			return s.openAICompatibleImage(w, r, providerID, apiKey, input)
+		case "codex":
+			return s.codexImage(w, r, apiKey, providerData, input)
 		default:
 			return false
 		}
@@ -94,6 +97,58 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
 	return true
+}
+
+func (s *Server) codexImage(w http.ResponseWriter, r *http.Request, accessToken string, providerData map[string]any, input map[string]any) bool {
+	if accessToken == "" || stringValue(input["prompt"]) == "" {
+		return false
+	}
+	model := strings.TrimSuffix(stringValue(input["model"]), "-image")
+	content := []map[string]any{{"type": "input_text", "text": stringValue(input["prompt"])}}
+	body := map[string]any{
+		"model": model, "instructions": "", "input": []any{map[string]any{"type": "message", "role": "user", "content": content}},
+		"tools":       []any{map[string]any{"type": "image_generation", "output_format": "png", "size": stringValue(input["size"])}},
+		"tool_choice": "auto", "parallel_tool_calls": false, "stream": true, "store": false, "reasoning": nil,
+	}
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://chatgpt.com/backend-api/codex", strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Accept", "text/event-stream, application/json")
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("originator", "codex_cli_rs")
+	request.Header.Set("User-Agent", "codex_cli_rs/0.136.0")
+	request.Header.Set("version", "0.136.0")
+	if accountID := stringValue(providerData["chatgptAccountId"]); accountID != "" {
+		request.Header.Set("chatgpt-account-id", accountID)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	scanner := bufio.NewScanner(io.LimitReader(response.Body, 64<<20))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event struct {
+			Item struct {
+				Type, Result string `json:"type"`
+			} `json:"item"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event) == nil && event.Item.Type == "image_generation_call" && event.Item.Result != "" {
+			writeJSON(w, http.StatusOK, imageResult([]map[string]string{{"b64_json": event.Item.Result}}))
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) openAICompatibleImage(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
