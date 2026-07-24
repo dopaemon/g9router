@@ -79,7 +79,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
-	s.proxy(w, r, "/models", http.MethodGet, nil)
+	s.proxy(w, r, s.options.Upstream, "/models", http.MethodGet, nil, "")
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -111,25 +111,25 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	model, _ := request["model"].(string)
 	providers := s.store.Resolve(model)
 	if len(providers) == 0 {
-		s.proxy(w, r, s.options.Upstream, path, body)
+		s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey)
 		return
 	}
 	for _, provider := range providers {
-		if s.proxy(w, r, provider.BaseURL, path, body) {
+		if s.proxy(w, r, provider.BaseURL, path, http.MethodPost, body, provider.APIKey) {
 			return
 		}
 	}
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
 }
 
-func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte) bool {
+func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, path, method string, body []byte, apiKey string) bool {
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {
 		reader = strings.NewReader(string(body))
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, reader)
+	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(baseURL, "/")+path, reader)
 	if err != nil {
 		return false
 	}
@@ -137,8 +137,8 @@ func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, p
 	request.Header.Set("Content-Type", "application/json")
 	if key := incoming.Header.Get("Authorization"); key != "" {
 		request.Header.Set("Authorization", key)
-	} else if s.options.APIKey != "" {
-		request.Header.Set("Authorization", "Bearer "+s.options.APIKey)
+	} else if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 	response, err := s.client.Do(request)
 	if err != nil {

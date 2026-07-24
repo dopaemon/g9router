@@ -33,3 +33,23 @@ func TestChatCompletionProxiesRequest(t *testing.T) {
 		t.Fatalf("status = %d", response.StatusCode)
 	}
 }
+
+func TestModelsUsesGET(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s", r.Method)
+		}
+		fmt.Fprint(w, `{"data":[]}`)
+	}))
+	defer upstream.Close()
+	server := httptest.NewServer(New(Options{Upstream: upstream.URL + "/v1"}).Handler())
+	defer server.Close()
+	response, err := http.Get(server.URL + "/v1/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+}
