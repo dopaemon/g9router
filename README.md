@@ -1,6 +1,6 @@
 # g9router
 
-Go tracer-bullet port of 9Router's OpenAI-compatible proxy core.
+Go port of 9Router's OpenAI-compatible gateway, including provider routing, OAuth, translations, media APIs, management APIs, and embedded dashboard.
 
 ## Run
 
@@ -9,7 +9,7 @@ G9ROUTER_UPSTREAM=https://api.openai.com/v1 G9ROUTER_API_KEY=sk-... go run .
 ```
 
 Defaults: `:20128`, upstream `https://api.openai.com/v1`.
-Routes: `/healthz`, `/v1/models`, `/v1/chat/completions`, `/api/providers`, `/`.
+Routes include `/healthz`, `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/*`, `/v1/search`, `/v1/web/fetch`, `/api/providers`, `/api/oauth`, and `/dashboard`.
 
 OAuth credentials are managed through `/api/oauth` (`GET`, `POST`, `PUT?id=...`) and persisted in `oauth.json`; secrets are omitted from API responses.
 
@@ -28,6 +28,6 @@ Provider records persist in `providers.json`; API keys are never returned by the
 
 ## Layout
 
-`cmd/g9router` contains the executable. `internal/server`, `internal/providers`, and `internal/web` contain private application modules. `web` is reserved for future external assets.
+`cmd/g9router` contains the executable. `internal/server` owns HTTP routing and provider dispatch; `internal/providers` owns the registry and persistence; `internal/translator` owns wire-format conversion; `internal/oauth`, `internal/keys`, and `internal/settings` own persisted management state; `internal/web` embeds the dashboard. The top-level `web` directory is reserved for external assets.
 
-Provider-specific translators cover OpenAI, Claude, Gemini, Vertex, Codex, Kiro, and Cursor. The server also includes provider fallback, quota tracking, OAuth persistence, SQLite storage, model aliases/custom models, MCP bridges, Headroom APIs, CLI settings APIs, and RTK compression.
+Provider-specific paths cover OpenAI, Claude, Gemini, Gemini CLI, Vertex, Antigravity, Codex, Grok CLI, Kiro, Cursor, Qoder, Qwen, iFlow, Kimchi, MiMo, Perplexity Web, OpenCode, CommandCode, and media providers. The server also includes provider fallback, quota tracking, OAuth persistence, SQLite storage, model aliases/custom models, MCP bridges, Headroom APIs, CLI settings APIs, tunnels, proxy pools, and RTK compression.
