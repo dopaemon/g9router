@@ -1,0 +1,102 @@
+package server
+
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+
+	"g9router/internal/providers"
+)
+
+func (s *Server) codexImportTokenAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		AccessToken string `json:"accessToken"`
+		Name        string `json:"name"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&input) != nil || strings.TrimSpace(input.AccessToken) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Access token is required"})
+		return
+	}
+	account := codexAccount(strings.TrimSpace(input.AccessToken), input.Name)
+	provider, _ := s.store.Find("codex")
+	provider.ID, provider.Name = "codex", "Codex"
+	if provider.BaseURL == "" {
+		if descriptor, ok := providers.Lookup("codex"); ok {
+			provider.BaseURL, provider.APIType = descriptor.BaseURL, "codex"
+		}
+	}
+	provider.Enabled = true
+	provider.Accounts = append(provider.Accounts, account)
+	if err := s.store.Upsert(provider); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "connection": map[string]any{"id": account.ID, "provider": "codex", "name": input.Name}})
+}
+
+func (s *Server) codexBulkImportAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var raw any
+	if json.NewDecoder(io.LimitReader(r.Body, 32<<20)).Decode(&raw) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+	items := []any{}
+	switch value := raw.(type) {
+	case []any:
+		items = value
+	case map[string]any:
+		if accounts, ok := value["accounts"].([]any); ok {
+			items = accounts
+		} else {
+			items = []any{value}
+		}
+	}
+	if len(items) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No accounts provided"})
+		return
+	}
+	provider, _ := s.store.Find("codex")
+	provider.ID, provider.Name, provider.Enabled = "codex", "Codex", true
+	if provider.BaseURL == "" {
+		if descriptor, ok := providers.Lookup("codex"); ok {
+			provider.BaseURL, provider.APIType = descriptor.BaseURL, "codex"
+		}
+	}
+	results := make([]map[string]any, 0, len(items))
+	success := 0
+	for index, value := range items {
+		item, ok := value.(map[string]any)
+		token, _ := item["accessToken"].(string)
+		if !ok || strings.TrimSpace(token) == "" {
+			results = append(results, map[string]any{"index": index, "ok": false, "error": "Missing accessToken"})
+			continue
+		}
+		account := codexAccount(strings.TrimSpace(token), stringValue(item["name"]))
+		provider.Accounts = append(provider.Accounts, account)
+		results = append(results, map[string]any{"index": index, "ok": true, "id": account.ID})
+		success++
+	}
+	if err := s.store.Upsert(provider); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": success, "failed": len(items) - success, "results": results})
+}
+
+func codexAccount(token, _ string) providers.Account {
+	sum := sha256.Sum256([]byte(token))
+	return providers.Account{ID: "codex-" + base64.RawURLEncoding.EncodeToString(sum[:9]), APIKey: token, Enabled: true}
+}
+
+func stringValue(value any) string { result, _ := value.(string); return result }
