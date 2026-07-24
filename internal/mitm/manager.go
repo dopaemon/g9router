@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -168,6 +169,46 @@ func (m *Manager) SetDNS(tool, password string, enabled bool) error {
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("sudo hosts update failed: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func (m *Manager) TrustCertificate(password string) error {
+	certFile, _, err := m.certificateFiles()
+	if err != nil {
+		return err
+	}
+	if err := ensureCertificate(certFile, filepath.Join(filepath.Dir(certFile), "ca.key")); err != nil {
+		return err
+	}
+	if password != "" && strings.ContainsAny(password, "\r\n") {
+		return fmt.Errorf("invalid sudo password")
+	}
+	if runtime.GOOS == "windows" {
+		return m.privileged(password, "certutil", "-addstore", "-f", "Root", certFile)
+	}
+	if runtime.GOOS == "darwin" {
+		return m.privileged(password, "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", certFile)
+	}
+	installed := "/usr/local/share/ca-certificates/g9router-mitm.crt"
+	if err := m.privileged(password, "cp", certFile, installed); err != nil {
+		return err
+	}
+	return m.privileged(password, "update-ca-certificates")
+}
+
+func (m *Manager) privileged(password string, name string, args ...string) error {
+	commandName, commandArgs := name, args
+	if os.Geteuid() != 0 && runtime.GOOS != "windows" {
+		commandName, commandArgs = "sudo", append([]string{"-S", name}, args...)
+	}
+	command := exec.Command(commandName, commandArgs...)
+	if password != "" && commandName == "sudo" {
+		command.Stdin = strings.NewReader(password + "\n")
+	}
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s failed: %s", name, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

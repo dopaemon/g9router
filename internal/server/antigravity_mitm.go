@@ -52,7 +52,13 @@ func (s *Server) antigravityMITMAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if input.Action == "trust-cert" {
-			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "automatic certificate trust is OS-specific"})
+			if err := s.mitmManager.TrustCertificate(input.SudoPassword); err != nil {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+				return
+			}
+			status := s.mitmManager.Status()
+			status.CertTrusted = true
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "certTrusted": status.CertTrusted})
 			return
 		}
 		if input.Action != "enable" && input.Action != "disable" {
