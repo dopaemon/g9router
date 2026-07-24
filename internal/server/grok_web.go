@@ -2,6 +2,8 @@ package server
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,52 +12,79 @@ import (
 	"time"
 )
 
+type grokModelConfig struct {
+	model, mode string
+	thinking    bool
+}
+
+var grokModels = map[string]grokModelConfig{
+	"grok-3": {"grok-3", "MODEL_MODE_GROK_3", false}, "grok-3-mini": {"grok-3", "MODEL_MODE_GROK_3_MINI_THINKING", true},
+	"grok-3-thinking": {"grok-3", "MODEL_MODE_GROK_3_THINKING", true}, "grok-4": {"grok-4", "MODEL_MODE_GROK_4", false},
+	"grok-4-mini": {"grok-4-mini", "MODEL_MODE_GROK_4_MINI_THINKING", true}, "grok-4-thinking": {"grok-4", "MODEL_MODE_GROK_4_THINKING", true},
+	"grok-4-heavy": {"grok-4", "MODEL_MODE_HEAVY", true}, "grok-4.1-mini": {"grok-4-1-thinking-1129", "MODEL_MODE_GROK_4_1_MINI_THINKING", true},
+	"grok-4.1-fast": {"grok-4-1-thinking-1129", "MODEL_MODE_FAST", false}, "grok-4.1-expert": {"grok-4-1-thinking-1129", "MODEL_MODE_EXPERT", true},
+	"grok-4.1-thinking": {"grok-4-1-thinking-1129", "MODEL_MODE_GROK_4_1_THINKING", true}, "grok-4.2": {"grok-420", "MODEL_MODE_GROK_420", false},
+	"grok-4.20": {"grok-420", "MODEL_MODE_GROK_420", false}, "grok-4.20-beta": {"grok-420", "MODEL_MODE_GROK_420", false},
+}
+
+func grokRandomHex(size int) string {
+	data := make([]byte, size)
+	if _, err := rand.Read(data); err != nil {
+		return uuidToken(fmt.Sprint(time.Now().UnixNano()))[:size*2]
+	}
+	return fmt.Sprintf("%x", data)
+}
+
+func grokStatsigID() string {
+	return base64.StdEncoding.EncodeToString([]byte("e:TypeError: Cannot read properties of undefined (reading 'grok')"))
+}
+
+func grokMessageContent(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	parts, ok := value.([]any)
+	if !ok {
+		return ""
+	}
+	var text []string
+	for _, part := range parts {
+		item, _ := part.(map[string]any)
+		if stringValue(item["type"]) == "text" && stringValue(item["text"]) != "" {
+			text = append(text, stringValue(item["text"]))
+		}
+	}
+	return strings.Join(text, " ")
+}
+
 func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map[string]any, token string) bool {
 	messages, _ := request["messages"].([]any)
 	if len(messages) == 0 || token == "" {
 		return false
 	}
 	model := stringValue(request["model"])
-	modelName, modelMode := "grok-4.1-thinking-1129", "MODEL_MODE_FAST"
-	switch model {
-	case "grok-3":
-		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3"
-	case "grok-3-mini":
-		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3_MINI_THINKING"
-	case "grok-3-thinking":
-		modelName, modelMode = "grok-3", "MODEL_MODE_GROK_3_THINKING"
-	case "grok-4":
-		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4"
-	case "grok-4-mini":
-		modelName, modelMode = "grok-4-mini", "MODEL_MODE_GROK_4_MINI_THINKING"
-	case "grok-4-thinking":
-		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4_THINKING"
-	case "grok-4-heavy":
-		modelName, modelMode = "grok-4", "MODEL_MODE_HEAVY"
-	case "grok-4.1-fast":
-		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_FAST"
-	case "grok-4.1-expert":
-		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_EXPERT"
-	case "grok-4.1-thinking":
-		modelName, modelMode = "grok-4-1-thinking-1129", "MODEL_MODE_GROK_4_1_THINKING"
-	case "grok-4.2", "grok-4.20", "grok-4.20-beta":
-		modelName, modelMode = "grok-420", "MODEL_MODE_GROK_420"
+	config, ok := grokModels[model]
+	if !ok {
+		config = grokModels["grok-4.1-fast"]
 	}
 	parts := make([]string, 0, len(messages))
 	lastUser := -1
 	for index, raw := range messages {
 		message, _ := raw.(map[string]any)
-		if stringValue(message["role"]) == "user" && stringValue(message["content"]) != "" {
+		if stringValue(message["role"]) == "user" && strings.TrimSpace(grokMessageContent(message["content"])) != "" {
 			lastUser = index
 		}
 	}
 	for index, raw := range messages {
 		message, _ := raw.(map[string]any)
-		content := stringValue(message["content"])
+		content := grokMessageContent(message["content"])
 		if content == "" {
 			continue
 		}
 		role := stringValue(message["role"])
+		if role == "developer" {
+			role = "system"
+		}
 		if role == "user" && index == lastUser {
 			parts = append(parts, content)
 		} else {
@@ -66,7 +95,7 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 	if message == "" {
 		return false
 	}
-	payload := map[string]any{"temporary": true, "modelName": modelName, "modelMode": modelMode, "message": message, "fileAttachments": []any{}, "imageAttachments": []any{}, "disableSearch": false, "enableImageGeneration": false, "returnImageBytes": false, "returnRawGrokInXaiRequest": false, "enableImageStreaming": false, "imageGenerationCount": 0, "forceConcise": false, "toolOverrides": map[string]any{}, "enableSideBySide": true, "sendFinalMetadata": true, "isReasoning": false, "disableTextFollowUps": false, "disableMemory": true, "forceSideBySide": false, "isAsyncChat": false}
+	payload := map[string]any{"temporary": true, "modelName": config.model, "modelMode": config.mode, "message": message, "fileAttachments": []any{}, "imageAttachments": []any{}, "disableSearch": false, "enableImageGeneration": false, "returnImageBytes": false, "returnRawGrokInXaiRequest": false, "enableImageStreaming": false, "imageGenerationCount": 0, "forceConcise": false, "toolOverrides": map[string]any{}, "enableSideBySide": true, "sendFinalMetadata": true, "isReasoning": false, "disableTextFollowUps": false, "disableMemory": true, "forceSideBySide": false, "isAsyncChat": false, "disableSelfHarmShortCircuit": false, "deviceEnvInfo": map[string]any{"darkModeEnabled": false, "devicePixelRatio": 2, "screenWidth": 2056, "screenHeight": 1329, "viewportWidth": 2056, "viewportHeight": 1083}}
 	encoded, _ := json.Marshal(payload)
 	requestUpstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://grok.com/rest/app-chat/conversations/new", strings.NewReader(string(encoded)))
 	if err != nil {
@@ -76,7 +105,12 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 	requestUpstream.Header.Set("Accept", "*/*")
 	requestUpstream.Header.Set("Origin", "https://grok.com")
 	requestUpstream.Header.Set("Referer", "https://grok.com/")
-	requestUpstream.Header.Set("User-Agent", "Mozilla/5.0 Chrome/136.0.0.0")
+	requestUpstream.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+	requestUpstream.Header.Set("Cache-Control", "no-cache")
+	requestUpstream.Header.Set("Pragma", "no-cache")
+	requestUpstream.Header.Set("x-statsig-id", grokStatsigID())
+	requestUpstream.Header.Set("x-xai-request-id", grokRandomHex(16))
+	requestUpstream.Header.Set("traceparent", "00-"+grokRandomHex(16)+"-"+grokRandomHex(8)+"-00")
 	token = strings.TrimPrefix(token, "sso=")
 	requestUpstream.Header.Set("Cookie", "sso="+token)
 	response, err := s.client.Do(requestUpstream)
@@ -95,6 +129,9 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 		w.WriteHeader(http.StatusOK)
 	}
 	full := ""
+	reasoning := ""
+	fingerprint := ""
+	responseID := ""
 	scanner := bufio.NewScanner(io.LimitReader(response.Body, 64<<20))
 	for scanner.Scan() {
 		var event map[string]any
@@ -103,24 +140,35 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 		}
 		result, _ := event["result"].(map[string]any)
 		resp, _ := result["response"].(map[string]any)
-		text := stringValue(resp["token"])
-		fullMessage := false
-		if text == "" {
-			modelResponse, _ := resp["modelResponse"].(map[string]any)
-			text = stringValue(modelResponse["message"])
-			fullMessage = text != ""
+		if info, ok := resp["llmInfo"].(map[string]any); ok && fingerprint == "" {
+			fingerprint = stringValue(info["modelHash"])
 		}
+		responseID = nonEmpty(stringValue(resp["responseId"]), responseID)
+		if modelResponse, ok := resp["modelResponse"].(map[string]any); ok {
+			if metadata, ok := modelResponse["metadata"].(map[string]any); ok {
+				if info, ok := metadata["llm_info"].(map[string]any); ok {
+					fingerprint = nonEmpty(stringValue(info["modelHash"]), fingerprint)
+				}
+			}
+			if messageText := stringValue(modelResponse["message"]); messageText != "" {
+				full = messageText
+				if stream {
+					grokWriteChunk(w, id, created, model, map[string]any{"content": messageText, "reasoning_content": nil}, fingerprint)
+				}
+				continue
+			}
+		}
+		text := stringValue(resp["token"])
 		if text == "" {
 			continue
 		}
-		if fullMessage {
-			full = text
-		} else {
-			full += text
+		full += text
+		if config.thinking && strings.HasPrefix(text, "<think>") {
+			reasoning += strings.TrimPrefix(text, "<think>")
+			continue
 		}
 		if stream {
-			chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": text}, "finish_reason": nil}}})
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
+			grokWriteChunk(w, id, created, model, map[string]any{"content": text}, fingerprint)
 		}
 	}
 	if stream {
@@ -128,6 +176,15 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 		_, _ = fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
 		return true
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "object": "chat.completion", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "message": map[string]string{"role": "assistant", "content": full}, "finish_reason": "stop"}}})
+	messageOut := map[string]any{"role": "assistant", "content": full}
+	if reasoning != "" {
+		messageOut["reasoning_content"] = reasoning
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "object": "chat.completion", "created": created, "model": model, "system_fingerprint": nonEmpty(fingerprint, ""), "choices": []any{map[string]any{"index": 0, "message": messageOut, "finish_reason": "stop"}}})
 	return true
+}
+
+func grokWriteChunk(w http.ResponseWriter, id string, created int64, model string, delta map[string]any, fingerprint string) {
+	chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "system_fingerprint": nonEmpty(fingerprint, ""), "choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": nil}}})
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
 }
