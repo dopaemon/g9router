@@ -2930,6 +2930,10 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := r.URL.Query().Get("provider")
+	if provider == "deepgram" || provider == "inworld" || provider == "minimax" || provider == "minimax-cn" {
+		s.audioVoicesAPI(w, r)
+		return
+	}
 	if provider == "elevenlabs" {
 		apiKey := r.URL.Query().Get("apiKey")
 		if apiKey == "" {
