@@ -34,6 +34,7 @@ import (
 	"g9router/internal/mcp"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
+	providerNodeStore "g9router/internal/providernodes"
 	"g9router/internal/providers"
 	"g9router/internal/rtk"
 	"g9router/internal/settings"
@@ -60,6 +61,7 @@ type Server struct {
 	headroomManager *headroom.Manager
 	keys            *keyStore.Store
 	combos          *comboStore.Store
+	providerNodes   *providerNodeStore.Store
 }
 
 func New(options Options) *Server {
@@ -76,7 +78,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json")}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json")}
 }
 
 func (s *Server) Run() error {
@@ -103,6 +105,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
+	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
+	mux.HandleFunc("/api/provider-nodes/", s.providerNodeResourceAPI)
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
