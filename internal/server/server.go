@@ -40,6 +40,7 @@ import (
 	"g9router/internal/rtk"
 	"g9router/internal/settings"
 	"g9router/internal/translator"
+	"g9router/internal/tunnel"
 	"g9router/internal/usage"
 	"g9router/internal/vertex"
 	"g9router/internal/web"
@@ -65,6 +66,7 @@ type Server struct {
 	combos          *comboStore.Store
 	providerNodes   *providerNodeStore.Store
 	proxyPools      *proxypools.Store
+	tunnelManager   *tunnel.Manager
 }
 
 func New(options Options) *Server {
@@ -81,7 +83,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), database: database}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), database: database}
 }
 
 func (s *Server) Run() error {
@@ -120,6 +122,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/provider-nodes/", s.providerNodeResourceAPI)
 	mux.HandleFunc("/api/proxy-pools", s.proxyPoolsAPI)
 	mux.HandleFunc("/api/proxy-pools/", s.proxyPoolResourceAPI)
+	mux.HandleFunc("/api/tunnel/status", s.tunnelStatusAPI)
+	mux.HandleFunc("/api/tunnel/enable", s.tunnelEnableAPI)
+	mux.HandleFunc("/api/tunnel/disable", s.tunnelDisableAPI)
 	mux.HandleFunc("/api/media-providers/tts/voices", s.ttsVoicesAPI)
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
