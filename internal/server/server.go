@@ -98,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
+	mux.HandleFunc("/api/models/availability", s.modelsAvailabilityAPI)
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
@@ -451,6 +452,53 @@ func (s *Server) disabledModelsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) modelsAvailabilityAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		now := time.Now().UnixMilli()
+		models := []map[string]any{}
+		for _, provider := range s.store.List() {
+			for model, until := range provider.ModelLocks {
+				if until > now {
+					models = append(models, map[string]any{"provider": provider.ID, "model": model, "status": "cooldown", "until": until, "connectionId": provider.ID, "connectionName": provider.Name, "lastError": provider.LastError})
+				}
+			}
+			if len(provider.ModelLocks) == 0 && provider.TestStatus == "unavailable" {
+				models = append(models, map[string]any{"provider": provider.ID, "model": "__all", "status": "unavailable", "connectionId": provider.ID, "connectionName": provider.Name, "lastError": provider.LastError})
+			}
+		}
+		writeJSON(w, 200, map[string]any{"models": models, "unavailableCount": len(models)})
+		return
+	}
+	if r.Method == http.MethodPost {
+		var input struct {
+			Action, Provider, Model string `json:"action"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Action != "clearCooldown" || input.Provider == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "Invalid request"})
+			return
+		}
+		provider, ok := s.store.Find(input.Provider)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "provider not found"})
+			return
+		}
+		if provider.ModelLocks != nil {
+			delete(provider.ModelLocks, input.Model)
+		}
+		if provider.TestStatus == "unavailable" {
+			provider.TestStatus = "active"
+			provider.LastError = ""
+		}
+		if err := s.store.Upsert(provider); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+		return
+	}
+	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 }
 
 func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
