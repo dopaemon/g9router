@@ -134,6 +134,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/deepseek-tui-settings", s.deepSeekTUISettingsAPI)
 	mux.HandleFunc("/api/cli-tools/grok-build-settings", s.grokBuildSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/hermes-settings", s.hermesSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/cowork-mcp-tools", s.coworkMCPToolsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -2078,6 +2079,121 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		streamCopy(w, response.Body, flusher)
 	}
+}
+
+func (s *Server) coworkMCPToolsAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil || strings.TrimSpace(input.URL) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url required"})
+		return
+	}
+	result := s.probeMCPTools(r.Context(), strings.TrimSpace(input.URL))
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) probeMCPTools(parent context.Context, target string) map[string]any {
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	headers := map[string]string{
+		"Content-Type":         "application/json",
+		"Accept":               "application/json, text/event-stream",
+		"MCP-Protocol-Version": "2025-06-18",
+	}
+	call := func(method string, id any, session string) (*http.Response, error) {
+		params := map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "9router", "version": "1"}}
+		if method != "initialize" {
+			params = map[string]any{}
+		}
+		payload := map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
+		if id != nil {
+			payload["id"] = id
+		}
+		body, _ := json.Marshal(payload)
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(string(body)))
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range headers {
+			request.Header.Set(key, value)
+		}
+		if session != "" {
+			request.Header.Set("mcp-session-id", session)
+		}
+		return s.client.Do(request)
+	}
+	fail := func(message string) map[string]any { return map[string]any{"error": message, "tools": []any{}} }
+	initResponse, err := call("initialize", 1, "")
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fail("timeout")
+		}
+		return fail(err.Error())
+	}
+	if initResponse.StatusCode == http.StatusUnauthorized || initResponse.StatusCode == http.StatusForbidden {
+		initResponse.Body.Close()
+		return map[string]any{"requiresAuth": true, "tools": []any{}}
+	}
+	if initResponse.StatusCode < 200 || initResponse.StatusCode >= 300 {
+		status := initResponse.StatusCode
+		initResponse.Body.Close()
+		return fail(fmt.Sprintf("init %d", status))
+	}
+	session := initResponse.Header.Get("mcp-session-id")
+	_, _ = io.Copy(io.Discard, initResponse.Body)
+	initResponse.Body.Close()
+	if response, err := call("notifications/initialized", nil, session); err == nil {
+		response.Body.Close()
+	}
+	listResponse, err := call("tools/list", 2, session)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fail("timeout")
+		}
+		return fail(err.Error())
+	}
+	defer listResponse.Body.Close()
+	if listResponse.StatusCode == http.StatusUnauthorized || listResponse.StatusCode == http.StatusForbidden {
+		return map[string]any{"requiresAuth": true, "tools": []any{}}
+	}
+	if listResponse.StatusCode < 200 || listResponse.StatusCode >= 300 {
+		return fail(fmt.Sprintf("tools/list %d", listResponse.StatusCode))
+	}
+	var response struct {
+		ID     int `json:"id"`
+		Result struct {
+			Tools []struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if strings.Contains(strings.ToLower(listResponse.Header.Get("Content-Type")), "text/event-stream") {
+		body, readErr := io.ReadAll(io.LimitReader(listResponse.Body, 4<<20))
+		if readErr != nil {
+			return fail(readErr.Error())
+		}
+		for _, line := range strings.Split(string(body), "\n") {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &response) == nil && response.ID == 2 {
+				break
+			}
+		}
+	} else if err := json.NewDecoder(listResponse.Body).Decode(&response); err != nil {
+		return fail(err.Error())
+	}
+	tools := make([]map[string]string, 0, len(response.Result.Tools))
+	for _, tool := range response.Result.Tools {
+		tools = append(tools, map[string]string{"name": tool.Name, "description": tool.Description})
+	}
+	return map[string]any{"tools": tools}
 }
 
 func (s *Server) headroomStatusAPI(w http.ResponseWriter, r *http.Request) {
