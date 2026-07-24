@@ -68,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/v1/models", s.models)
+	mux.HandleFunc("/v1beta/models", s.betaModels)
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/v1/responses", s.responses)
 	mux.HandleFunc("/v1/messages", s.messages)
@@ -76,6 +77,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/audio/transcriptions", s.transcriptions)
 	mux.HandleFunc("/v1/audio/speech", s.speech)
 	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
+	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
@@ -266,6 +269,14 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.proxy(w, r, s.options.Upstream, "/models", http.MethodGet, nil, "")
+}
+func (s *Server) betaModels(w http.ResponseWriter, r *http.Request) { s.models(w, r) }
+func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"providers": s.store.List(), "baseURL": "/v1"})
 }
 
 func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
