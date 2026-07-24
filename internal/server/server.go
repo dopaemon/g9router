@@ -3557,6 +3557,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
+			return
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
