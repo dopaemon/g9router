@@ -185,16 +185,34 @@ func (m *Manager) TrustCertificate(password string) error {
 		return fmt.Errorf("invalid sudo password")
 	}
 	if runtime.GOOS == "windows" {
-		return m.privileged(password, "certutil", "-addstore", "-f", "Root", certFile)
+		if err := m.privileged(password, "certutil", "-addstore", "-f", "Root", certFile); err != nil {
+			return err
+		}
+		m.mu.Lock()
+		m.status.CertTrusted = true
+		m.mu.Unlock()
+		return nil
 	}
 	if runtime.GOOS == "darwin" {
-		return m.privileged(password, "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", certFile)
+		if err := m.privileged(password, "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", certFile); err != nil {
+			return err
+		}
+		m.mu.Lock()
+		m.status.CertTrusted = true
+		m.mu.Unlock()
+		return nil
 	}
 	installed := "/usr/local/share/ca-certificates/g9router-mitm.crt"
 	if err := m.privileged(password, "cp", certFile, installed); err != nil {
 		return err
 	}
-	return m.privileged(password, "update-ca-certificates")
+	if err := m.privileged(password, "update-ca-certificates"); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.status.CertTrusted = true
+	m.mu.Unlock()
+	return nil
 }
 
 func (m *Manager) privileged(password string, name string, args ...string) error {
