@@ -19,6 +19,7 @@ type Credential struct {
 	ID, Provider, AccessToken, RefreshToken, TokenURL, ClientID string
 	ExpiresAt                                                   int64 `json:"expiresAt"`
 	Scope                                                       string
+	ProviderSpecificData                                        map[string]any `json:"providerSpecificData,omitempty"`
 }
 type Manager struct {
 	mu       sync.RWMutex
@@ -100,6 +101,9 @@ func (m *Manager) Refresh(ctx context.Context, id string) (Credential, error) {
 	if item.RefreshToken == "" || item.TokenURL == "" {
 		return item, fmt.Errorf("credential %q has no refresh configuration", id)
 	}
+	if item.Provider == "kiro" {
+		return m.refreshKiro(ctx, item)
+	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {item.RefreshToken}, "client_id": {item.ClientID}}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, item.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -148,6 +152,76 @@ func (m *Manager) Refresh(ctx context.Context, id string) (Credential, error) {
 		return item, err
 	}
 	return item, nil
+}
+
+func (m *Manager) refreshKiro(ctx context.Context, item Credential) (Credential, error) {
+	data := item.ProviderSpecificData
+	clientID, _ := data["clientId"].(string)
+	clientSecret, _ := data["clientSecret"].(string)
+	region, _ := data["region"].(string)
+	var endpoint, contentType string
+	var body []byte
+	if clientID != "" && clientSecret != "" {
+		endpoint = "https://oidc.us-east-1.amazonaws.com/token"
+		if region != "" {
+			endpoint = "https://oidc." + region + ".amazonaws.com/token"
+		}
+		payload := map[string]string{"clientId": clientID, "clientSecret": clientSecret, "refreshToken": item.RefreshToken, "grantType": "refresh_token"}
+		encoded, _ := json.Marshal(payload)
+		body, contentType = encoded, "application/json"
+	} else {
+		endpoint = item.TokenURL
+		encoded, _ := json.Marshal(map[string]string{"refreshToken": item.RefreshToken})
+		body, contentType = encoded, "application/json"
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return item, err
+	}
+	request.Header.Set("Content-Type", contentType)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "kiro-cli/1.0.0")
+	response, err := m.client.Do(request)
+	if err != nil {
+		return item, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 300 {
+		return item, fmt.Errorf("token refresh status %s", response.Status)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return item, err
+	}
+	accessToken := stringFrom(payload, "accessToken", "access_token")
+	if accessToken == "" {
+		return item, fmt.Errorf("token response missing access token")
+	}
+	item.AccessToken = accessToken
+	if refreshed := stringFrom(payload, "refreshToken", "refresh_token"); refreshed != "" {
+		item.RefreshToken = refreshed
+	}
+	if expires := numberFrom(payload, "expiresIn", "expires_in"); expires > 0 {
+		item.ExpiresAt = time.Now().Add(time.Duration(expires) * time.Second).UnixMilli()
+	}
+	return item, m.Upsert(item)
+}
+
+func stringFrom(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := payload[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
+}
+func numberFrom(payload map[string]any, keys ...string) int64 {
+	for _, key := range keys {
+		if value, ok := payload[key].(float64); ok {
+			return int64(value)
+		}
+	}
+	return 0
 }
 func (m *Manager) load() error {
 	data, err := os.ReadFile(m.path)
