@@ -214,6 +214,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/kiro/poll", s.kiroPollAPI)
 	mux.HandleFunc("/api/oauth/gitlab/authorize", s.gitlabAuthorizeAPI)
 	mux.HandleFunc("/api/oauth/gitlab/exchange", s.gitlabExchangeAPI)
+	mux.HandleFunc("/api/oauth/iflow/authorize", s.iflowAuthorizeAPI)
+	mux.HandleFunc("/api/oauth/iflow/exchange", s.iflowExchangeAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
