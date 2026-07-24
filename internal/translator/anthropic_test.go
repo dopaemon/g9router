@@ -22,3 +22,16 @@ func TestClaudeToOpenAIConvertsToolsAndImages(t *testing.T) {
 		t.Fatal(content)
 	}
 }
+
+func TestClaudeResponseToOpenAI(t *testing.T) {
+	out := ClaudeResponseToOpenAI(map[string]any{
+		"id": "msg-1", "model": "claude", "stop_reason": "tool_use",
+		"content": []any{map[string]any{"type": "text", "text": "ready"}, map[string]any{"type": "tool_use", "id": "call-1", "name": "Read", "input": map[string]any{"path": "/tmp/a"}}},
+		"usage":   map[string]any{"input_tokens": float64(4), "output_tokens": float64(2)},
+	})
+	choices := out["choices"].([]any)
+	choice := choices[0].(map[string]any)
+	if choice["finish_reason"] != "tool_calls" || choice["message"].(map[string]any)["tool_calls"] == nil {
+		t.Fatal(out)
+	}
+}

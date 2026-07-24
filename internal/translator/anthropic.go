@@ -176,3 +176,58 @@ func collapseText(parts []any) any {
 	return parts
 }
 func array(value any) []any { result, _ := value.([]any); return result }
+
+func ClaudeResponseToOpenAI(body map[string]any) map[string]any {
+	content := []any{}
+	toolCalls := []any{}
+	for _, raw := range array(body["content"]) {
+		block, _ := raw.(map[string]any)
+		kind, _ := block["type"].(string)
+		switch kind {
+		case "text":
+			if text, _ := block["text"].(string); text != "" {
+				content = append(content, map[string]any{"type": "text", "text": text})
+			}
+		case "tool_use":
+			encoded, _ := json.Marshal(block["input"])
+			toolCalls = append(toolCalls, map[string]any{
+				"id": block["id"], "type": "function",
+				"function": map[string]any{"name": block["name"], "arguments": string(encoded)},
+			})
+		}
+	}
+	message := map[string]any{"role": "assistant"}
+	if len(content) == 1 {
+		message["content"] = content[0].(map[string]any)["text"]
+	} else if len(content) > 0 {
+		message["content"] = content
+	}
+	if len(toolCalls) > 0 {
+		message["tool_calls"] = toolCalls
+	}
+	finishReason := "stop"
+	if reason, _ := body["stop_reason"].(string); reason == "tool_use" {
+		finishReason = "tool_calls"
+	} else if reason == "max_tokens" {
+		finishReason = "length"
+	}
+	choice := map[string]any{"index": 0, "message": message, "finish_reason": finishReason}
+	result := map[string]any{"id": body["id"], "object": "chat.completion", "model": body["model"], "choices": []any{choice}}
+	if usage, ok := body["usage"].(map[string]any); ok {
+		prompt := usageNumber(usage["input_tokens"])
+		completion := usageNumber(usage["output_tokens"])
+		result["usage"] = map[string]any{"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": prompt + completion}
+	}
+	return result
+}
+
+func usageNumber(value any) int {
+	switch number := value.(type) {
+	case int:
+		return number
+	case float64:
+		return int(number)
+	default:
+		return 0
+	}
+}
