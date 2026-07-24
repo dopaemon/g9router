@@ -53,6 +53,8 @@ func init() {
 		"cline":          {ID: "cline", Alias: "cline", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
 		"clinepass":      {ID: "clinepass", Alias: "clinepass", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
 		"codebuddy-cn":   {ID: "codebuddy-cn", Alias: "codebuddy-cn", BaseURL: "https://copilot.tencent.com/v2/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"azure":          {ID: "azure", Alias: "azure", BaseURL: "", Format: "openai", Services: []string{"llm", "embedding", "image", "tts", "stt"}},
+		"comfyui":        {ID: "comfyui", Alias: "comfyui", BaseURL: "http://localhost:8188", Format: "comfyui", Services: []string{"image"}, Models: []Model{{ID: "flux-dev", Name: "FLUX Dev", Kind: "image"}, {ID: "sdxl", Name: "SDXL", Kind: "image"}}},
 	} {
 		if _, exists := Registry[id]; !exists {
 			Registry[id] = descriptor
