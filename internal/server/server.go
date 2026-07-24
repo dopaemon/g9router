@@ -87,6 +87,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
+	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
+	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
+	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -307,6 +310,127 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "saved"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) modelAliasAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"aliases": s.settings.ModelAliases()})
+	case http.MethodPut:
+		var input struct {
+			Model string `json:"model"`
+			Alias string `json:"alias"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Model == "" || input.Alias == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Model and alias required"})
+			return
+		}
+		if err := s.settings.SetModelAlias(input.Alias, input.Model); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "model": input.Model, "alias": input.Alias})
+	case http.MethodDelete:
+		alias := r.URL.Query().Get("alias")
+		if alias == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Alias required"})
+			return
+		}
+		if err := s.settings.DeleteModelAlias(alias); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) customModelsAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"models": s.settings.CustomModels()})
+	case http.MethodPost:
+		var input map[string]any
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		provider, _ := input["providerAlias"].(string)
+		id, _ := input["id"].(string)
+		if provider == "" || id == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "providerAlias and id required"})
+			return
+		}
+		if input["type"] == nil {
+			input["type"] = "llm"
+		}
+		if _, err := s.settings.AddCustomModel(input); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "added": input})
+	case http.MethodDelete:
+		provider, id, kind := r.URL.Query().Get("providerAlias"), r.URL.Query().Get("id"), r.URL.Query().Get("type")
+		if kind == "" {
+			kind = "llm"
+		}
+		if provider == "" || id == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "providerAlias and id required"})
+			return
+		}
+		if err := s.settings.DeleteCustomModel(provider, id, kind); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) disabledModelsAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		all := s.settings.DisabledModels()
+		provider := r.URL.Query().Get("providerAlias")
+		if provider != "" {
+			writeJSON(w, http.StatusOK, map[string]any{"ids": all[provider]})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"disabled": all})
+	case http.MethodPost:
+		var input struct {
+			Provider string   `json:"providerAlias"`
+			IDs      []string `json:"ids"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || input.IDs == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "providerAlias and ids[] required"})
+			return
+		}
+		if err := s.settings.SetDisabledModels(input.Provider, input.IDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	case http.MethodDelete:
+		provider := r.URL.Query().Get("providerAlias")
+		if provider == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "providerAlias required"})
+			return
+		}
+		ids := []string{}
+		if id := r.URL.Query().Get("id"); id != "" {
+			ids = append(ids, id)
+		}
+		if err := s.settings.EnableModels(provider, ids); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
 }
 

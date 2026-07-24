@@ -57,3 +57,31 @@ func TestProviderResourceCRUD(t *testing.T) {
 		t.Fatal(response.StatusCode)
 	}
 }
+
+func TestModelSettingsAPI(t *testing.T) {
+	app := New(Options{ProviderPath: os.TempDir() + "/model-settings-test.json"})
+	server := httptest.NewServer(app.Handler())
+	defer server.Close()
+	request, _ := http.NewRequest(http.MethodPut, server.URL+"/api/models/alias", strings.NewReader(`{"model":"gpt-x","alias":"fast"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatal(err, response.StatusCode)
+	}
+	response.Body.Close()
+	response, err = http.Get(server.URL + "/api/models/alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatal(response.StatusCode)
+	}
+	request, _ = http.NewRequest(http.MethodPost, server.URL+"/api/models/disabled", strings.NewReader(`{"providerAlias":"openai","ids":["gpt-x"]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatal(err, response.StatusCode)
+	}
+	response.Body.Close()
+}
