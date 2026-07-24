@@ -90,7 +90,8 @@ func commandCodeChunks(state *commandCodeState, event map[string]any) []string {
 		return []string{commandCodeChunk(state, delta, nil)}
 	}
 	if eventType == "finish" || eventType == "finish-step" {
-		return []string{commandCodeChunk(state, map[string]any{}, "stop")}
+		finish := "stop"
+		return []string{commandCodeChunk(state, map[string]any{}, &finish)}
 	}
 	return nil
 }
