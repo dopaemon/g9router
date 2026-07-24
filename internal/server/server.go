@@ -1968,6 +1968,78 @@ func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) keysAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"keys": s.keys.List()})
+	case http.MethodPost:
+		var input struct {
+			Name string `json:"name"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || strings.TrimSpace(input.Name) == "" {
+			writeJSON(w, 400, map[string]string{"error": "Name is required"})
+			return
+		}
+		machineID, _ := os.Hostname()
+		item, err := s.keys.Create(strings.TrimSpace(input.Name), machineID)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 201, item)
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) keyResourceAPI(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/keys/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, 404, map[string]string{"error": "Key not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		item, ok := s.keys.Get(id)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Key not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"key": item})
+	case http.MethodPut:
+		var input struct {
+			IsActive *bool `json:"isActive"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.IsActive == nil {
+			writeJSON(w, 400, map[string]string{"error": "isActive is required"})
+			return
+		}
+		item, ok, err := s.keys.Update(id, *input.IsActive)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Key not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"key": item})
+	case http.MethodDelete:
+		ok, err := s.keys.Delete(id)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "Key not found"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"message": "Key deleted successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
