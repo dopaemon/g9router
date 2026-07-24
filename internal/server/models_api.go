@@ -9,6 +9,66 @@ import (
 	"g9router/internal/providers"
 )
 
+func (s *Server) modelCatalogAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/models/")
+	if path == r.URL.Path {
+		path = strings.TrimPrefix(r.URL.Path, "/v1/models/")
+	}
+	path = strings.Trim(path, "/")
+	if path == "info" {
+		s.modelInfoAPI(w, r)
+		return
+	}
+	kind := map[string]string{"image": "image", "tts": "tts", "stt": "stt", "embedding": "embedding", "image-to-text": "imageToText", "web": "webSearch"}[path]
+	if kind == "" {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]string{"message": "Unknown model kind: " + path, "type": "invalid_request_error"}})
+		return
+	}
+	data := []map[string]any{}
+	for provider, descriptor := range providers.Registry {
+		matchesService := containsString(descriptor.Services, kind)
+		for _, model := range descriptor.Models {
+			if model.Kind != "" {
+				matchesService = model.Kind == kind || (kind == "webSearch" && model.Kind == "webFetch")
+			}
+			if !matchesService {
+				continue
+			}
+			data = append(data, map[string]any{"id": descriptor.Alias + "/" + model.ID, "object": "model", "owned_by": provider, "name": model.Name, "type": model.Kind})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+}
+
+func (s *Server) modelInfoAPI(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": "Missing required query param: id", "type": "invalid_request_error"}})
+		return
+	}
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) != 2 {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]string{"message": "Model not found: " + id, "type": "not_found"}})
+		return
+	}
+	for provider, descriptor := range providers.Registry {
+		if descriptor.Alias != parts[0] && provider != parts[0] {
+			continue
+		}
+		for _, model := range descriptor.Models {
+			if model.ID == parts[1] {
+				writeJSON(w, http.StatusOK, map[string]any{"id": id, "object": "model", "owned_by": provider, "name": model.Name, "kind": model.Kind, "services": descriptor.Services})
+				return
+			}
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]string{"message": "Model not found: " + id, "type": "not_found"}})
+}
+
 func (s *Server) modelsAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
