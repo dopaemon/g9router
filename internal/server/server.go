@@ -3822,7 +3822,12 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 	if err != nil {
 		return false
 	}
-	endpoint := strings.TrimRight(baseURL, "/") + "/v1/publishers/google/models/" + model + ":generateContent"
+	stream, _ := request["stream"].(bool)
+	action := ":generateContent"
+	if stream {
+		action = ":streamGenerateContent?alt=sse"
+	}
+	endpoint := strings.TrimRight(baseURL, "/") + "/v1/publishers/google/models/" + model + action
 	if oauthToken {
 		project, _ := specific["projectId"].(string)
 		location, _ := specific["location"].(string)
@@ -3832,7 +3837,7 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 		if project == "" {
 			return false
 		}
-		endpoint = strings.TrimRight(baseURL, "/") + "/v1/projects/" + url.PathEscape(project) + "/locations/" + url.PathEscape(location) + "/publishers/google/models/" + url.PathEscape(model) + ":generateContent"
+		endpoint = strings.TrimRight(baseURL, "/") + "/v1/projects/" + url.PathEscape(project) + "/locations/" + url.PathEscape(location) + "/publishers/google/models/" + url.PathEscape(model) + action
 	} else if apiKey != "" {
 		endpoint += "?key=" + url.QueryEscape(apiKey)
 	}
@@ -3853,6 +3858,12 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 	defer response.Body.Close()
 	if response.StatusCode >= 500 {
 		return false
+	}
+	if stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(response.StatusCode)
+		_, _ = io.WriteString(w, antigravitySSE(response.Body, model))
+		return true
 	}
 	var payload map[string]any
 	if json.NewDecoder(response.Body).Decode(&payload) != nil {
