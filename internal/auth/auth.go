@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,6 +41,9 @@ func MiddlewareWithValidator(next http.Handler, key string, validator func(strin
 			return
 		}
 		provided := r.Header.Get("X-G9Router-Key")
+		if provided == "" {
+			provided = strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		}
 		valid := key != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(key)) == 1
 		if !valid && validator != nil {
 			valid = validator(provided)
