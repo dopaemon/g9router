@@ -92,6 +92,17 @@ func (s *Store) List() []Provider {
 	return result
 }
 
+func (s *Store) Find(id string) (Provider, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, provider := range s.items {
+		if provider.ID == id {
+			return provider, true
+		}
+	}
+	return Provider{}, false
+}
+
 func (s *Store) accountKeyLocked(providerIndex int) string {
 	provider := &s.items[providerIndex]
 	accounts := provider.Accounts
