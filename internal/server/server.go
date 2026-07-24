@@ -24,6 +24,7 @@ import (
 	"g9router/internal/db"
 	"g9router/internal/executor"
 	"g9router/internal/format"
+	"g9router/internal/headroom"
 	"g9router/internal/mcp"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
@@ -41,15 +42,16 @@ type Options struct {
 }
 
 type Server struct {
-	options    Options
-	client     *http.Client
-	store      *providers.Store
-	usage      *usage.Store
-	oauth      *oauth.Manager
-	settings   *settings.Store
-	sessions   *auth.Sessions
-	oidcConfig oidc.Config
-	mcpBridge  *mcp.Bridge
+	options         Options
+	client          *http.Client
+	store           *providers.Store
+	usage           *usage.Store
+	oauth           *oauth.Manager
+	settings        *settings.Store
+	sessions        *auth.Sessions
+	oidcConfig      oidc.Config
+	mcpBridge       *mcp.Bridge
+	headroomManager *headroom.Manager
 }
 
 func New(options Options) *Server {
@@ -66,7 +68,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New()}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND"))}
 }
 
 func (s *Server) Run() error {
@@ -102,6 +104,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
+	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
+	mux.HandleFunc("/api/headroom/stop", s.headroomStopAPI)
+	mux.HandleFunc("/api/headroom/restart", s.headroomRestartAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -955,6 +960,49 @@ func (s *Server) headroomStatusAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	defer response.Body.Close()
 	writeJSON(w, 200, map[string]any{"running": response.StatusCode < 400, "url": urlValue, "status": response.StatusCode})
+}
+
+func (s *Server) headroomStartAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	port := 8787
+	if value, ok := s.settings.Get()["headroomPort"].(float64); ok && value > 0 && value < 65536 {
+		port = int(value)
+	}
+	pid, err := s.headroomManager.Start(r.Context(), port)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error(), "code": "START_FAILED"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"success": true, "pid": pid, "port": port})
+}
+func (s *Server) headroomStopAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	stopped := s.headroomManager.Stop()
+	if !stopped {
+		writeJSON(w, 409, map[string]any{"stopped": false, "code": "NOT_RUNNING"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"stopped": true})
+}
+func (s *Server) headroomRestartAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	_ = s.headroomManager.Stop()
+	port := 8787
+	pid, err := s.headroomManager.Start(r.Context(), port)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"success": true, "pid": pid, "port": port})
 }
 
 func replaceTOMLLine(content, prefix, replacement string) string {
