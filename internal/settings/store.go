@@ -29,6 +29,13 @@ func (s *Store) Get() map[string]any {
 	return result
 }
 
+func (s *Store) Secret(key string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.values[key].(string)
+	return value, ok && value != ""
+}
+
 func (s *Store) Reload() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
