@@ -66,6 +66,20 @@ func (m *Manager) Get(id string) (Credential, bool) {
 	item, ok := m.items[id]
 	return item, ok
 }
+
+func (m *Manager) Delete(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.items[id]; !ok {
+		return nil
+	}
+	delete(m.items, id)
+	if m.database != nil {
+		_, err := m.database.Exec(`DELETE FROM oauth_credentials WHERE id = ?`, id)
+		return err
+	}
+	return m.save()
+}
 func (m *Manager) Refresh(ctx context.Context, id string) (Credential, error) {
 	m.mu.RLock()
 	item, ok := m.items[id]

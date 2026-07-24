@@ -100,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
+	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
@@ -1923,6 +1924,32 @@ func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, credential)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) oauthResourceAPI(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/oauth/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, 404, map[string]string{"error": "credential not found"})
+		return
+	}
+	credential, ok := s.oauth.Get(id)
+	if !ok {
+		writeJSON(w, 404, map[string]string{"error": "credential not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		credential.AccessToken, credential.RefreshToken = "", ""
+		writeJSON(w, 200, credential)
+	case http.MethodDelete:
+		if err := s.oauth.Delete(id); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
 }
 
