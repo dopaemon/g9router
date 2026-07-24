@@ -12,7 +12,7 @@ func TestV1AliasReturnsModels(t *testing.T) {
 	for _, path := range []string{"/v1", "/api/v1"} {
 		response := httptest.NewRecorder()
 		app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"models"`) {
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"data"`) {
 			t.Fatalf("path=%s status=%d body=%s", path, response.Code, response.Body.String())
 		}
 	}
