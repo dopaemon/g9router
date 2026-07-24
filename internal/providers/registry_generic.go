@@ -23,6 +23,19 @@ func init() {
 		"jina-ai":        {ID: "jina-ai", Alias: "jina", BaseURL: "https://api.jina.ai/v1/chat/completions", Format: "openai", Services: []string{"llm", "embedding"}},
 		"opencode":       {ID: "opencode", Alias: "oc", BaseURL: "https://api.opencode.ai/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
 		"opencode-go":    {ID: "opencode-go", Alias: "opencode-go", BaseURL: "https://opencode.ai/zen/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"kimchi":         {ID: "kimchi", Alias: "kimchi", BaseURL: "https://llm.kimchi.dev/openai/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"mimo-free":      {ID: "mimo-free", Alias: "mmf", BaseURL: "https://api.xiaomimimo.com/api/free-ai/openai/chat", Format: "openai", Services: []string{"llm"}},
+		"minimax-cn":     {ID: "minimax-cn", Alias: "minimax-cn", BaseURL: "https://api.minimaxi.com/v1/text/chatcompletion_v2", Format: "openai", Services: []string{"llm", "tts", "image"}},
+		"firecrawl":      {ID: "firecrawl", Alias: "firecrawl", BaseURL: "https://api.firecrawl.dev/v1/scrape", Format: "firecrawl", Services: []string{"webFetch"}},
+		"jina-reader":    {ID: "jina-reader", Alias: "jina-reader", BaseURL: "https://r.jina.ai", Format: "jina-reader", Services: []string{"webFetch"}},
+		"playht":         {ID: "playht", Alias: "playht", BaseURL: "https://api.play.ht/api/v2/tts/stream", Format: "playht", Services: []string{"tts"}},
+		"cartesia":       {ID: "cartesia", Alias: "cartesia", BaseURL: "https://api.cartesia.ai/tts/bytes", Format: "cartesia", Services: []string{"tts"}},
+		"coqui":          {ID: "coqui", Alias: "coqui", BaseURL: "http://localhost:5002/api/tts", Format: "coqui", Services: []string{"tts"}},
+		"inworld":        {ID: "inworld", Alias: "inworld", BaseURL: "https://api.inworld.ai/tts/v1/voice", Format: "inworld", Services: []string{"tts"}},
+		"tortoise":       {ID: "tortoise", Alias: "tortoise", BaseURL: "http://localhost:5000/api/tts", Format: "tortoise", Services: []string{"tts"}},
+		"aws-polly":      {ID: "aws-polly", Alias: "aws-polly", BaseURL: "https://polly.{region}.amazonaws.com/v1/speech", Format: "aws-polly", Services: []string{"tts"}},
+		"google-tts":     {ID: "google-tts", Alias: "google-tts", BaseURL: "google-tts", Format: "google-tts", Services: []string{"tts"}},
+		"local-device":   {ID: "local-device", Alias: "local-device", BaseURL: "local-device", Format: "local-device", Services: []string{"tts"}},
 	} {
 		if _, exists := Registry[id]; !exists {
 			Registry[id] = descriptor
