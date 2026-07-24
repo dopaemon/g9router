@@ -43,3 +43,16 @@ func TestMiddlewareAcceptsBearerValidatorKey(t *testing.T) {
 		t.Fatal(response.Code)
 	}
 }
+
+func TestMiddlewareAcceptsSessionCookie(t *testing.T) {
+	sessions := NewSessions()
+	sessions.Create("session-token")
+	handler := MiddlewareWithSession(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }), "", nil, true, sessions)
+	request := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	request.AddCookie(&http.Cookie{Name: "g9router_session", Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 204 {
+		t.Fatal(response.Code)
+	}
+}
