@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
+	"time"
 
 	"g9router/internal/auth"
 	"g9router/internal/cli/xai"
@@ -50,10 +52,25 @@ func main() {
 	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY")})
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	log.Printf("g9router listening on %s", addr)
-	if !*noBrowser {
+	errors := make(chan error, 1)
+	go func() { errors <- http.ListenAndServe(addr, appHandler) }()
+	if !*noBrowser && waitReady(addr, 15*time.Second) {
 		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
-	log.Fatal(http.ListenAndServe(addr, appHandler))
+	log.Fatal(<-errors)
+}
+
+func waitReady(addr string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		connection, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err == nil {
+			_ = connection.Close()
+			return true
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return false
 }
 
 func openBrowser(target string) {
