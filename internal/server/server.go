@@ -107,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
 	mux.HandleFunc("/api/provider-nodes/", s.providerNodeResourceAPI)
+	mux.HandleFunc("/api/media-providers/tts/voices", s.ttsVoicesAPI)
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
@@ -2293,6 +2294,68 @@ func (s *Server) validateProviderNodeAPI(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"valid": status >= 200 && status < 300, "method": "chat", "status": status})
+}
+
+func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if provider := r.URL.Query().Get("provider"); provider != "" && provider != "edge-tts" {
+		writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Provider %q voice listing is not implemented", provider)})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4", nil)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	request.Header.Set("User-Agent", "g9router/1.0")
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 300 {
+		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("Edge TTS voices fetch failed: %s", response.Status)})
+		return
+	}
+	var raw []struct {
+		ShortName    string `json:"ShortName"`
+		Locale       string `json:"Locale"`
+		FriendlyName string `json:"FriendlyName"`
+		Gender       string `json:"Gender"`
+	}
+	if json.NewDecoder(response.Body).Decode(&raw) != nil {
+		writeJSON(w, 502, map[string]string{"error": "invalid voice catalog"})
+		return
+	}
+	filter := r.URL.Query().Get("lang")
+	voices := make([]map[string]any, 0, len(raw))
+	groups := map[string]map[string]any{}
+	for _, voice := range raw {
+		parts := strings.SplitN(voice.Locale, "-", 2)
+		lang, country := parts[0], ""
+		if len(parts) == 2 {
+			country = parts[1]
+		}
+		if filter != "" && filter != lang {
+			continue
+		}
+		name := strings.Replace(strings.Replace(voice.FriendlyName, "Microsoft ", "", 1), " Online (Natural) - ", " (", 1)
+		item := map[string]any{"id": voice.ShortName, "name": name, "locale": voice.Locale, "lang": lang, "country": country, "countryName": country, "langName": lang, "gender": voice.Gender}
+		voices = append(voices, item)
+		if groups[lang] == nil {
+			groups[lang] = map[string]any{"code": lang, "name": lang, "voices": []any{}}
+		}
+		groups[lang]["voices"] = append(groups[lang]["voices"].([]any), item)
+	}
+	languages := make([]any, 0, len(groups))
+	for _, group := range groups {
+		languages = append(languages, group)
+	}
+	writeJSON(w, 200, map[string]any{"voices": voices, "languages": languages, "byLang": groups})
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
