@@ -3608,7 +3608,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			continue
 		}
 		if provider.APIType == "kiro" {
-			if s.proxyKiro(w, r, provider.BaseURL, model, request, provider.APIKey) {
+			if s.proxyKiro(w, r, provider.BaseURL, model, request, provider.APIKey, provider.ProviderSpecificData) {
 				return
 			}
 			continue
@@ -3874,7 +3874,7 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 	return true
 }
 
-func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
+func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, specific map[string]any) bool {
 	body, err := json.Marshal(translator.OpenAIToKiro(model, request, true))
 	if err != nil {
 		return false
@@ -3882,14 +3882,30 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	endpoint := strings.TrimRight(baseURL, "/") + "/generateAssistantResponse"
+	authMethod, _ := specific["authMethod"].(string)
+	if authMethod == "api_key" || authMethod == "external_idp" || authMethod == "idc" {
+		region, _ := specific["region"].(string)
+		if region == "" {
+			region = "us-east-1"
+		}
+		endpoint = "https://codewhisperer." + region + ".amazonaws.com/generateAssistantResponse"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
 	if err != nil {
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Accept", "application/vnd.amazon.eventstream")
+	req.Header.Set("X-Amz-Target", "AmazonCodeWhispererStreamingService.GenerateAssistantResponse")
+	req.Header.Set("User-Agent", "AWS-SDK-JS/3.0.0 kiro-ide/1.0.0")
+	req.Header.Set("X-Amz-User-Agent", "aws-sdk-js/3.0.0 kiro-ide/1.0.0")
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
+		if authMethod == "api_key" {
+			req.Header.Set("tokentype", "API_KEY")
+		} else if authMethod == "external_idp" {
+			req.Header.Set("TokenType", "EXTERNAL_IDP")
+		}
 	}
 	response, err := s.client.Do(req)
 	if err != nil {
