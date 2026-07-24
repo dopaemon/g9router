@@ -48,7 +48,7 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		s.minimaxVoicesAPI(w, r, alias)
 		return
 	}
-	if provider != "edge-tts" && provider != "elevenlabs" {
+	if provider != "edge-tts" && provider != "elevenlabs" && provider != "local-device" {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"message": "voice provider is not implemented", "type": "server_error"}})
 		return
 	}
