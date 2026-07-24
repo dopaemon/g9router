@@ -399,6 +399,15 @@ func (s *Server) databaseSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": err.Error()})
 			return
 		}
+		if err := s.store.Reload(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.oauth.Reload(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		s.settings.Reload()
 		writeJSON(w, 200, map[string]bool{"success": true})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
