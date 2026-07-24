@@ -450,6 +450,20 @@ func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
 	for _, tool := range tools {
 		result[tool] = map[string]any{"installed": false, "configured": false, "available": false}
 	}
+	if home, err := os.UserHomeDir(); err == nil {
+		path := filepath.Join(home, ".claude", "settings.json")
+		_, cliErr := exec.LookPath("claude")
+		raw, readErr := os.ReadFile(path)
+		configured := false
+		if readErr == nil {
+			var settings map[string]any
+			_ = json.Unmarshal(raw, &settings)
+			if env, ok := settings["env"].(map[string]any); ok {
+				_, configured = env["ANTHROPIC_BASE_URL"]
+			}
+		}
+		result["claude"] = map[string]any{"installed": cliErr == nil || readErr == nil, "configured": configured, "available": cliErr == nil || readErr == nil}
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
