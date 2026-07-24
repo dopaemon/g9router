@@ -3263,7 +3263,7 @@ func (s *Server) speech(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20))
 		if err == nil {
 			var input map[string]any
-			if json.Unmarshal(body, &input) == nil && s.edgeTTSAPI(w, r, input) {
+			if json.Unmarshal(body, &input) == nil && (localDeviceTTSAPI(w, r, input) || s.edgeTTSAPI(w, r, input)) {
 				return
 			}
 			r.Body = io.NopCloser(strings.NewReader(string(body)))
