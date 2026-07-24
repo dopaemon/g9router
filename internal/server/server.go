@@ -3932,6 +3932,11 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 }
 
 func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, specific map[string]any) bool {
+	if cursorAgentEligible(request) {
+		if s.proxyCursorAgent(w, incoming, model, request, apiKey, specific) {
+			return true
+		}
+	}
 	messages := make([]map[string]string, 0)
 	for _, raw := range arrayValue(request["messages"]) {
 		message, _ := raw.(map[string]any)
@@ -4040,6 +4045,137 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	_, _ = io.WriteString(w, fmt.Sprintf("data: %s\n\ndata: [DONE]\n\n", fmt.Sprintf(`{"id":%q,"object":"chat.completion.chunk","created":%d,"model":%q,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, state, created, model)))
 	flusher.Flush()
 	return response.StatusCode < 400
+}
+
+func cursorAgentEligible(request map[string]any) bool {
+	for _, raw := range arrayValue(request["messages"]) {
+		message, _ := raw.(map[string]any)
+		if len(arrayValue(message["tool_calls"])) > 0 || message["role"] == "tool" {
+			return false
+		}
+		content := message["content"]
+		if _, ok := content.(string); ok {
+			continue
+		}
+		parts, ok := content.([]any)
+		if !ok {
+			return false
+		}
+		for _, part := range parts {
+			item, _ := part.(map[string]any)
+			if item["type"] != "text" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *Server) proxyCursorAgent(w http.ResponseWriter, incoming *http.Request, model string, request map[string]any, apiKey string, specific map[string]any) bool {
+	messages := make([]map[string]string, 0)
+	for _, raw := range arrayValue(request["messages"]) {
+		message, _ := raw.(map[string]any)
+		messages = append(messages, map[string]string{"role": stringValue(message["role"]), "content": cursorText(message["content"])})
+	}
+	model = strings.TrimPrefix(model, "cursor/")
+	if model == "" {
+		model = "default"
+	}
+	machineID, _ := specific["machineId"].(string)
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	reader, writer := io.Pipe()
+	go func() {
+		_, err := writer.Write(cursor.AgentBody(messages, model))
+		if err != nil {
+			_ = writer.CloseWithError(err)
+			return
+		}
+	}()
+	requestURL := "https://agent.api5.cursor.sh/agent.v1.AgentService/Run"
+	upstream, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, reader)
+	if err != nil {
+		_ = reader.Close()
+		return false
+	}
+	for key, value := range cursor.Headers(apiKey, machineID, true) {
+		upstream.Header.Set(key, value)
+	}
+	response, err := s.client.Do(upstream)
+	if err != nil {
+		_ = writer.CloseWithError(err)
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_ = writer.Close()
+		return false
+	}
+	stream, _ := request["stream"].(bool)
+	state := "chatcmpl-msg_" + hex.EncodeToString(randomBytes(8))
+	created := time.Now().Unix()
+	all := make([]byte, 0, 32*1024)
+	content := strings.Builder{}
+	if stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+	}
+	flusher, _ := w.(http.Flusher)
+	buffer := make([]byte, 32*1024)
+	for {
+		count, readErr := response.Body.Read(buffer)
+		if count > 0 {
+			all = append(all, buffer[:count]...)
+			remaining, events, parseErr := cursor.ParseAgentFrames(all)
+			if parseErr != nil {
+				_ = writer.Close()
+				return false
+			}
+			all = remaining
+			for _, event := range events {
+				if event.ContextRequest {
+					_, _ = writer.Write(cursor.AgentContextResponse())
+					continue
+				}
+				if event.Text != "" {
+					content.WriteString(event.Text)
+					if stream && flusher != nil {
+						_, _ = io.WriteString(w, chatChunk(state, created, model, event.Text))
+						flusher.Flush()
+					}
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			_ = writer.Close()
+			return false
+		}
+	}
+	_ = writer.Close()
+	if stream {
+		if flusher != nil {
+			_, _ = io.WriteString(w, chatChunkDone(state, created, model))
+			flusher.Flush()
+		}
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		return true
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": state, "object": "chat.completion", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": content.String()}, "finish_reason": "stop"}}})
+	return true
+}
+
+func chatChunk(id string, created int64, model, text string) string {
+	payload, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": text}, "finish_reason": nil}}})
+	return "data: " + string(payload) + "\n\n"
+}
+
+func chatChunkDone(id string, created int64, model string) string {
+	payload, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
+	return "data: " + string(payload) + "\n\n"
 }
 
 func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
