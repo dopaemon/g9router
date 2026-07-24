@@ -113,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
 	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
+	mux.HandleFunc("/api/providers/kilo/free-models", s.kiloFreeModelsAPI)
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/init", s.initAPI)
 	mux.HandleFunc("/api/version", s.versionAPI)
