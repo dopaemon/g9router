@@ -92,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
+	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -434,6 +435,19 @@ func (s *Server) disabledModelsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	tools := []string{"claude", "codex", "opencode", "droid", "openclaw", "hermes", "cowork", "copilot", "cline", "kilo", "deepseek-tui", "jcode", "grok-build"}
+	result := map[string]any{}
+	for _, tool := range tools {
+		result[tool] = map[string]any{"installed": false, "configured": false, "available": false}
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
