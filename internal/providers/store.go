@@ -49,6 +49,19 @@ func (s *Store) Resolve(model string) []Provider {
 	return append(matched, fallback...)
 }
 
+func (s *Store) Enabled() []Provider {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := []Provider{}
+	for _, item := range s.items {
+		if item.Enabled {
+			item.APIKey = ""
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 func New(path string) *Store {
 	store := &Store{path: path, next: map[string]int{}}
 	_ = store.load()

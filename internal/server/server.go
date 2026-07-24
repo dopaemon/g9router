@@ -139,7 +139,50 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		if s.aggregateModels(w, r) {
+			return
+		}
+	}
 	s.proxy(w, r, s.options.Upstream, "/models", http.MethodGet, nil, "")
+}
+
+func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
+	type modelList struct {
+		Data []map[string]any `json:"data"`
+	}
+	merged := map[string]map[string]any{}
+	sources := append([]providers.Provider{{BaseURL: s.options.Upstream, APIKey: s.options.APIKey, Enabled: true}}, s.store.Enabled()...)
+	for _, provider := range sources {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+		if err == nil {
+			if provider.APIKey != "" {
+				req.Header.Set("Authorization", "Bearer "+provider.APIKey)
+			}
+			resp, doErr := s.client.Do(req)
+			if doErr == nil && resp.StatusCode < 400 {
+				var payload modelList
+				if json.NewDecoder(resp.Body).Decode(&payload) == nil {
+					for _, model := range payload.Data {
+						if id, ok := model["id"].(string); ok && id != "" {
+							if _, exists := merged[id]; !exists {
+								merged[id] = model
+							}
+						}
+					}
+				}
+				resp.Body.Close()
+			}
+		}
+		cancel()
+	}
+	data := make([]map[string]any, 0, len(merged))
+	for _, model := range merged {
+		data = append(data, model)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+	return true
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
