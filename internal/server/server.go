@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
+	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -931,6 +932,29 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		streamCopy(w, response.Body, flusher)
 	}
+}
+
+func (s *Server) headroomStatusAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	urlValue := "http://127.0.0.1:8787"
+	if configured, ok := s.settings.Get()["headroomUrl"].(string); ok && configured != "" {
+		urlValue = configured
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(urlValue, "/")+"/health", nil)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"running": false, "url": urlValue, "error": err.Error()})
+		return
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"running": false, "url": urlValue, "error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	writeJSON(w, 200, map[string]any{"running": response.StatusCode < 400, "url": urlValue, "status": response.StatusCode})
 }
 
 func replaceTOMLLine(content, prefix, replacement string) string {
