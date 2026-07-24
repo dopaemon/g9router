@@ -96,6 +96,16 @@ func (s *Store) List() []Provider {
 	return result
 }
 
+func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.items = nil
+	if s.database != nil {
+		return s.loadDB()
+	}
+	return s.load()
+}
+
 func (s *Store) Find(id string) (Provider, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -51,6 +51,16 @@ func (m *Manager) List() []Credential {
 	}
 	return result
 }
+
+func (m *Manager) Reload() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.items = map[string]Credential{}
+	if m.database != nil {
+		return m.loadDB()
+	}
+	return m.load()
+}
 func (m *Manager) Upsert(item Credential) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

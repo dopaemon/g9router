@@ -28,6 +28,13 @@ func (s *Store) Get() map[string]any {
 	}
 	return result
 }
+
+func (s *Store) Reload() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values = map[string]any{}
+	s.load()
+}
 func (s *Store) Update(values map[string]any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
