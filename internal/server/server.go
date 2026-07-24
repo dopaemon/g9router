@@ -48,6 +48,7 @@ import (
 	"g9router/internal/usage"
 	"g9router/internal/vertex"
 	"g9router/internal/web"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Options struct {
@@ -603,7 +604,8 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	token, _ := r.Cookie("g9router_session")
-	writeJSON(w, 200, map[string]any{"authenticated": token != nil && s.sessions.Valid(token.Value), "passwordConfigured": os.Getenv("G9ROUTER_PASSWORD") != ""})
+	_, stored := s.settings.Secret("password")
+	writeJSON(w, 200, map[string]any{"authenticated": token != nil && s.sessions.Valid(token.Value), "passwordConfigured": os.Getenv("G9ROUTER_PASSWORD") != "" || stored})
 }
 func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -618,7 +620,13 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expected := os.Getenv("G9ROUTER_PASSWORD")
-	if expected == "" || input.Password != expected {
+	valid := expected != "" && input.Password == expected
+	if !valid {
+		if hash, ok := s.settings.Secret("password"); ok {
+			valid = bcrypt.CompareHashAndPassword([]byte(hash), []byte(input.Password)) == nil
+		}
+	}
+	if !valid {
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
 	}
@@ -692,6 +700,37 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, 200, s.settings.Get())
+	case http.MethodPatch:
+		var input map[string]any
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		if raw, ok := input["newPassword"].(string); ok && raw != "" {
+			current, _ := input["currentPassword"].(string)
+			if hash, exists := s.settings.Secret("password"); exists {
+				if bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
+					writeJSON(w, 401, map[string]string{"error": "Invalid current password"})
+					return
+				}
+			} else if current != "" && current != "123456" {
+				writeJSON(w, 401, map[string]string{"error": "Invalid current password"})
+				return
+			}
+			hash, err := bcrypt.GenerateFromPassword([]byte(raw), bcrypt.DefaultCost)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": err.Error()})
+				return
+			}
+			input["password"] = string(hash)
+			delete(input, "newPassword")
+			delete(input, "currentPassword")
+		}
+		if err := s.settings.Update(input); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true})
 	case http.MethodPut, http.MethodPost:
 		var values map[string]any
 		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&values) != nil {
