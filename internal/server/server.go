@@ -3548,6 +3548,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 		}
 		if path == "/responses" && (provider.APIType == "codex" || provider.APIType == "openai-responses") {
+			if provider.ID == "grok-cli" && s.grokCLIResponses(w, r, body, provider.APIKey, provider.ProviderSpecificData) {
+				return
+			}
 			var responsesBody map[string]any
 			if json.Unmarshal(body, &responsesBody) == nil {
 				providerBody, _ = json.Marshal(translator.NormalizeCodexRequest(responsesBody))
