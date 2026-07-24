@@ -3247,6 +3247,9 @@ func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
 	if s.geminiEmbedding(w, r) {
 		return
 	}
+	if s.compatibleEmbedding(w, r) {
+		return
+	}
 	s.forwardRaw(w, r, "/embeddings")
 }
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {

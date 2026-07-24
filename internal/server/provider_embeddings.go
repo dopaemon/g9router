@@ -95,3 +95,52 @@ func (s *Server) geminiEmbedding(w http.ResponseWriter, r *http.Request) bool {
 	}
 	return false
 }
+
+func (s *Server) compatibleEmbedding(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+	if err != nil {
+		return false
+	}
+	var input struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(data, &input) != nil || input.Model == "" {
+		return false
+	}
+	for _, provider := range s.store.Resolve(input.Model) {
+		if provider.ID != "voyage-ai" {
+			continue
+		}
+		if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+			provider.APIKey = credential.AccessToken
+		}
+		if provider.APIKey == "" {
+			return false
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.voyageai.com/v1/embeddings", strings.NewReader(string(data)))
+		if err != nil {
+			return false
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+provider.APIKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		responseData, _ := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return false
+		}
+		var payload map[string]any
+		if json.Unmarshal(responseData, &payload) != nil {
+			return false
+		}
+		writeJSON(w, response.StatusCode, payload)
+		return true
+	}
+	return false
+}
