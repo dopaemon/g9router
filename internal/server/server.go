@@ -102,6 +102,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/v1/models", s.models)
 	mux.HandleFunc("/api/v1/models", s.models)
+	mux.HandleFunc("/v1", s.models)
+	mux.HandleFunc("/api/v1", s.models)
 	mux.HandleFunc("/v1/models/", s.modelCatalogAPI)
 	mux.HandleFunc("/api/v1/models/", s.modelCatalogAPI)
 	mux.HandleFunc("/v1beta/models", s.betaModels)
