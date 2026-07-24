@@ -16,6 +16,7 @@ import (
 )
 
 const qoderChatURL = "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
+const qoderModelListURL = "https://api3.qoder.sh/algo/api/v2/model/list"
 
 func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, accessToken string, providerData map[string]any) bool {
 	var input map[string]any
@@ -45,6 +46,11 @@ func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, 
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]string{"message": "qoder credential is missing userId or accessToken; reconnect the account"}})
 		return true
 	}
+	modelConfig, err := s.qoderModelConfig(r, accessToken, providerData, model)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"message": err.Error()}})
+		return true
+	}
 	recordID := qoderRecordID(model, messages, input["tools"], maxTokens)
 	sessionID := qoderHash("qoder-session", userID, model)
 	payload := map[string]any{
@@ -54,8 +60,8 @@ func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, 
 		"agent_id": "agent_common", "task_id": "common", "code_language": "", "chat_prompt": "",
 		"image_urls": nil, "aliyun_user_type": "", "system": system, "messages": messages,
 		"tools": qoderTools(input["tools"]), "parameters": map[string]int{"max_tokens": maxTokens},
-		"chat_context": map[string]any{"chatPrompt": "", "imageUrls": nil, "extra": map[string]any{"context": []any{}, "modelConfig": map[string]any{"key": model, "is_reasoning": false}, "originalContent": lastUser}, "features": []any{}, "text": lastUser},
-		"model_config": map[string]any{"key": model},
+		"chat_context": map[string]any{"chatPrompt": "", "imageUrls": nil, "extra": map[string]any{"context": []any{}, "modelConfig": map[string]any{"key": model, "is_reasoning": modelConfig["is_reasoning"]}, "originalContent": lastUser}, "features": []any{}, "text": lastUser},
+		"model_config": modelConfig,
 		"business":     map[string]any{"product": "cli", "version": "1.0.0", "type": "agent", "stage": "start", "id": uuid.NewString(), "name": truncateQoder(lastUser, 30), "begin_at": time.Now().UnixMilli()},
 	}
 	plain, err := json.Marshal(payload)
@@ -101,6 +107,43 @@ func (s *Server) qoderChat(w http.ResponseWriter, r *http.Request, body []byte, 
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(wrapped)
 	return true
+}
+
+func (s *Server) qoderModelConfig(r *http.Request, token string, providerData map[string]any, model string) (map[string]any, error) {
+	credentials := qoderCOSYCredentials{UserID: stringValue(providerData["userId"]), AuthToken: token, Name: stringValue(providerData["name"]), Email: stringValue(providerData["email"]), MachineID: stringValue(providerData["machineId"])}
+	headers, err := qoderCOSYHeaders(nil, qoderModelListURL, credentials)
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, qoderModelListURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Accept-Encoding", "identity")
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 400 {
+		return nil, fmt.Errorf("qoder model list failed: %s", response.Status)
+	}
+	var payload struct {
+		Chat []map[string]any `json:"chat"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	for _, config := range payload.Chat {
+		if stringValue(config["key"]) == model {
+			return config, nil
+		}
+	}
+	return nil, fmt.Errorf("qoder model_config for %q not found", model)
 }
 
 func qoderMessages(raw any) ([]map[string]any, string) {
