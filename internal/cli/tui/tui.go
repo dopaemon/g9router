@@ -38,7 +38,7 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 		case "0", "q", "Q":
 			return nil
 		case "1":
-			err = ui.showJSON(reader, "/api/providers")
+			err = ui.providers(reader)
 		case "2":
 			err = ui.apiKeys(reader)
 		case "3":
@@ -90,6 +90,83 @@ type apiKey struct {
 	Name     string `json:"name"`
 	Key      string `json:"key"`
 	IsActive bool   `json:"isActive"`
+}
+
+type provider struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	BaseURL string `json:"baseURL"`
+	APIKey  string `json:"apiKey"`
+	APIType string `json:"apiType"`
+	Enabled bool   `json:"enabled"`
+}
+
+func (ui *UI) providers(reader *bufio.Reader) error {
+	for {
+		var items []provider
+		if err := ui.request(http.MethodGet, "/api/providers", nil, &items); err != nil {
+			return err
+		}
+		fmt.Fprintln(ui.Out, "\nProviders")
+		for i, item := range items {
+			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])
+		}
+		fmt.Fprintln(ui.Out, "a. Add API provider  d. Delete  t. Test  b. Back")
+		fmt.Fprint(ui.Out, "Select action: ")
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "b", "0":
+			return nil
+		case "a":
+			item := provider{Enabled: true, APIType: "openai"}
+			for _, field := range []struct {
+				name   string
+				target *string
+			}{{"Provider ID", &item.ID}, {"Name", &item.Name}, {"Base URL", &item.BaseURL}, {"API key", &item.APIKey}} {
+				fmt.Fprintf(ui.Out, "%s: ", field.name)
+				value, err := reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				*field.target = strings.TrimSpace(value)
+			}
+			if err := ui.request(http.MethodPost, "/api/providers", item, nil); err != nil {
+				return err
+			}
+		case "d", "t":
+			if len(items) == 0 {
+				fmt.Fprintln(ui.Out, "No providers found.")
+				continue
+			}
+			fmt.Fprint(ui.Out, "Provider number: ")
+			number, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			index, err := strconv.Atoi(strings.TrimSpace(number))
+			if err != nil || index < 1 || index > len(items) {
+				fmt.Fprintln(ui.Out, "Invalid provider number")
+				continue
+			}
+			item := items[index-1]
+			if strings.ToLower(strings.TrimSpace(line)) == "d" {
+				if err := ui.request(http.MethodDelete, "/api/providers?id="+item.ID, nil, nil); err != nil {
+					return err
+				}
+				continue
+			}
+			var result any
+			if err := ui.request(http.MethodPost, "/api/providers/"+item.ID+"/test", nil, &result); err != nil {
+				return err
+			}
+			fmt.Fprintln(ui.Out, "Test result:", result)
+		default:
+			fmt.Fprintln(ui.Out, "Invalid selection")
+		}
+	}
 }
 
 func (ui *UI) apiKeys(reader *bufio.Reader) error {
