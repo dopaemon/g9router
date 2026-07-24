@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -24,7 +25,7 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 	query := ""
 	for _, raw := range messages {
 		message, _ := raw.(map[string]any)
-		content := stringValue(message["content"])
+		content := grokMessageContent(message["content"])
 		if content == "" {
 			continue
 		}
@@ -80,6 +81,12 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 			continue
 		}
 		text := perplexityBlockText(event)
+		for _, thought := range perplexityThinking(event) {
+			if stream {
+				chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]string{"reasoning_content": thought + "\n"}, "finish_reason": nil}}})
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
+			}
+		}
 		if text == "" {
 			text = stringValue(event["text"])
 		}
@@ -128,7 +135,56 @@ func cleanPerplexityText(value string) string {
 }
 
 func cleanPerplexityDelta(value string) string {
-	value = strings.ReplaceAll(value, "[1]", "")
-	value = strings.ReplaceAll(value, "[2]", "")
+	value = regexp.MustCompile(`<\?xml[^?]*\?>|<grok:[^>]*>.*?</grok:[^>]*>|<grok:[^>]*/>|</?response\b[^>]*>`).ReplaceAllString(value, "")
+	value = regexp.MustCompile(`\[\d+\]`).ReplaceAllString(value, "")
 	return value
+}
+
+func perplexityThinking(event map[string]any) []string {
+	blocks, _ := event["blocks"].([]any)
+	var thoughts []string
+	for _, raw := range blocks {
+		block, _ := raw.(map[string]any)
+		if stringValue(block["intended_usage"]) != "pro_search_steps" && stringValue(block["intended_usage"]) != "plan" {
+			continue
+		}
+		if plan, ok := block["plan_block"].(map[string]any); ok {
+			steps, _ := plan["steps"].([]any)
+			for _, rawStep := range steps {
+				step, _ := rawStep.(map[string]any)
+				if stringValue(step["step_type"]) == "SEARCH_WEB" {
+					queries, _ := step["search_web_content"].(map[string]any)
+					items, _ := queries["queries"].([]any)
+					for _, rawQuery := range items {
+						query, _ := rawQuery.(map[string]any)
+						if value := stringValue(query["query"]); value != "" {
+							thoughts = append(thoughts, "Searching: "+value)
+						}
+					}
+				}
+				if stringValue(step["step_type"]) == "READ_RESULTS" {
+					results, _ := step["read_results_content"].(map[string]any)
+					urls, _ := results["urls"].([]any)
+					for index, rawURL := range urls {
+						if index >= 3 {
+							break
+						}
+						if value := stringValue(rawURL); value != "" {
+							thoughts = append(thoughts, "Reading: "+value)
+						}
+					}
+				}
+			}
+		}
+		if goals, ok := block["plan_block"].(map[string]any); ok && stringValue(block["intended_usage"]) == "plan" {
+			items, _ := goals["goals"].([]any)
+			for _, rawGoal := range items {
+				goal, _ := rawGoal.(map[string]any)
+				if value := stringValue(goal["description"]); value != "" {
+					thoughts = append(thoughts, value)
+				}
+			}
+		}
+	}
+	return thoughts
 }
