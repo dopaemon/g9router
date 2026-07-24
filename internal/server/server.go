@@ -473,7 +473,9 @@ func (s *Server) modelsAvailabilityAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost {
 		var input struct {
-			Action, Provider, Model string `json:"action"`
+			Action   string `json:"action"`
+			Provider string `json:"provider"`
+			Model    string `json:"model"`
 		}
 		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Action != "clearCooldown" || input.Provider == "" || input.Model == "" {
 			writeJSON(w, 400, map[string]string{"error": "Invalid request"})
