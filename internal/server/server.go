@@ -3301,7 +3301,7 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 				provider.APIKey = credential.AccessToken
 			}
 		}
-		if path == "/images/generations" && s.providerImage(w, r, provider.ID, provider.APIKey, input) {
+		if path == "/images/generations" && s.providerImage(w, r, provider.ID, provider.APIKey, provider.ProviderSpecificData, input) {
 			return
 		}
 		if path == "/audio/speech" && s.providerSpeech(w, r, provider.ID, provider.APIKey, input) {
