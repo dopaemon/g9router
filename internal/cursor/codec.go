@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 )
 
@@ -79,7 +80,7 @@ func metadata() []byte {
 	return join(stringField(1, "linux"), stringField(2, "x64"), stringField(3, "3.12.17"), stringField(5, "UTC"))
 }
 
-func request(messages []map[string]string, modelName string, agentic bool) []byte {
+func request(messages []map[string]string, modelName string, agentic bool, tools []map[string]any) []byte {
 	parts := make([][]byte, 0, len(messages)+12)
 	ids := make([][]byte, 0, len(messages))
 	for _, item := range messages {
@@ -98,12 +99,23 @@ func request(messages []map[string]string, modelName string, agentic bool) []byt
 	for _, id := range ids {
 		parts = append(parts, field(30, wireBytes, id))
 	}
+	for _, tool := range tools {
+		function, _ := tool["function"].(map[string]any)
+		name, _ := function["name"].(string)
+		description, _ := function["description"].(string)
+		parameters, _ := json.Marshal(function["parameters"])
+		parts = append(parts, field(34, wireBytes, join(stringField(1, name), stringField(2, description), stringField(3, string(parameters)), stringField(4, "custom"))))
+	}
 	parts = append(parts, intField(35, 0), intField(38, 0), intField(46, map[bool]uint64{false: 1, true: 2}[agentic]), field(47, wireBytes, nil), boolField(48, !agentic), intField(51, 0), intField(53, 1), stringField(54, map[bool]string{false: "Ask", true: "Agent"}[agentic]))
 	return join(parts...)
 }
 
-func Body(messages []map[string]string, modelName string, agentic bool) []byte {
-	payload := field(1, wireBytes, request(messages, modelName, agentic))
+func Body(messages []map[string]string, modelName string, agentic bool, tools ...[]map[string]any) []byte {
+	var definitions []map[string]any
+	if len(tools) > 0 {
+		definitions = tools[0]
+	}
+	payload := field(1, wireBytes, request(messages, modelName, agentic, definitions))
 	frame := make([]byte, 5+len(payload))
 	frame[0] = 0
 	binary.BigEndian.PutUint32(frame[1:5], uint32(len(payload)))

@@ -1790,7 +1790,14 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	if value, ok := specific["ghostMode"].(bool); ok {
 		ghostMode = value
 	}
-	requestBody := cursor.Body(messages, model, ghostMode)
+	tools, _ := request["tools"].([]any)
+	toolDefinitions := make([]map[string]any, 0, len(tools))
+	for _, raw := range tools {
+		if definition, ok := raw.(map[string]any); ok {
+			toolDefinitions = append(toolDefinitions, definition)
+		}
+	}
+	requestBody := cursor.Body(messages, model, ghostMode, toolDefinitions)
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	upstreamRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/"), strings.NewReader(string(requestBody)))
