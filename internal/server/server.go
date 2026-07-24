@@ -4496,10 +4496,19 @@ func (s *Server) proxyWithExecutor(w http.ResponseWriter, incoming *http.Request
 		headers["copilot-integration-id"] = "vscode-chat"
 		headers["editor-version"] = "vscode/1.110.0"
 		headers["editor-plugin-version"] = "copilot-chat/0.38.0"
+		headers["User-Agent"] = "GitHubCopilotChat/0.26.7"
 		headers["openai-intent"] = "conversation-panel"
 		headers["x-github-api-version"] = "2025-04-01"
+		headers["x-request-id"] = hex.EncodeToString(randomBytes(16))
+		headers["x-vscode-user-agent-library-version"] = "electron-fetch"
+		headers["X-Initiator"] = "user"
+		headers["anthropic-version"] = "2023-06-01"
 	}
-	result, err := executor.Execute(incoming.Context(), s.client, executor.Config{BaseURLs: []string{baseURL}, Headers: headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, path, body, incoming.Header.Get("Accept") == "text/event-stream")
+	stream := incoming.Header.Get("Accept") == "text/event-stream"
+	if strings.Contains(baseURL, "api.githubcopilot.com") {
+		headers["Accept"] = map[bool]string{true: "text/event-stream", false: "application/json"}[stream]
+	}
+	result, err := executor.Execute(incoming.Context(), s.client, executor.Config{BaseURLs: []string{baseURL}, Headers: headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, path, body, stream)
 	if err != nil {
 		return false
 	}
