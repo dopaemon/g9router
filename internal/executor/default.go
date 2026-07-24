@@ -38,6 +38,8 @@ func ApplyJSONSchemaFallback(body map[string]any) map[string]any {
 		}
 		if text, ok := clone["content"].(string); ok {
 			clone["content"] = text + "\n\n" + prompt
+		} else if parts, ok := clone["content"].([]any); ok {
+			clone["content"] = append(parts, map[string]any{"type": "text", "text": "\n\n" + prompt})
 		}
 		copied[index] = clone
 		added = true
