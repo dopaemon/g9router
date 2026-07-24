@@ -77,6 +77,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/audio/transcriptions", s.transcriptions)
 	mux.HandleFunc("/v1/audio/speech", s.speech)
 	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/usage", s.usageAPI)
@@ -89,6 +90,51 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/oidc/callback", s.oidcCallback)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	if id == "" || id == "client" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
+		return
+	}
+	if r.Method == http.MethodDelete {
+		if err := s.store.Delete(id); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		for _, provider := range s.store.List() {
+			if provider.ID == id {
+				writeJSON(w, 200, provider)
+				return
+			}
+		}
+		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		return
+	}
+	if r.Method == http.MethodPut {
+		var provider providers.Provider
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&provider) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		provider.ID = id
+		if provider.BaseURL == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseURL is required"})
+			return
+		}
+		if err := s.store.Upsert(provider); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "saved"})
+		return
+	}
+	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 }
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
