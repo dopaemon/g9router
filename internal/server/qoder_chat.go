@@ -129,6 +129,17 @@ func qoderText(value any) string {
 	if text, ok := value.(string); ok {
 		return text
 	}
+	if parts, ok := value.([]any); ok {
+		texts := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if item, ok := part.(map[string]any); ok {
+				if text, ok := item["text"].(string); ok {
+					texts = append(texts, text)
+				}
+			}
+		}
+		return strings.Join(texts, "\n")
+	}
 	return fmt.Sprint(value)
 }
 func qoderTools(value any) []any {
