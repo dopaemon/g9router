@@ -2301,7 +2301,68 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 		return
 	}
-	if provider := r.URL.Query().Get("provider"); provider != "" && provider != "edge-tts" {
+	provider := r.URL.Query().Get("provider")
+	if provider == "elevenlabs" {
+		apiKey := r.URL.Query().Get("apiKey")
+		if apiKey == "" {
+			writeJSON(w, 400, map[string]string{"error": "ElevenLabs API key required"})
+			return
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.elevenlabs.io/v1/voices", nil)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		request.Header.Set("xi-api-key", apiKey)
+		request.Header.Set("Content-Type", "application/json")
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		if response.StatusCode >= 300 {
+			writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("ElevenLabs voices fetch failed: %s", response.Status)})
+			return
+		}
+		var payload struct {
+			Voices []struct {
+				ID       string            `json:"voice_id"`
+				Name     string            `json:"name"`
+				Labels   map[string]string `json:"labels"`
+				Category string            `json:"category"`
+			} `json:"voices"`
+		}
+		if json.NewDecoder(response.Body).Decode(&payload) != nil {
+			writeJSON(w, 502, map[string]string{"error": "invalid voice catalog"})
+			return
+		}
+		filter := r.URL.Query().Get("lang")
+		voices := []map[string]any{}
+		groups := map[string]map[string]any{}
+		for _, voice := range payload.Voices {
+			lang := voice.Labels["language"]
+			if lang == "" {
+				lang = "en"
+			}
+			if filter != "" && filter != lang {
+				continue
+			}
+			item := map[string]any{"id": voice.ID, "name": voice.Name, "locale": lang, "lang": lang, "country": "", "countryName": "", "langName": lang, "gender": voice.Labels["gender"], "category": voice.Category}
+			voices = append(voices, item)
+			if groups[lang] == nil {
+				groups[lang] = map[string]any{"code": lang, "name": lang, "voices": []any{}}
+			}
+			groups[lang]["voices"] = append(groups[lang]["voices"].([]any), item)
+		}
+		languages := make([]any, 0, len(groups))
+		for _, group := range groups {
+			languages = append(languages, group)
+		}
+		writeJSON(w, 200, map[string]any{"voices": voices, "languages": languages, "byLang": groups})
+		return
+	}
+	if provider != "" && provider != "edge-tts" {
 		writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Provider %q voice listing is not implemented", provider)})
 		return
 	}
