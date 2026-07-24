@@ -19,7 +19,7 @@ func (s *Server) videoAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	path := strings.TrimPrefix(r.URL.Path, "/v1/videos/")
-	path = strings.TrimPrefix(path, "api/v1/videos/")
+	path = strings.TrimPrefix(path, "/api/v1/videos/")
 	if path == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing video request id"})
 		return
