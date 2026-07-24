@@ -3056,7 +3056,26 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
 	s.forwardRaw(w, r, "/audio/transcriptions")
 }
-func (s *Server) speech(w http.ResponseWriter, r *http.Request) { s.forwardRaw(w, r, "/audio/speech") }
+func (s *Server) speech(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method == http.MethodPost {
+		body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+		if err == nil {
+			var input map[string]any
+			if json.Unmarshal(body, &input) == nil && s.edgeTTSAPI(w, r, input) {
+				return
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(body)))
+		}
+	}
+	s.forwardRaw(w, r, "/audio/speech")
+}
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
