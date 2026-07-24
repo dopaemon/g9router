@@ -192,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/combos", s.combosAPI)
 	mux.HandleFunc("/api/combos/", s.comboResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
+	mux.HandleFunc("/api/settings/proxy-test", s.proxyTestAPI)
 	mux.HandleFunc("/api/settings/require-login", s.requireLoginAPI)
 	mux.HandleFunc("/api/settings/database", s.databaseSettingsAPI)
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
