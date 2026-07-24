@@ -8,6 +8,7 @@ import (
 )
 
 func OpenAIToKiro(model string, body map[string]any, stream bool) map[string]any {
+	agentic := strings.HasSuffix(model, "-agentic")
 	upstream := strings.TrimSuffix(model, "-agentic")
 	history := []any{}
 	var current map[string]any
@@ -33,18 +34,23 @@ func OpenAIToKiro(model string, body map[string]any, stream bool) map[string]any
 			history = append(history, item)
 			continue
 		}
-		item := map[string]any{"userInputMessage": map[string]any{"content": content, "modelId": upstream}}
+		item := map[string]any{"userInputMessage": map[string]any{"content": content, "modelId": upstream, "origin": "AI_EDITOR"}}
 		if current != nil {
 			history = append(history, current)
 		}
 		current = item
 	}
 	if current == nil {
-		current = map[string]any{"userInputMessage": map[string]any{"content": "continue", "modelId": upstream}}
+		current = map[string]any{"userInputMessage": map[string]any{"content": "continue", "modelId": upstream, "origin": "AI_EDITOR"}}
 	}
+	currentMessage := current["userInputMessage"].(map[string]any)
+	currentMessage["content"] = "[Context: Current time is " + time.Now().UTC().Format(time.RFC3339Nano) + "]\n\n" + stringValue(currentMessage["content"])
 	conversationID := randomID()
 	state := map[string]any{"chatTriggerType": "MANUAL", "conversationId": conversationID, "agentContinuationId": conversationID, "agentTaskType": "vibe", "currentMessage": current, "history": history}
 	result := map[string]any{"conversationState": state, "agentMode": "vibe", "inferenceConfig": map[string]any{"maxTokens": 32000}}
+	if agentic {
+		result["systemPrompt"] = kiroAgenticSystemPrompt
+	}
 	if system, ok := body["system"].(string); ok && system != "" {
 		result["systemPrompt"] = system
 	}
@@ -57,6 +63,8 @@ func OpenAIToKiro(model string, body map[string]any, stream bool) map[string]any
 	_ = stream
 	return result
 }
+
+const kiroAgenticSystemPrompt = "# CRITICAL: CHUNKED WRITE PROTOCOL (MANDATORY)\n\nYou MUST follow chunked write operations for file changes to avoid server timeouts."
 
 func randomID() string {
 	raw := make([]byte, 16)
