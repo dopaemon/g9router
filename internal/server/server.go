@@ -3312,6 +3312,18 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			if s.exaSearch(w, specialized) {
 				return
 			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.serperSearch(w, specialized) {
+				return
+			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.googlePSESearch(w, specialized) {
+				return
+			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.searxngSearch(w, specialized) {
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewReader(data))
 		}
 	}
