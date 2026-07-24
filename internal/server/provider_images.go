@@ -1,11 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -490,6 +492,9 @@ func (s *Server) cloudflareImage(w http.ResponseWriter, r *http.Request, apiKey 
 	if accountID == "" || model == "" || apiKey == "" {
 		return false
 	}
+	if model == "@cf/black-forest-labs/flux-2-dev" || model == "@cf/black-forest-labs/flux-2-klein-4b" || model == "@cf/black-forest-labs/flux-2-klein-9b" {
+		return s.cloudflareMultipartImage(w, r, apiKey, accountID, model, input)
+	}
 	body := map[string]any{"prompt": input["prompt"]}
 	if size := stringValue(input["size"]); size != "" {
 		parts := strings.SplitN(size, "x", 2)
@@ -524,6 +529,60 @@ func (s *Server) cloudflareImage(w http.ResponseWriter, r *http.Request, apiKey 
 		}
 		return nil, false
 	})
+}
+
+func (s *Server) cloudflareMultipartImage(w http.ResponseWriter, r *http.Request, apiKey, accountID, model string, input map[string]any) bool {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("prompt", stringValue(input["prompt"]))
+	if size := stringValue(input["size"]); size != "" {
+		parts := strings.SplitN(size, "x", 2)
+		if len(parts) == 2 {
+			_ = writer.WriteField("width", parts[0])
+			_ = writer.WriteField("height", parts[1])
+		}
+	}
+	for _, key := range []string{"negative_prompt", "guidance", "seed", "num_steps", "steps", "strength"} {
+		if value, ok := input[key]; ok && value != nil && value != "" {
+			_ = writer.WriteField(key, fmt.Sprint(value))
+		}
+	}
+	_ = writer.Close()
+	endpoint := "https://api.cloudflare.com/client/v4/accounts/" + url.PathEscape(accountID) + "/ai/run/" + url.PathEscape(model)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, &body)
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 64<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	if strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "image/") {
+		writeJSON(w, http.StatusOK, imageResult([]map[string]string{{"b64_json": base64.StdEncoding.EncodeToString(data)}}))
+		return true
+	}
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	result := payload["result"]
+	if result == nil {
+		result = payload
+	}
+	resultMap, _ := result.(map[string]any)
+	image := stringValue(resultMap["image"])
+	if image == "" {
+		return false
+	}
+	writeJSON(w, http.StatusOK, imageResult([]map[string]string{{"b64_json": image}}))
+	return true
 }
 
 func (s *Server) stabilityImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
