@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/images/generations", s.images)
 	mux.HandleFunc("/v1/audio/transcriptions", s.transcriptions)
 	mux.HandleFunc("/v1/audio/speech", s.speech)
+	mux.HandleFunc("/v1/audio/voices", s.audioVoicesAPI)
 	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/v1/videos/", s.videoAPI)
 	mux.HandleFunc("/api/providers", s.providerAPI)
