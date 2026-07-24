@@ -97,6 +97,10 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	if strings.HasSuffix(id, "/models") {
+		s.providerModelsAPI(w, r, strings.TrimSuffix(id, "/models"))
+		return
+	}
 	if id == "" || id == "client" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
 		return
@@ -138,6 +142,45 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+}
+
+func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var provider *providers.Provider
+	for _, item := range s.store.List() {
+		if item.ID == id {
+			copy := item
+			provider = &copy
+			break
+		}
+	}
+	if provider == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	if provider.APIType == "claude" || provider.APIType == "anthropic" {
+		request.Header.Set("x-api-key", provider.APIKey)
+		request.Header.Set("anthropic-version", "2023-06-01")
+	} else if provider.APIKey != "" {
+		request.Header.Set("Authorization", "Bearer "+provider.APIKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
 }
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
