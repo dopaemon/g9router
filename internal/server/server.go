@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/copilot-settings", s.copilotSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/droid-settings", s.droidSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/cline-settings", s.clineSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/kilo-settings", s.kiloSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -1065,6 +1066,109 @@ func (s *Server) clineSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed from Cline"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) kiloSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir := filepath.Join(home, ".local", "share", "kilo")
+	authPath := filepath.Join(dir, "auth.json")
+	vscodePath := filepath.Join(home, ".config", "Code", "User", "settings.json")
+	read := func(path string) map[string]any {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return map[string]any{}
+		}
+		raw = regexp.MustCompile(`,\s*([}\]])`).ReplaceAll(raw, []byte(`$1`))
+		var value map[string]any
+		if json.Unmarshal(raw, &value) != nil {
+			return map[string]any{}
+		}
+		return value
+	}
+	write := func(path string, value map[string]any) error {
+		raw, _ := json.MarshalIndent(value, "", "  ")
+		return os.WriteFile(path, raw, 0600)
+	}
+	switch r.Method {
+	case http.MethodGet:
+		_, cliErr := exec.LookPath("kilo")
+		_, fileErr := os.Stat(authPath)
+		if cliErr != nil && fileErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "Kilo Code CLI is not installed"})
+			return
+		}
+		auth := read(authPath)
+		entry, _ := auth["openai-compatible"].(map[string]any)
+		if entry == nil {
+			entry, _ = auth["9router"].(map[string]any)
+		}
+		base := ""
+		if entry != nil {
+			base = anyString(entry["baseUrl"])
+			if base == "" {
+				base = anyString(entry["baseURL"])
+			}
+		}
+		has := strings.Contains(base, "localhost") || strings.Contains(base, "127.0.0.1") || strings.Contains(base, "9router")
+		keys := make([]string, 0, len(auth))
+		for key := range auth {
+			keys = append(keys, key)
+		}
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": map[string]any{"auth": keys}, "has9Router": has, "authPath": authPath})
+	case http.MethodPost:
+		var input struct {
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+			Model   string `json:"model"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.APIKey == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl, apiKey and model are required"})
+			return
+		}
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		base := strings.TrimRight(input.BaseURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		auth := read(authPath)
+		auth["openai-compatible"] = map[string]any{"type": "api-key", "apiKey": input.APIKey, "baseUrl": base, "model": input.Model}
+		if err := write(authPath, auth); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		vscode := read(vscodePath)
+		vscode["kilocode.customProvider"] = map[string]any{"name": "9Router", "baseURL": base, "apiKey": input.APIKey}
+		vscode["kilocode.defaultModel"] = input.Model
+		_ = os.MkdirAll(filepath.Dir(vscodePath), 0700)
+		_ = write(vscodePath, vscode)
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Kilo Code settings applied successfully!", "authPath": authPath})
+	case http.MethodDelete:
+		auth := read(authPath)
+		if len(auth) == 0 {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No settings file to reset"})
+			return
+		}
+		delete(auth, "openai-compatible")
+		delete(auth, "9router")
+		if err := write(authPath, auth); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		vscode := read(vscodePath)
+		delete(vscode, "kilocode.customProvider")
+		delete(vscode, "kilocode.defaultModel")
+		_ = write(vscodePath, vscode)
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed from Kilo Code"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
