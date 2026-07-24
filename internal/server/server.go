@@ -711,6 +711,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.APIType == "kiro" {
+			if s.proxyKiro(w, r, provider.BaseURL, model, request, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
@@ -855,6 +861,60 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 	}
 	writeJSON(w, response.StatusCode, translator.GeminiToOpenAI(model, payload))
 	return true
+}
+
+func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
+	body, err := json.Marshal(translator.OpenAIToKiro(model, request, true))
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	endpoint := strings.TrimRight(baseURL, "/") + "/generateAssistantResponse"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	response, err := s.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(response.StatusCode)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return false
+	}
+	state := &translator.KiroStreamState{}
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 4096), 16<<20)
+	eventType := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event:") {
+			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		for _, output := range translator.KiroEventToOpenAISSE(eventType, []byte(payload), state) {
+			_, _ = io.WriteString(w, output)
+			flusher.Flush()
+		}
+	}
+	return scanner.Err() == nil
 }
 
 func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
