@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"g9router/internal/oauth"
 	"g9router/internal/providers"
 )
 
@@ -50,9 +52,9 @@ func (s *Server) kiroSocialExchangeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Code        string `json:"code"`
+		Code         string `json:"code"`
 		CodeVerifier string `json:"codeVerifier"`
-		Provider    string `json:"provider"`
+		Provider     string `json:"provider"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.CodeVerifier) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing required fields"})
@@ -102,11 +104,17 @@ func (s *Server) kiroSocialExchangeAPI(w http.ResponseWriter, r *http.Request) {
 			email = value
 		}
 	}
-	if err := s.store.Upsert(providers.Provider{ID: "kiro", Name: "Kiro", BaseURL: "https://runtime.us-east-1.kiro.dev", APIKey: token.AccessToken, APIType: "kiro", OAuthID: "kiro", Enabled: true, TestStatus: "active", ProviderSpecificData: map[string]any{"profileArn": token.ProfileARN, "authMethod": input.Provider, "provider": strings.ToUpper(input.Provider[:1]) + input.Provider[1:], "email": email}, Accounts: []providers.Account{{ID: "kiro-social", APIKey: token.AccessToken, Enabled: true}}}); err != nil {
+	credentialID := "kiro-social"
+	providerData := map[string]any{"profileArn": token.ProfileARN, "authMethod": "social", "provider": strings.ToUpper(input.Provider[:1]) + input.Provider[1:], "email": email}
+	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: "kiro", AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenURL: "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", ExpiresAt: time.Now().Add(time.Duration(token.ExpiresIn) * time.Second).UnixMilli(), ProviderSpecificData: providerData}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "provider": "kiro", "email": email})
+	if err := s.store.Upsert(providers.Provider{ID: "kiro", Name: "Kiro", BaseURL: "https://runtime.us-east-1.kiro.dev", APIKey: token.AccessToken, APIType: "kiro", OAuthID: credentialID, Enabled: true, TestStatus: "active", ProviderSpecificData: providerData, Accounts: []providers.Account{{ID: "kiro-social", APIKey: token.AccessToken, Enabled: true}}}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "provider": "kiro", "email": email, "connection": map[string]string{"provider": "kiro", "id": credentialID}})
 }
 
 func randomURLToken(size int) (string, error) {
