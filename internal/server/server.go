@@ -3915,8 +3915,12 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 	if response.StatusCode >= 500 {
 		return false
 	}
+	stream, _ := request["stream"].(bool)
 	if strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "eventstream") {
-		return s.proxyKiroEventStream(w, response.Body)
+		return s.proxyKiroEventStream(w, response.Body, model, stream)
+	}
+	if !stream {
+		return s.proxyKiroSSEJSON(w, response.Body, model)
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -3951,15 +3955,20 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 	return scanner.Err() == nil
 }
 
-func (s *Server) proxyKiroEventStream(w http.ResponseWriter, body io.Reader) bool {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return false
+func (s *Server) proxyKiroEventStream(w http.ResponseWriter, body io.Reader, model string, stream bool) bool {
+	var flusher http.Flusher
+	if stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		var ok bool
+		flusher, ok = w.(http.Flusher)
+		if !ok {
+			return false
+		}
 	}
 	state := &translator.KiroStreamState{}
+	var captured strings.Builder
 	pending := make([]byte, 0, 32*1024)
 	buffer := make([]byte, 32*1024)
 	for {
@@ -3974,18 +3983,77 @@ func (s *Server) proxyKiroEventStream(w http.ResponseWriter, body io.Reader) boo
 			for _, event := range events {
 				eventType := event.Headers[":event-type"]
 				for _, output := range translator.KiroEventToOpenAISSE(eventType, event.Payload, state) {
-					_, _ = io.WriteString(w, output)
-					flusher.Flush()
+					if stream {
+						_, _ = io.WriteString(w, output)
+						flusher.Flush()
+					} else {
+						captured.WriteString(output)
+					}
 				}
 			}
 		}
 		if err == io.EOF {
-			return len(pending) == 0
+			if len(pending) != 0 {
+				return false
+			}
+			if !stream {
+				return s.proxyKiroSSEJSON(w, strings.NewReader(captured.String()), model)
+			}
+			return true
 		}
 		if err != nil {
 			return false
 		}
 	}
+}
+
+func (s *Server) proxyKiroSSEJSON(w http.ResponseWriter, body io.Reader, model string) bool {
+	content := strings.Builder{}
+	reasoning := strings.Builder{}
+	var tools []any
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 4096), 16<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" || payload == "[DONE]" {
+			continue
+		}
+		var chunk map[string]any
+		if json.Unmarshal([]byte(payload), &chunk) != nil {
+			continue
+		}
+		choices, _ := chunk["choices"].([]any)
+		if len(choices) == 0 {
+			continue
+		}
+		choice, _ := choices[0].(map[string]any)
+		delta, _ := choice["delta"].(map[string]any)
+		if text, _ := delta["content"].(string); text != "" {
+			content.WriteString(text)
+		}
+		if text, _ := delta["reasoning_content"].(string); text != "" {
+			reasoning.WriteString(text)
+		}
+		if values, ok := delta["tool_calls"].([]any); ok {
+			tools = append(tools, values...)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return false
+	}
+	message := map[string]any{"role": "assistant", "content": content.String()}
+	if reasoning.Len() > 0 {
+		message["reasoning_content"] = reasoning.String()
+	}
+	if len(tools) > 0 {
+		message["tool_calls"] = tools
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": "chatcmpl-" + hex.EncodeToString(randomBytes(8)), "object": "chat.completion", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "message": message, "finish_reason": "stop"}}})
+	return true
 }
 
 func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, specific map[string]any) bool {
