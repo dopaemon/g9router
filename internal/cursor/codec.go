@@ -1,9 +1,12 @@
 package cursor
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
+	"io"
 )
 
 type Response struct {
@@ -156,7 +159,20 @@ func ParseFrame(frame []byte) (Response, int, bool) {
 	if length < 0 || 5+length > len(frame) {
 		return Response{}, 0, false
 	}
-	fields := readFields(frame[5 : 5+length])
+	payload := frame[5 : 5+length]
+	if frame[0]&1 != 0 {
+		reader, err := gzip.NewReader(bytes.NewReader(payload))
+		if err != nil {
+			return Response{}, 0, false
+		}
+		decoded, err := io.ReadAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			return Response{}, 0, false
+		}
+		payload = decoded
+	}
+	fields := readFields(payload)
 	result := Response{}
 	if values := fields[1]; len(values) > 0 {
 		tool := readFields(values[0])
