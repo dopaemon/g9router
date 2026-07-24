@@ -118,6 +118,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/version", s.versionAPI)
 	mux.HandleFunc("/api/locale", s.localeAPI)
 	mux.HandleFunc("/api/tags", s.tagsAPI)
+	mux.HandleFunc("/api/pricing", s.pricingAPI)
+	mux.HandleFunc("/api/pricing/", s.pricingAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
 	mux.HandleFunc("/api/usage/request-logs", s.usageLogsAPI)
