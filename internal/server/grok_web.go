@@ -87,14 +87,20 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 		result, _ := event["result"].(map[string]any)
 		resp, _ := result["response"].(map[string]any)
 		text := stringValue(resp["token"])
+		fullMessage := false
 		if text == "" {
 			modelResponse, _ := resp["modelResponse"].(map[string]any)
 			text = stringValue(modelResponse["message"])
+			fullMessage = text != ""
 		}
 		if text == "" {
 			continue
 		}
-		full += text
+		if fullMessage {
+			full = text
+		} else {
+			full += text
+		}
 		if stream {
 			chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": text}, "finish_reason": nil}}})
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
