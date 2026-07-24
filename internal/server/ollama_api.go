@@ -10,6 +10,10 @@ import (
 )
 
 func (s *Server) ollamaChatAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		s.models(w, r)
+		return
+	}
 	if r.Method == http.MethodOptions {
 		setCORS(w, "GET, POST, OPTIONS")
 		w.WriteHeader(http.StatusNoContent)
