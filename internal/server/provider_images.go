@@ -37,6 +37,8 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.nanoBananaImage(w, r, apiKey, input)
 		case "antigravity":
 			return s.antigravityImage(w, r, apiKey, providerData, input)
+		case "comfyui":
+			return s.comfyUIImage(w, r, input)
 		case "openai", "minimax", "openrouter", "recraft", "vercel-ai-gateway", "xai":
 			return s.openAICompatibleImage(w, r, providerID, apiKey, input)
 		case "codex":
@@ -96,6 +98,30 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 		images = append(images, map[string]string{"b64_json": "", "revised_prompt": prompt})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
+	return true
+}
+
+func (s *Server) comfyUIImage(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
+	body, _ := json.Marshal(map[string]any{"prompt": stringValue(input["prompt"])})
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "http://localhost:8188", strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	writeJSON(w, response.StatusCode, payload)
 	return true
 }
 
