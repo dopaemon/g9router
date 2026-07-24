@@ -3374,6 +3374,9 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 		if path == "/audio/speech" && s.providerSpeech(w, r, provider.ID, provider.APIKey, input) {
 			return
 		}
+		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
+			return
+		}
 		baseURL := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
 		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
 			return
@@ -3382,6 +3385,53 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 	if !s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"})
 	}
+}
+
+func (s *Server) proxyAzure(w http.ResponseWriter, incoming *http.Request, path string, body []byte, apiKey string, data map[string]any) bool {
+	endpoint := stringValue(data["azureEndpoint"])
+	if endpoint == "" {
+		endpoint = stringValue(data["baseUrl"])
+	}
+	deployment := nonEmpty(stringValue(data["deployment"]), "gpt-4")
+	apiVersion := nonEmpty(stringValue(data["apiVersion"]), "2024-10-01-preview")
+	if endpoint == "" || apiKey == "" {
+		return false
+	}
+	endpoint = strings.TrimRight(endpoint, "/") + "/openai/deployments/" + url.PathEscape(deployment)
+	switch path {
+	case "/chat/completions":
+		endpoint += "/chat/completions"
+	case "/embeddings":
+		endpoint += "/embeddings"
+	default:
+		return false
+	}
+	query := url.Values{"api-version": {apiVersion}}
+	request, err := http.NewRequestWithContext(incoming.Context(), http.MethodPost, endpoint+"?"+query.Encode(), strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("api-key", apiKey)
+	response, err := s.client.Do(request)
+	if err != nil || response.StatusCode >= 500 {
+		if response != nil {
+			response.Body.Close()
+		}
+		return false
+	}
+	defer response.Body.Close()
+	for key, values := range response.Header {
+		if key == "Content-Length" || key == "Content-Encoding" {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
+	return true
 }
 
 func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string) {
