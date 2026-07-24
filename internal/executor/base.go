@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"g9router/internal/providers"
 )
 
 type Config struct {
@@ -22,6 +24,14 @@ type Result struct {
 	Status int
 	Header http.Header
 	Body   []byte
+}
+
+func ConfigForProvider(provider string, apiKey string) (Config, bool) {
+	descriptor, ok := providers.Lookup(provider)
+	if !ok {
+		return Config{}, false
+	}
+	return Config{Provider: provider, BaseURLs: []string{descriptor.BaseURL}, Format: descriptor.Format, Headers: descriptor.Headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, true
 }
 
 func Execute(ctx context.Context, client *http.Client, config Config, path string, body []byte, stream bool) (Result, error) {
