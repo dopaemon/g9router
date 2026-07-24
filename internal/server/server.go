@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/audio/speech", s.speech)
 	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/providers/validate", s.validateProviderAPI)
 	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
 	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
@@ -270,6 +271,55 @@ func (s *Server) suggestedModelsAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"data": result})
+}
+
+func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		Provider string `json:"provider"`
+		APIKey   string `json:"apiKey"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || input.APIKey == "" {
+		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
+		return
+	}
+	descriptor, ok := providers.Lookup(input.Provider)
+	if !ok {
+		writeJSON(w, 404, map[string]string{"error": "Unknown provider"})
+		return
+	}
+	base := strings.TrimRight(descriptor.BaseURL, "/")
+	if strings.HasSuffix(base, "/chat/completions") {
+		base = strings.TrimSuffix(base, "/chat/completions")
+	}
+	endpoint := base + "/models"
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+		return
+	}
+	for key, value := range descriptor.Headers {
+		request.Header.Set(key, value)
+	}
+	if descriptor.Format == "claude" {
+		request.Header.Set("x-api-key", input.APIKey)
+		request.Header.Set("anthropic-version", "2023-06-01")
+	} else if descriptor.Format == "gemini" {
+		request.Header.Set("X-Goog-Api-Key", input.APIKey)
+	} else {
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	valid := response.StatusCode != 401 && response.StatusCode != 403
+	writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]string{true: "", false: "Invalid API key"}[valid]})
 }
 
 func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id string) {
