@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -704,6 +705,12 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			}
 			continue
 		}
+		if provider.APIType == "vertex" {
+			if s.proxyVertex(w, r, provider.BaseURL, model, request, provider.APIKey) {
+				return
+			}
+			continue
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
@@ -815,6 +822,38 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 	_ = json.NewEncoder(w).Encode(result)
+	return true
+}
+
+func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
+	body, err := json.Marshal(translator.OpenAIToVertex(model, request))
+	if err != nil {
+		return false
+	}
+	endpoint := strings.TrimRight(baseURL, "/") + "/v1/publishers/google/models/" + model + ":generateContent"
+	if apiKey != "" {
+		endpoint += "?key=" + url.QueryEscape(apiKey)
+	}
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := s.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	var payload map[string]any
+	if json.NewDecoder(response.Body).Decode(&payload) != nil {
+		return false
+	}
+	writeJSON(w, response.StatusCode, translator.GeminiToOpenAI(model, payload))
 	return true
 }
 
