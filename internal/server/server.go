@@ -3296,6 +3296,17 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if r.Method == http.MethodPost {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+		if err == nil {
+			specialized := r.Clone(r.Context())
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.tavilySearch(w, specialized) {
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(data))
+		}
+	}
 	s.forwardRaw(w, r, "/search")
 }
 
