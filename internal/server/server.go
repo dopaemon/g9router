@@ -3198,14 +3198,7 @@ func (s *Server) betaModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) betaModelResource(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	writeJSON(w, http.StatusNotImplemented, map[string]any{"error": map[string]any{"message": "Gemini model generation is not available in this Go build", "code": http.StatusNotImplemented}})
+	s.geminiModelAPI(w, r)
 }
 func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
