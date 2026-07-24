@@ -143,6 +143,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/usage/providers", s.usageProvidersAPI)
 	mux.HandleFunc("/api/usage/chart", s.usageChartAPI)
 	mux.HandleFunc("/api/usage/request-details", s.usageRequestDetailsAPI)
+	mux.HandleFunc("/api/usage/stats", s.usageStatsAPI)
+	mux.HandleFunc("/api/usage/stream", s.usageStreamAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
