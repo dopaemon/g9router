@@ -140,7 +140,8 @@ func (s *Server) codexImage(w http.ResponseWriter, r *http.Request, accessToken 
 		}
 		var event struct {
 			Item struct {
-				Type, Result string `json:"type"`
+				Type   string `json:"type"`
+				Result string `json:"result"`
 			} `json:"item"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event) == nil && event.Item.Type == "image_generation_call" && event.Item.Result != "" {
