@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -142,6 +143,52 @@ func (s *Server) githubExchangeMetadata(r *http.Request, accessToken string) map
 func githubStringValue(payload map[string]any, key string) string {
 	value, _ := payload[key].(string)
 	return value
+}
+
+func (s *Server) refreshGithubCopilotToken(ctx context.Context, accessToken string) (string, any, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, githubCopilotTokenURL, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	request.Header.Set("Authorization", "token "+accessToken)
+	request.Header.Set("User-Agent", "GitHubCopilotChat/0.26.7")
+	request.Header.Set("Editor-Version", "vscode/1.110.0")
+	request.Header.Set("Editor-Plugin-Version", "copilot-chat/0.38.0")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("x-github-api-version", "2025-04-01")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return "", nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", nil, fmt.Errorf("copilot token status %s", response.Status)
+	}
+	var payload struct {
+		Token     string `json:"token"`
+		ExpiresAt any    `json:"expires_at"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload); err != nil {
+		return "", nil, err
+	}
+	if payload.Token == "" {
+		return "", nil, fmt.Errorf("copilot response missing token")
+	}
+	return payload.Token, payload.ExpiresAt, nil
+}
+
+func copilotTokenExpired(value any) bool {
+	switch expiry := value.(type) {
+	case float64:
+		return expiry > 0 && expiry <= float64(time.Now().Unix())
+	case int64:
+		return expiry > 0 && expiry <= time.Now().Unix()
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, expiry); err == nil {
+			return !parsed.After(time.Now())
+		}
+	}
+	return true
 }
 
 func firstString(payload map[string]any, keys ...string) string {
