@@ -25,6 +25,10 @@ func (s *Server) geminiAuthorizeAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
+	if geminiClientID() == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "G9ROUTER_GEMINI_CLIENT_ID is not configured"})
+		return
+	}
 	redirect := r.URL.Query().Get("redirect_uri")
 	if redirect == "" {
 		redirect = "http://localhost:8080/callback"
@@ -41,6 +45,10 @@ func (s *Server) geminiAuthorizeAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) geminiExchangeAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if geminiClientID() == "" || os.Getenv("G9ROUTER_GEMINI_CLIENT_SECRET") == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Gemini OAuth client credentials are not configured"})
 		return
 	}
 	var input struct {
