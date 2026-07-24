@@ -20,6 +20,12 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.huggingFaceImage(w, r, apiKey, input)
 		case "cloudflare-ai":
 			return s.cloudflareImage(w, r, apiKey, providerData, input)
+		case "fal-ai":
+			return s.falImage(w, r, apiKey, input)
+		case "black-forest-labs":
+			return s.bflImage(w, r, apiKey, input)
+		case "runwayml":
+			return s.runwayImage(w, r, apiKey, input)
 		default:
 			return false
 		}
@@ -76,6 +82,205 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
 	return true
+}
+
+func (s *Server) falImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
+	model := stringValue(input["model"])
+	body := map[string]any{"prompt": input["prompt"], "num_images": numberOr(input["n"], 1)}
+	if size := stringValue(input["size"]); size != "" {
+		body["image_size"] = imageAspectRatio(size)
+	}
+	if image := stringValue(input["image"]); image != "" {
+		body["image_url"] = image
+	}
+	return s.asyncImage(w, r, "https://queue.fal.run/"+strings.TrimPrefix(model, "models/"), apiKey, "Key", body, func(payload map[string]any) (any, bool) {
+		images := []map[string]string{}
+		if values, ok := payload["images"].([]any); ok {
+			for _, value := range values {
+				if item, ok := value.(map[string]any); ok {
+					if image := stringValue(item["url"]); image != "" {
+						images = append(images, map[string]string{"url": image})
+					}
+				}
+			}
+		}
+		if image := stringValue(payload["image"]); image != "" {
+			images = append(images, map[string]string{"url": image})
+		}
+		return imageResult(images), len(images) > 0
+	})
+}
+
+func (s *Server) bflImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
+	model := stringValue(input["model"])
+	body := map[string]any{"prompt": input["prompt"]}
+	if size := stringValue(input["size"]); size != "" {
+		parts := strings.SplitN(size, "x", 2)
+		if len(parts) == 2 {
+			body["width"], _ = strconv.Atoi(parts[0])
+			body["height"], _ = strconv.Atoi(parts[1])
+		}
+	}
+	if image := stringValue(input["image"]); image != "" {
+		body["image_prompt"] = image
+	}
+	return s.asyncImage(w, r, "https://api.bfl.ai/v1/"+strings.TrimPrefix(model, "models/"), apiKey, "x-key", body, func(payload map[string]any) (any, bool) {
+		result, _ := payload["result"].(map[string]any)
+		if image := stringValue(result["sample"]); image != "" {
+			return imageResult([]map[string]string{{"url": image}}), true
+		}
+		return nil, false
+	})
+}
+
+func (s *Server) runwayImage(w http.ResponseWriter, r *http.Request, apiKey string, input map[string]any) bool {
+	model := stringValue(input["model"])
+	path := "image_to_video"
+	if strings.Contains(model, "image") {
+		path = "text_to_image"
+	}
+	body := map[string]any{"promptText": input["prompt"], "model": model, "ratio": imageAspectRatio(stringValue(input["size"]))}
+	if image := stringValue(input["image"]); image != "" {
+		if path == "text_to_image" {
+			body["referenceImages"] = []map[string]string{{"uri": image}}
+		} else {
+			body["promptImage"] = image
+		}
+	}
+	if path == "image_to_video" {
+		body["duration"] = 5
+	}
+	return s.asyncImage(w, r, "https://api.dev.runwayml.com/v1/"+path, apiKey, "Authorization", body, func(payload map[string]any) (any, bool) {
+		outputs := []map[string]string{}
+		if values, ok := payload["output"].([]any); ok {
+			for _, value := range values {
+				if image, ok := value.(string); ok && image != "" {
+					outputs = append(outputs, map[string]string{"url": image})
+				}
+			}
+		}
+		return imageResult(outputs), len(outputs) > 0
+	})
+}
+
+func (s *Server) asyncImage(w http.ResponseWriter, r *http.Request, endpoint, apiKey, authHeader string, body any, normalize func(map[string]any) (any, bool)) bool {
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if authHeader == "Authorization" {
+		request.Header.Set(authHeader, "Bearer "+apiKey)
+	} else {
+		request.Header.Set(authHeader, apiKey)
+	}
+	if authHeader == "Authorization" && strings.Contains(endpoint, "runway") {
+		request.Header.Set("X-Runway-Version", "2024-11-06")
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var submitted map[string]any
+	if json.Unmarshal(data, &submitted) != nil {
+		return false
+	}
+	deadline := time.Now().Add(120 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-r.Context().Done():
+			return false
+		case <-time.After(1500 * time.Millisecond):
+		}
+		statusURL, responseURL := stringValue(submitted["status_url"]), stringValue(submitted["response_url"])
+		if responseURL != "" && statusURL == "" {
+			statusURL = responseURL
+		}
+		if statusURL == "" {
+			base := strings.TrimSuffix(strings.TrimSuffix(endpoint, "/text_to_image"), "/image_to_video")
+			statusURL = base + "/tasks/" + stringValue(submitted["id"])
+		}
+		poll, err := http.NewRequestWithContext(r.Context(), http.MethodGet, statusURL, nil)
+		if err != nil {
+			return false
+		}
+		if authHeader == "Authorization" {
+			poll.Header.Set(authHeader, "Bearer "+apiKey)
+		} else {
+			poll.Header.Set(authHeader, apiKey)
+		}
+		poll.Header.Set("Accept", "application/json")
+		result, err := s.client.Do(poll)
+		if err != nil {
+			return false
+		}
+		pollData, _ := io.ReadAll(io.LimitReader(result.Body, 8<<20))
+		result.Body.Close()
+		var status map[string]any
+		if json.Unmarshal(pollData, &status) != nil {
+			return false
+		}
+		state := stringValue(status["status"])
+		if state == "FAILED" || state == "Failed" || state == "Error" || state == "CANCELLED" {
+			return false
+		}
+		if state == "COMPLETED" || state == "SUCCEEDED" || state == "Ready" {
+			if responseURL != "" && responseURL != statusURL {
+				return s.fetchImageResult(w, r, responseURL, apiKey, authHeader, normalize)
+			}
+			value, ok := normalize(status)
+			if !ok {
+				return false
+			}
+			writeJSON(w, http.StatusOK, value)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) fetchImageResult(w http.ResponseWriter, r *http.Request, endpoint, apiKey, authHeader string, normalize func(map[string]any) (any, bool)) bool {
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		return false
+	}
+	if authHeader == "Authorization" {
+		request.Header.Set(authHeader, "Bearer "+apiKey)
+	} else {
+		request.Header.Set(authHeader, apiKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 16<<20))
+	var payload map[string]any
+	if response.StatusCode < 200 || response.StatusCode >= 300 || json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	value, ok := normalize(payload)
+	if !ok {
+		return false
+	}
+	writeJSON(w, http.StatusOK, value)
+	return true
+}
+
+func imageResult(images []map[string]string) map[string]any {
+	return map[string]any{"created": time.Now().Unix(), "data": images}
+}
+func numberOr(value any, fallback int) int {
+	if number, ok := value.(float64); ok && number > 0 {
+		return int(number)
+	}
+	return fallback
 }
 
 func (s *Server) cloudflareImage(w http.ResponseWriter, r *http.Request, apiKey string, providerData map[string]any, input map[string]any) bool {
