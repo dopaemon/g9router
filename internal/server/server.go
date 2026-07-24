@@ -630,6 +630,11 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		body, _ = json.Marshal(request)
 	}
 	model, _ := request["model"].(string)
+	if target := s.settings.ModelAliases()[model]; target != "" {
+		request["model"] = target
+		model = target
+		body, _ = json.Marshal(request)
+	}
 	sourceFormat := format.Detect(request)
 	providers := s.store.Resolve(model)
 	if len(providers) == 0 {
