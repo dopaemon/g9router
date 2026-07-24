@@ -32,6 +32,7 @@ import (
 	"g9router/internal/headroom"
 	keyStore "g9router/internal/keys"
 	"g9router/internal/mcp"
+	"g9router/internal/mitm"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
 	providerNodeStore "g9router/internal/providernodes"
@@ -69,6 +70,7 @@ type Server struct {
 	proxyPools      *proxypools.Store
 	tunnelManager   *tunnel.Manager
 	pxpipeManager   *pxpipe.Manager
+	mitmManager     *mitm.Manager
 }
 
 func New(options Options) *Server {
@@ -85,7 +87,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), database: database}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
 }
 
 func (s *Server) Run() error {
@@ -179,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/availability", s.modelsAvailabilityAPI)
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
 	mux.HandleFunc("/api/cli-tools/antigravity-mitm/alias", s.antigravityAliasAPI)
+	mux.HandleFunc("/api/cli-tools/antigravity-mitm", s.antigravityMITMAPI)
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
