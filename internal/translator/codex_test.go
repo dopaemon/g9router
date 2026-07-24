@@ -18,4 +18,7 @@ func TestNormalizeCodexRequest(t *testing.T) {
 	if tools[0].(map[string]any)["name"] != "Read" {
 		t.Fatal(out)
 	}
+	if out["stream"] != true || out["store"] != false || out["input"] == nil {
+		t.Fatal(out)
+	}
 }

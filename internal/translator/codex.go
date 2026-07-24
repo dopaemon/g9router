@@ -38,9 +38,32 @@ func NormalizeCodexRequest(body map[string]any) map[string]any {
 		}
 		result["input"] = clean
 	}
-	if tools, ok := result["tools"].([]any); ok {
-		result["tools"] = normalizeCodexTools(tools)
+	if input, ok := result["input"].([]any); !ok || len(input) == 0 {
+		result["input"] = []any{map[string]any{"type": "message", "role": "user", "content": []any{map[string]any{"type": "input_text", "text": "..."}}}}
 	}
+	if tools, ok := result["tools"].([]any); ok {
+		validTools := normalizeCodexTools(tools)
+		result["tools"] = validTools
+		if choice, ok := result["tool_choice"].(map[string]any); ok && choice["type"] == "function" {
+			name, _ := choice["name"].(string)
+			if name == "" {
+				delete(result, "tool_choice")
+			} else {
+				found := false
+				for _, tool := range validTools {
+					if tool.(map[string]any)["name"] == name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					delete(result, "tool_choice")
+				}
+			}
+		}
+	}
+	result["stream"] = true
+	result["store"] = false
 	return result
 }
 
