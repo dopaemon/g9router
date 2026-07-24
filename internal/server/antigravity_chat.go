@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"g9router/internal/translator"
 )
 
 func (s *Server) proxyAntigravity(w http.ResponseWriter, incoming *http.Request, baseURL, model string, body map[string]any, accessToken string, providerData map[string]any) bool {
@@ -21,7 +24,8 @@ func (s *Server) proxyAntigravity(w http.ResponseWriter, incoming *http.Request,
 	}
 	project := stringValue(providerData["projectId"])
 	requestID := antigravityRequestID(providerData, model)
-	wrapped := map[string]any{"project": project, "model": model, "userAgent": "antigravity", "requestType": "agent", "requestId": requestID, "request": body}
+	geminiBody := translator.OpenAIToGemini(model, body)
+	wrapped := map[string]any{"project": project, "model": model, "userAgent": "antigravity", "requestType": "agent", "requestId": requestID, "request": geminiBody}
 	encoded, err := json.Marshal(wrapped)
 	if err != nil {
 		return false
@@ -49,8 +53,47 @@ func (s *Server) proxyAntigravity(w http.ResponseWriter, incoming *http.Request,
 		}
 	}
 	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	if stream {
+		_, _ = io.WriteString(w, antigravitySSE(response.Body, model))
+	} else {
+		var payload map[string]any
+		if json.NewDecoder(response.Body).Decode(&payload) != nil {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(translator.GeminiToOpenAI(model, payload))
+	}
 	return response.StatusCode < 500
+}
+
+func antigravitySSE(body io.Reader, model string) string {
+	var output strings.Builder
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 4096), 16<<20)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var payload map[string]any
+		if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &payload) != nil {
+			continue
+		}
+		translated := translator.GeminiToOpenAI(model, payload)
+		choices, _ := translated["choices"].([]any)
+		if len(choices) == 0 {
+			continue
+		}
+		choice, _ := choices[0].(map[string]any)
+		message, _ := choice["message"].(map[string]any)
+		content, _ := message["content"].(string)
+		chunk := map[string]any{"id": translated["id"], "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": content}, "finish_reason": nil}}}
+		encoded, _ := json.Marshal(chunk)
+		output.WriteString("data: ")
+		output.Write(encoded)
+		output.WriteString("\n\n")
+	}
+	output.WriteString("data: [DONE]\n\n")
+	return output.String()
 }
 
 func antigravityRequestID(providerData map[string]any, model string) string {
