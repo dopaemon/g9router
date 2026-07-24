@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"g9router/internal/providers"
 	"g9router/internal/web"
 )
 
@@ -20,13 +21,14 @@ type Options struct {
 type Server struct {
 	options Options
 	client  *http.Client
+	store   *providers.Store
 }
 
 func New(options Options) *Server {
 	if options.Upstream == "" {
 		options.Upstream = "https://api.openai.com/v1"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New("providers.json")}
 }
 
 func (s *Server) Run() error {
@@ -39,8 +41,35 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/v1/models", s.models)
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
+	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.store.List())
+	case http.MethodPost:
+		var provider providers.Provider
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&provider); err != nil || provider.ID == "" || provider.BaseURL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id and baseURL are required"})
+			return
+		}
+		if err := s.store.Upsert(provider); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	case http.MethodDelete:
+		if err := s.store.Delete(r.URL.Query().Get("id")); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
