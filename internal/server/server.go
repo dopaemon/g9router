@@ -3577,6 +3577,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "commandcode" && path == "/chat/completions" && s.commandCodeChat(w, r, body, provider.APIKey, request) {
 			return
 		}
+		if provider.ID == "perplexity-web" && path == "/chat/completions" && s.perplexityWebChat(w, r, request, provider.APIKey) {
+			return
+		}
 		if (provider.ID == "opencode" || provider.ID == "opencode-go") && path == "/chat/completions" && s.openCodeChat(w, r, body, provider.ID) {
 			return
 		}
