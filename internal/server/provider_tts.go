@@ -58,7 +58,8 @@ func (s *Server) binaryTTSSpeech(w http.ResponseWriter, r *http.Request, provide
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Authorization", "Token "+apiKey)
 	case "nvidia":
-		body, _ := json.Marshal(map[string]any{"input": map[string]string{"text": text}, "voice": nonEmpty(asString(input["voice"]), "default"), "model": model})
+		voice, _ := input["voice"].(string)
+		body, _ := json.Marshal(map[string]any{"input": map[string]string{"text": text}, "voice": nonEmpty(voice, "default"), "model": model})
 		request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, "https://integrate.api.nvidia.com/v1/audio/speech", strings.NewReader(string(body)))
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Authorization", "Bearer "+apiKey)
