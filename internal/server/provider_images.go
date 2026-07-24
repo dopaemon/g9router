@@ -113,7 +113,11 @@ func (s *Server) openAICompatibleImage(w http.ResponseWriter, r *http.Request, p
 	if endpoint == "" || model == "" || prompt == "" {
 		return false
 	}
-	body := map[string]any{"model": model, "prompt": prompt, "n": inputNumber(input["n"], 1), "size": nonEmpty(stringValue(input["size"]), "1024x1024")}
+	count := 1
+	if value, ok := input["n"].(float64); ok && value > 0 {
+		count = int(value)
+	}
+	body := map[string]any{"model": model, "prompt": prompt, "n": count, "size": nonEmpty(stringValue(input["size"]), "1024x1024")}
 	for _, key := range []string{"quality", "style", "response_format"} {
 		if value, ok := input[key]; ok && value != nil && value != "" {
 			body[key] = value
