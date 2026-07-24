@@ -38,7 +38,7 @@ func New(options Options) *Server {
 		options.ProviderPath = "g9router.db"
 	}
 	if options.OAuthPath == "" {
-		options.OAuthPath = "oauth.json"
+		options.OAuthPath = "g9router.db"
 	}
 	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath)}
 }

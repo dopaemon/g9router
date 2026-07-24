@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"g9router/internal/db"
 )
 
 type Credential struct {
@@ -18,14 +21,22 @@ type Credential struct {
 	Scope                                                       string
 }
 type Manager struct {
-	mu     sync.RWMutex
-	path   string
-	items  map[string]Credential
-	client *http.Client
+	mu       sync.RWMutex
+	path     string
+	items    map[string]Credential
+	client   *http.Client
+	database *sql.DB
 }
 
 func New(path string) *Manager {
 	manager := &Manager{path: path, items: map[string]Credential{}, client: &http.Client{Timeout: 30 * time.Second}}
+	if strings.HasSuffix(path, ".db") {
+		if database, err := db.Open(path); err == nil {
+			manager.database = database
+			_ = manager.loadDB()
+			return manager
+		}
+	}
 	_ = manager.load()
 	return manager
 }
@@ -44,6 +55,9 @@ func (m *Manager) Upsert(item Credential) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.items[item.ID] = item
+	if m.database != nil {
+		return m.saveDB(item)
+	}
 	return m.save()
 }
 func (m *Manager) Get(id string) (Credential, bool) {
@@ -112,6 +126,32 @@ func (m *Manager) save() error {
 		return err
 	}
 	return os.WriteFile(m.path, data, 0600)
+}
+func (m *Manager) loadDB() error {
+	rows, err := m.database.Query(`SELECT id,payload FROM oauth_credentials`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, payload string
+		if err := rows.Scan(&id, &payload); err != nil {
+			return err
+		}
+		var item Credential
+		if json.Unmarshal([]byte(payload), &item) == nil {
+			m.items[id] = item
+		}
+	}
+	return rows.Err()
+}
+func (m *Manager) saveDB(item Credential) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = m.database.Exec(`INSERT INTO oauth_credentials(id,payload,updated_at) VALUES(?,?,unixepoch()) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, item.ID, string(payload))
+	return err
 }
 func (c Credential) ExpiringSoon(now time.Time) bool {
 	return c.ExpiresAt > 0 && c.ExpiresAt-now.UnixMilli() < 5*60*1000
