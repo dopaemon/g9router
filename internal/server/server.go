@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/audio/speech", s.speech)
 	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
 	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
 	mux.HandleFunc("/api/health", s.health)
@@ -197,6 +198,78 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+}
+
+func (s *Server) suggestedModelsAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	endpoint, filter := r.URL.Query().Get("url"), r.URL.Query().Get("type")
+	if endpoint == "" || filter == "" {
+		writeJSON(w, 400, map[string]string{"error": "Missing url or type"})
+		return
+	}
+	if filter != "openrouter-free" && filter != "opencode-free" && filter != "mimo-free" {
+		writeJSON(w, 400, map[string]string{"error": "Unknown filter type"})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"data": []any{}})
+		return
+	}
+	response, err := s.client.Do(request)
+	if err != nil || response.StatusCode >= 300 {
+		if response != nil {
+			response.Body.Close()
+		}
+		writeJSON(w, 200, map[string]any{"data": []any{}})
+		return
+	}
+	defer response.Body.Close()
+	var payload any
+	if json.NewDecoder(response.Body).Decode(&payload) != nil {
+		writeJSON(w, 200, map[string]any{"data": []any{}})
+		return
+	}
+	raw := payload
+	if object, ok := payload.(map[string]any); ok {
+		if object["data"] != nil {
+			raw = object["data"]
+		} else if object["models"] != nil {
+			raw = object["models"]
+		}
+	}
+	values, _ := raw.([]any)
+	result := make([]map[string]any, 0)
+	for _, item := range values {
+		model, _ := item.(map[string]any)
+		id, _ := model["id"].(string)
+		name, _ := model["name"].(string)
+		switch filter {
+		case "openrouter-free":
+			pricing, _ := model["pricing"].(map[string]any)
+			prompt, _ := pricing["prompt"].(string)
+			completion, _ := pricing["completion"].(string)
+			context, _ := model["context_length"].(float64)
+			if prompt != "0" || completion != "0" || context < 200000 {
+				continue
+			}
+			result = append(result, map[string]any{"id": id, "name": name, "contextLength": context})
+		case "opencode-free":
+			if !strings.HasSuffix(id, "-free") && id != "big-pickle" {
+				continue
+			}
+			result = append(result, map[string]any{"id": id, "name": id})
+		case "mimo-free":
+			if !strings.HasPrefix(id, "mimo") && !strings.Contains(strings.ToLower(name), "mimo") {
+				continue
+			}
+			result = append(result, map[string]any{"id": id, "name": valueOr(name, id)})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"data": result})
 }
 
 func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id string) {
