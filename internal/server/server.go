@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"g9router/internal/web"
 )
 
 type Options struct {
@@ -37,6 +39,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/v1/models", s.models)
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
+	mux.Handle("/", web.Handler())
 	return logging(mux)
 }
 
