@@ -159,6 +159,42 @@ func (m *Manager) refreshKiro(ctx context.Context, item Credential) (Credential,
 	clientID, _ := data["clientId"].(string)
 	clientSecret, _ := data["clientSecret"].(string)
 	region, _ := data["region"].(string)
+	authMethod, _ := data["authMethod"].(string)
+	if authMethod == "external_idp" {
+		endpoint, _ := data["tokenEndpoint"].(string)
+		scope, _ := data["scope"].(string)
+		form := url.Values{"grant_type": {"refresh_token"}, "client_id": {clientID}, "refresh_token": {item.RefreshToken}, "scope": {scope}}
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+		if err != nil {
+			return item, err
+		}
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("Accept", "application/json")
+		response, err := m.client.Do(request)
+		if err != nil {
+			return item, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode >= 300 {
+			return item, fmt.Errorf("token refresh status %s", response.Status)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+			return item, err
+		}
+		accessToken := stringFrom(payload, "access_token", "accessToken")
+		if accessToken == "" {
+			return item, fmt.Errorf("token response missing access token")
+		}
+		item.AccessToken = accessToken
+		if refreshed := stringFrom(payload, "refresh_token", "refreshToken"); refreshed != "" {
+			item.RefreshToken = refreshed
+		}
+		if expires := numberFrom(payload, "expires_in", "expiresIn"); expires > 0 {
+			item.ExpiresAt = time.Now().Add(time.Duration(expires) * time.Second).UnixMilli()
+		}
+		return item, m.Upsert(item)
+	}
 	var endpoint, contentType string
 	var body []byte
 	if clientID != "" && clientSecret != "" {
