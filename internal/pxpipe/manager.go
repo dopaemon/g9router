@@ -29,8 +29,15 @@ func New() *Manager { return &Manager{} }
 func (m *Manager) Status() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return map[string]any{"installed": false, "loaded": m.loaded, "available": false, "module": "go-fail-open"}
+	installDir := ""
+	if root, err := os.UserCacheDir(); err == nil {
+		installDir = filepath.Join(root, "g9router", "pxpipe")
+	}
+	installed := installDir != "" && fileExists(filepath.Join(installDir, "node_modules", "pxpipe-proxy", "package.json"))
+	return map[string]any{"installed": installed, "loaded": m.loaded, "available": false, "module": "go-fail-open", "installPath": installDir}
 }
+
+func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
 
 func (m *Manager) Start() map[string]any {
 	m.mu.Lock()
