@@ -3513,6 +3513,20 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		providerBody := body
 		providerPath := path
 		translateResponse := false
+		if provider.ID == "codebuddy-cn" && path == "/chat/completions" {
+			codeBuddyRequest := map[string]any{}
+			if json.Unmarshal(body, &codeBuddyRequest) == nil {
+				codeBuddyRequest["stream"] = true
+				if effort, ok := codeBuddyRequest["reasoning_effort"].(string); ok {
+					if effort == "none" || effort == "off" {
+						delete(codeBuddyRequest, "reasoning_effort")
+					} else if effort != "" {
+						codeBuddyRequest["reasoning_summary"] = "auto"
+					}
+				}
+				providerBody, _ = json.Marshal(codeBuddyRequest)
+			}
+		}
 		if path == "/responses" && provider.APIType == "openai-chat" {
 			var responsesBody map[string]any
 			if json.Unmarshal(body, &responsesBody) == nil {
