@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"g9router/internal/oauth"
 	"g9router/internal/providers"
 	"g9router/internal/translator"
 	"g9router/internal/usage"
@@ -18,7 +19,7 @@ import (
 )
 
 type Options struct {
-	Addr, Upstream, APIKey, ProviderPath string
+	Addr, Upstream, APIKey, ProviderPath, OAuthPath string
 }
 
 type Server struct {
@@ -26,6 +27,7 @@ type Server struct {
 	client  *http.Client
 	store   *providers.Store
 	usage   *usage.Store
+	oauth   *oauth.Manager
 }
 
 func New(options Options) *Server {
@@ -35,7 +37,10 @@ func New(options Options) *Server {
 	if options.ProviderPath == "" {
 		options.ProviderPath = "providers.json"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: &usage.Store{}}
+	if options.OAuthPath == "" {
+		options.OAuthPath = "oauth.json"
+	}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: &usage.Store{}, oauth: oauth.New(options.OAuthPath)}
 }
 
 func (s *Server) Run() error {
@@ -52,8 +57,39 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/messages", s.messages)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
+	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.oauth.List())
+	case http.MethodPost:
+		var credential oauth.Credential
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&credential); err != nil || credential.ID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+			return
+		}
+		if err := s.oauth.Upsert(credential); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	case http.MethodPut:
+		id := r.URL.Query().Get("id")
+		credential, err := s.oauth.Refresh(r.Context(), id)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		credential.AccessToken = ""
+		credential.RefreshToken = ""
+		writeJSON(w, http.StatusOK, credential)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (s *Server) usageAPI(w http.ResponseWriter, r *http.Request) {
