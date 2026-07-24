@@ -63,6 +63,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/v1/responses", s.responses)
 	mux.HandleFunc("/v1/messages", s.messages)
+	mux.HandleFunc("/v1/embeddings", s.embeddings)
+	mux.HandleFunc("/v1/images/generations", s.images)
+	mux.HandleFunc("/v1/audio/transcriptions", s.transcriptions)
+	mux.HandleFunc("/v1/audio/speech", s.speech)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
@@ -220,6 +224,31 @@ func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) responses(w http.ResponseWriter, r *http.Request) { s.forwardJSON(w, r, "/responses") }
 func (s *Server) messages(w http.ResponseWriter, r *http.Request)  { s.forwardJSON(w, r, "/messages") }
+func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
+	s.forwardRaw(w, r, "/embeddings")
+}
+func (s *Server) images(w http.ResponseWriter, r *http.Request) {
+	s.forwardRaw(w, r, "/images/generations")
+}
+func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
+	s.forwardRaw(w, r, "/audio/transcriptions")
+}
+func (s *Server) speech(w http.ResponseWriter, r *http.Request) { s.forwardRaw(w, r, "/audio/speech") }
+
+func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot read request body"})
+		return
+	}
+	if !s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey) {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"})
+	}
+}
 
 func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string) {
 	s.usage.Add(1, 0, 0, 0)
