@@ -105,7 +105,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/models/", s.modelCatalogAPI)
 	mux.HandleFunc("/api/v1/models/", s.modelCatalogAPI)
 	mux.HandleFunc("/v1beta/models", s.betaModels)
+	mux.HandleFunc("/v1beta/models/", s.betaModelResource)
 	mux.HandleFunc("/api/v1beta/models", s.betaModels)
+	mux.HandleFunc("/api/v1beta/models/", s.betaModelResource)
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/api/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/v1/responses", s.responses)
@@ -3169,7 +3171,42 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	}
 	s.proxy(w, r, s.options.Upstream, "/models", http.MethodGet, nil, "")
 }
-func (s *Server) betaModels(w http.ResponseWriter, r *http.Request) { s.models(w, r) }
+func (s *Server) betaModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	seen := map[string]bool{}
+	models := make([]map[string]any, 0)
+	for provider, descriptor := range providers.Registry {
+		for _, model := range descriptor.Models {
+			name := "models/" + provider + "/" + model.ID
+			if !seen[name] {
+				seen[name] = true
+				models = append(models, map[string]any{"name": name, "displayName": valueOr(model.Name, model.ID), "description": provider + " model: " + valueOr(model.Name, model.ID), "supportedGenerationMethods": []string{"generateContent"}, "inputTokenLimit": 128000, "outputTokenLimit": 8192})
+			}
+			if provider == "gemini" {
+				name = "models/" + model.ID
+				if !seen[name] {
+					seen[name] = true
+					models = append(models, map[string]any{"name": name, "displayName": valueOr(model.Name, model.ID), "description": "Gemini model: " + valueOr(model.Name, model.ID), "supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"}, "inputTokenLimit": 128000, "outputTokenLimit": 8192})
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+func (s *Server) betaModelResource(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusNotImplemented, map[string]any{"error": map[string]any{"message": "Gemini model generation is not available in this Go build", "code": http.StatusNotImplemented}})
+}
 func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
