@@ -37,7 +37,7 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		fmt.Fprintln(errOut, "❌", err)
 		return 1
 	}
-	if help {
+	if help != "" {
 		fmt.Fprintln(out, helpText())
 		return 0
 	}
@@ -270,11 +270,12 @@ func download(ctx context.Context, client *http.Client, target, output string) e
 			return err
 		}
 		if res.StatusCode >= 300 && res.StatusCode < 400 && res.Header.Get("Location") != "" {
-			target, err = res.Location()
+			location, locationErr := res.Location()
 			res.Body.Close()
-			if err != nil {
-				return err
+			if locationErr != nil {
+				return locationErr
 			}
+			target = location.String()
 			continue
 		}
 		if res.StatusCode != http.StatusOK {
