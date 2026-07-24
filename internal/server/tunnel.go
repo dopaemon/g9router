@@ -128,7 +128,15 @@ func (s *Server) tailscaleInstallAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if runtime.GOOS == "windows" {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "automatic Windows installation is unavailable"})
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+		defer cancel()
+		command := exec.CommandContext(ctx, "winget", "install", "--id", "Tailscale.Tailscale", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+		output, err := command.CombinedOutput()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": strings.TrimSpace(string(output))})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "installed": tailscaleInstalled(), "output": strings.TrimSpace(string(output))})
 		return
 	}
 	var input struct {
