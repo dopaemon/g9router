@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -10,10 +11,14 @@ import (
 	"strconv"
 
 	"g9router/internal/auth"
+	"g9router/internal/cli/xai"
 	"g9router/internal/server"
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "xai" && os.Args[2] == "video" {
+		os.Exit(xai.Run(context.Background(), os.Args[3:], os.Stdout, os.Stderr))
+	}
 	port := flag.Int("port", 0, "port to run the server")
 	host := flag.String("host", "", "host to bind")
 	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
