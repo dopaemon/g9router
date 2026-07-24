@@ -25,14 +25,21 @@ func (s *Server) grokWebChat(w http.ResponseWriter, r *http.Request, request map
 		modelName, modelMode = "grok-4", "MODEL_MODE_GROK_4_THINKING"
 	}
 	parts := make([]string, 0, len(messages))
-	for _, raw := range messages {
+	lastUser := -1
+	for index, raw := range messages {
+		message, _ := raw.(map[string]any)
+		if stringValue(message["role"]) == "user" && stringValue(message["content"]) != "" {
+			lastUser = index
+		}
+	}
+	for index, raw := range messages {
 		message, _ := raw.(map[string]any)
 		content := stringValue(message["content"])
 		if content == "" {
 			continue
 		}
 		role := stringValue(message["role"])
-		if role == "user" && len(parts) == len(messages)-1 {
+		if role == "user" && index == lastUser {
 			parts = append(parts, content)
 		} else {
 			parts = append(parts, role+": "+content)
