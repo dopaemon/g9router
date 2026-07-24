@@ -41,7 +41,7 @@ func New() *Manager { return &Manager{} }
 
 func (m *Manager) Status() Status { m.mu.Lock(); defer m.mu.Unlock(); return m.status }
 
-func (m *Manager) Start(baseURL string) (Status, error) {
+func (m *Manager) Start(baseURL, apiKey string) (Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.server != nil {
@@ -59,6 +59,13 @@ func (m *Manager) Start(baseURL string) (Status, error) {
 		return Status{}, err
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(request *http.Request) {
+		originalDirector(request)
+		if apiKey != "" && request.Header.Get("Authorization") == "" {
+			request.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 	}
