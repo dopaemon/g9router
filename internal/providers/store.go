@@ -3,6 +3,7 @@ package providers
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -14,6 +15,23 @@ type Store struct {
 	mu    sync.RWMutex
 	path  string
 	items []Provider
+}
+
+func (s *Store) Resolve(model string) []Provider {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var matched, fallback []Provider
+	for _, item := range s.items {
+		if !item.Enabled {
+			continue
+		}
+		if strings.HasPrefix(model, item.ID+"/") {
+			matched = append(matched, item)
+		} else {
+			fallback = append(fallback, item)
+		}
+	}
+	return append(matched, fallback...)
 }
 
 func New(path string) *Store { store := &Store{path: path}; _ = store.load(); return store }

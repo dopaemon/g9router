@@ -41,6 +41,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/v1/models", s.models)
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
+	mux.HandleFunc("/v1/responses", s.responses)
+	mux.HandleFunc("/v1/messages", s.messages)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
@@ -81,6 +83,13 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
+	s.forwardJSON(w, r, "/chat/completions")
+}
+
+func (s *Server) responses(w http.ResponseWriter, r *http.Request) { s.forwardJSON(w, r, "/responses") }
+func (s *Server) messages(w http.ResponseWriter, r *http.Request)  { s.forwardJSON(w, r, "/messages") }
+
+func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -99,20 +108,30 @@ func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model is required"})
 		return
 	}
-	s.proxy(w, r, "/chat/completions", http.MethodPost, body)
+	model, _ := request["model"].(string)
+	providers := s.store.Resolve(model)
+	if len(providers) == 0 {
+		s.proxy(w, r, s.options.Upstream, path, body)
+		return
+	}
+	for _, provider := range providers {
+		if s.proxy(w, r, provider.BaseURL, path, body) {
+			return
+		}
+	}
+	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
 }
 
-func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, path, method string, body []byte) {
+func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte) bool {
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {
 		reader = strings.NewReader(string(body))
 	}
-	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(s.options.Upstream, "/")+path, reader)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, reader)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
+		return false
 	}
 	request.Header.Set("Accept", incoming.Header.Get("Accept"))
 	request.Header.Set("Content-Type", "application/json")
@@ -123,10 +142,12 @@ func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, path, meth
 	}
 	response, err := s.client.Do(request)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
+		return false
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
 	for key, values := range response.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
@@ -136,10 +157,11 @@ func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, path, meth
 	if response.Header.Get("Content-Type") == "text/event-stream" {
 		if flusher, ok := w.(http.Flusher); ok {
 			streamCopy(w, response.Body, flusher)
-			return
+			return true
 		}
 	}
 	_, _ = io.Copy(w, response.Body)
+	return true
 }
 
 func streamCopy(w io.Writer, body io.Reader, flusher http.Flusher) {
