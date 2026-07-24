@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"g9router/internal/providers"
+	"g9router/internal/translator"
 	"g9router/internal/usage"
 	"g9router/internal/web"
 )
@@ -127,7 +128,17 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		return
 	}
 	for _, provider := range providers {
-		if s.proxy(w, r, provider.BaseURL, path, http.MethodPost, body, provider.APIKey) {
+		providerBody := body
+		if path == "/messages" && provider.APIType == "openai" {
+			var claude map[string]any
+			if json.Unmarshal(body, &claude) == nil {
+				stream, _ := claude["stream"].(bool)
+				model, _ := claude["model"].(string)
+				translated, _ := json.Marshal(translator.ClaudeToOpenAI(model, claude, stream))
+				providerBody = translated
+			}
+		}
+		if s.proxy(w, r, provider.BaseURL, path, http.MethodPost, providerBody, provider.APIKey) {
 			return
 		}
 	}

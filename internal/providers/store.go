@@ -8,8 +8,8 @@ import (
 )
 
 type Provider struct {
-	ID, Name, BaseURL, APIKey string
-	Enabled                   bool `json:"enabled"`
+	ID, Name, BaseURL, APIKey, APIType string
+	Enabled                            bool `json:"enabled"`
 }
 type Store struct {
 	mu    sync.RWMutex
