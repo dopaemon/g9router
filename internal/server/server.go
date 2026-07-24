@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/copilot-settings", s.copilotSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/droid-settings", s.droidSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -831,6 +832,144 @@ func (s *Server) copilotSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "9Router removed from Copilot config"})
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir, path := filepath.Join(home, ".factory"), filepath.Join(home, ".factory", "settings.json")
+	read := func() map[string]any {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return map[string]any{}
+		}
+		raw = regexp.MustCompile(`,\s*([}\]])`).ReplaceAll(raw, []byte(`$1`))
+		var settings map[string]any
+		if json.Unmarshal(raw, &settings) != nil {
+			return map[string]any{}
+		}
+		return settings
+	}
+	hasConfig := func(settings map[string]any) bool {
+		models, _ := settings["customModels"].([]any)
+		for _, raw := range models {
+			if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+				return true
+			}
+		}
+		return false
+	}
+	switch r.Method {
+	case http.MethodGet:
+		settings := read()
+		_, cliErr := exec.LookPath("droid")
+		_, fileErr := os.Stat(path)
+		if cliErr != nil && fileErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "Factory Droid CLI is not installed"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": settings, "has9Router": hasConfig(settings), "settingsPath": path})
+	case http.MethodPost:
+		var input struct {
+			BaseURL     string   `json:"baseUrl"`
+			APIKey      string   `json:"apiKey"`
+			Model       string   `json:"model"`
+			Models      []string `json:"models"`
+			ActiveModel *string  `json:"activeModel"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		models := input.Models
+		if len(models) == 0 && input.Model != "" {
+			models = []string{input.Model}
+		}
+		if input.BaseURL == "" || len(models) == 0 {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl and at least one model are required"})
+			return
+		}
+		settings := read()
+		existing, _ := settings["customModels"].([]any)
+		filtered := make([]any, 0, len(existing)+len(models))
+		for _, raw := range existing {
+			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+				filtered = append(filtered, raw)
+			}
+		}
+		baseURL := strings.TrimRight(input.BaseURL, "/")
+		if !strings.HasSuffix(baseURL, "/v1") {
+			baseURL += "/v1"
+		}
+		key := input.APIKey
+		if key == "" {
+			key = "your_api_key"
+		}
+		active := models[0]
+		if input.ActiveModel != nil {
+			active = *input.ActiveModel
+		}
+		for index, model := range models {
+			if model == "" {
+				continue
+			}
+			filtered = append(filtered, map[string]any{"model": model, "id": fmt.Sprintf("custom:9Router-%d", index), "index": index, "baseUrl": baseURL, "apiKey": key, "displayName": model, "maxOutputTokens": 131072, "noImageSupport": false, "provider": "openai"})
+		}
+		if active != "" {
+			for index, raw := range filtered {
+				entry, ok := raw.(map[string]any)
+				if ok && entry["model"] == active {
+					filtered = append([]any{entry}, append(filtered[:index], filtered[index+1:]...)...)
+					break
+				}
+			}
+			for index, raw := range filtered {
+				if entry, ok := raw.(map[string]any); ok && strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+					entry["index"] = index
+				}
+			}
+		}
+		settings["customModels"] = filtered
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		raw, _ := json.MarshalIndent(settings, "", "  ")
+		if err := os.WriteFile(path, raw, 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Factory Droid settings applied successfully!", "settingsPath": path})
+	case http.MethodDelete:
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No settings file to reset"})
+			return
+		}
+		settings := read()
+		models, _ := settings["customModels"].([]any)
+		filtered := make([]any, 0, len(models))
+		for _, raw := range models {
+			if entry, ok := raw.(map[string]any); !ok || !strings.HasPrefix(stringValue(entry["id"]), "custom:9Router") {
+				filtered = append(filtered, raw)
+			}
+		}
+		if len(filtered) == 0 {
+			delete(settings, "customModels")
+		} else {
+			settings["customModels"] = filtered
+		}
+		raw, _ := json.MarshalIndent(settings, "", "  ")
+		if err := os.WriteFile(path, raw, 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
 }
 
