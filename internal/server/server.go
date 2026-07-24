@@ -1546,6 +1546,32 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 
 func arrayValue(value any) []any { values, _ := value.([]any); return values }
 
+func cursorText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	parts, ok := value.([]any)
+	if !ok {
+		return ""
+	}
+	result := make([]string, 0, len(parts))
+	for _, raw := range parts {
+		part, _ := raw.(map[string]any)
+		if text, ok := part["text"].(string); ok {
+			result = append(result, text)
+		}
+	}
+	return strings.Join(result, "")
+}
+
+func randomBytes(length int) []byte {
+	result := make([]byte, length)
+	if _, err := rand.Read(result); err != nil {
+		return make([]byte, length)
+	}
+	return result
+}
+
 func (s *Server) proxyResponses(w http.ResponseWriter, incoming *http.Request, baseURL string, body []byte, apiKey string) bool {
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
@@ -1750,7 +1776,7 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	for _, raw := range arrayValue(request["messages"]) {
 		message, _ := raw.(map[string]any)
 		role, _ := message["role"].(string)
-		content := textValue(message["content"])
+		content := cursorText(message["content"])
 		if content != "" {
 			messages = append(messages, map[string]string{"role": role, "content": content})
 		}
@@ -1764,14 +1790,14 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	requestBody := cursor.Body(messages, model, ghostMode)
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/"), strings.NewReader(string(requestBody)))
+	upstreamRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/"), strings.NewReader(string(requestBody)))
 	if err != nil {
 		return false
 	}
 	for key, value := range cursor.Headers(apiKey, machineID, ghostMode) {
-		request.Header.Set(key, value)
+		upstreamRequest.Header.Set(key, value)
 	}
-	response, err := s.client.Do(request)
+	response, err := s.client.Do(upstreamRequest)
 	if err != nil || response == nil {
 		return false
 	}
@@ -1786,7 +1812,7 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	if !ok {
 		return false
 	}
-	state := "chatcmpl-" + randomHex(12)
+	state := "chatcmpl-" + hex.EncodeToString(randomBytes(12))
 	created := time.Now().Unix()
 	all := make([]byte, 0)
 	buffer := make([]byte, 32*1024)
