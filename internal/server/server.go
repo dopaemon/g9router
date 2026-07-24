@@ -17,6 +17,7 @@ import (
 
 	"g9router/internal/auth"
 	"g9router/internal/db"
+	"g9router/internal/executor"
 	"g9router/internal/oauth"
 	"g9router/internal/oidc"
 	"g9router/internal/providers"
@@ -618,6 +619,9 @@ func (s *Server) proxyClaudeStream(w http.ResponseWriter, response *http.Respons
 }
 
 func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, path, method string, body []byte, apiKey string) bool {
+	if method == http.MethodPost {
+		return s.proxyWithExecutor(w, incoming, baseURL, path, body, apiKey)
+	}
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	var reader io.Reader
@@ -660,6 +664,28 @@ func (s *Server) proxy(w http.ResponseWriter, incoming *http.Request, baseURL, p
 	}
 	_, _ = io.Copy(w, response.Body)
 	return true
+}
+
+func (s *Server) proxyWithExecutor(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
+	headers := map[string]string{}
+	if authorization := incoming.Header.Get("Authorization"); authorization != "" {
+		headers["Authorization"] = authorization
+	}
+	result, err := executor.Execute(incoming.Context(), s.client, executor.Config{BaseURLs: []string{baseURL}, Headers: headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, path, body, incoming.Header.Get("Accept") == "text/event-stream")
+	if err != nil {
+		return false
+	}
+	for key, values := range result.Header {
+		if key == "Content-Length" || key == "Content-Encoding" {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(result.Status)
+	_, _ = w.Write(result.Body)
+	return result.Status < 500
 }
 
 func streamCopy(w io.Writer, body io.Reader, flusher http.Flusher) {
