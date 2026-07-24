@@ -16,6 +16,7 @@ var audioVoiceAliases = map[string]string{
 	"minimax-cn":   "minimax-cn",
 	"edge-tts":     "edge-tts",
 	"local-device": "local-device",
+	"gemini":       "gemini",
 }
 
 func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +49,7 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		s.minimaxVoicesAPI(w, r, alias)
 		return
 	}
-	if provider != "edge-tts" && provider != "elevenlabs" && provider != "local-device" {
+	if provider != "edge-tts" && provider != "elevenlabs" && provider != "local-device" && provider != "gemini" {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"message": "voice provider is not implemented", "type": "server_error"}})
 		return
 	}
