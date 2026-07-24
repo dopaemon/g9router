@@ -15,6 +15,9 @@ func TestProviderModelsEndpoint(t *testing.T) {
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"object":"list","data":[{"id":"demo-model"}]}`)
 	}))

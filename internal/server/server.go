@@ -154,15 +154,8 @@ func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	var provider *providers.Provider
-	for _, item := range s.store.List() {
-		if item.ID == id {
-			copy := item
-			provider = &copy
-			break
-		}
-	}
-	if provider == nil {
+	provider, found := s.store.Find(id)
+	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
 	}
@@ -195,15 +188,8 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	var provider *providers.Provider
-	for _, item := range s.store.List() {
-		if item.ID == id {
-			copy := item
-			provider = &copy
-			break
-		}
-	}
-	if provider == nil {
+	provider, found := s.store.Find(id)
+	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
 		return
 	}
