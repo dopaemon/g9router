@@ -23,6 +23,21 @@ type ServiceAccount struct {
 	PrivateKey  string `json:"private_key"`
 	TokenURI    string `json:"token_uri"`
 }
+type AuthorizedUser struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	RefreshToken string `json:"refresh_token"`
+	TokenURI     string `json:"token_uri"`
+	QuotaProject string `json:"quota_project_id"`
+}
+
+func ParseAuthorizedUser(raw string) (AuthorizedUser, error) {
+	var user AuthorizedUser
+	if err := json.Unmarshal([]byte(raw), &user); err != nil || user.ClientID == "" || user.ClientSecret == "" || user.RefreshToken == "" {
+		return user, fmt.Errorf("invalid authorized user")
+	}
+	return user, nil
+}
 
 func ParseServiceAccount(raw string) (ServiceAccount, error) {
 	var account ServiceAccount
@@ -40,6 +55,9 @@ func ParseServiceAccount(raw string) (ServiceAccount, error) {
 
 func AccessToken(ctx context.Context, client *http.Client, raw string) (string, error) {
 	account, err := ParseServiceAccount(raw)
+	if err != nil {
+		return authorizedUserToken(ctx, client, raw)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -70,6 +88,43 @@ func AccessToken(ctx context.Context, client *http.Client, raw string) (string, 
 	}
 	form := url.Values{"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"}, "assertion": {unsigned + "." + b64(signature)}}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, account.TokenURI, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 300 {
+		return "", fmt.Errorf("token status %s", response.Status)
+	}
+	var payload struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	if payload.AccessToken == "" {
+		return "", fmt.Errorf("token response missing access_token")
+	}
+	return payload.AccessToken, nil
+}
+
+func authorizedUserToken(ctx context.Context, client *http.Client, raw string) (string, error) {
+	user, err := ParseAuthorizedUser(raw)
+	if err != nil {
+		return "", err
+	}
+	if user.TokenURI == "" {
+		user.TokenURI = "https://oauth2.googleapis.com/token"
+	}
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {user.RefreshToken}, "client_id": {user.ClientID}, "client_secret": {user.ClientSecret}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, user.TokenURI, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}

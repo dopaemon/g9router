@@ -835,8 +835,15 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, oauthToken bool, specific map[string]any) bool {
 	if !oauthToken && strings.HasPrefix(strings.TrimSpace(apiKey), "{") {
 		account, err := vertex.ParseServiceAccount(apiKey)
+		projectID := ""
 		if err != nil {
-			return false
+			user, userErr := vertex.ParseAuthorizedUser(apiKey)
+			if userErr != nil {
+				return false
+			}
+			projectID = user.QuotaProject
+		} else {
+			projectID = account.ProjectID
 		}
 		token, err := vertex.AccessToken(incoming.Context(), s.client, apiKey)
 		if err != nil {
@@ -847,7 +854,7 @@ func (s *Server) proxyVertex(w http.ResponseWriter, incoming *http.Request, base
 			specific = map[string]any{}
 		}
 		if specific["projectId"] == nil {
-			specific["projectId"] = account.ProjectID
+			specific["projectId"] = projectID
 		}
 	}
 	body, err := json.Marshal(translator.OpenAIToVertex(model, request))
