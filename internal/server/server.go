@@ -3563,6 +3563,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		if provider.ID == "commandcode" && path == "/chat/completions" && s.commandCodeChat(w, r, body, provider.APIKey, request) {
 			return
 		}
+		if (provider.ID == "opencode" || provider.ID == "opencode-go") && path == "/chat/completions" && s.openCodeChat(w, r, body, provider.ID) {
+			return
+		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
 			translateResponse = true
 			providerPath = "/chat/completions"
