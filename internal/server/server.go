@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/headroom/stop", s.headroomStopAPI)
 	mux.HandleFunc("/api/headroom/restart", s.headroomRestartAPI)
 	mux.HandleFunc("/api/headroom/proxy/", s.headroomProxyAPI)
+	mux.HandleFunc("/api/headroom/extras", s.headroomExtrasAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -1045,6 +1046,76 @@ func (s *Server) headroomProxyAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(w, response.Body)
+}
+
+func (s *Server) headroomExtrasAPI(w http.ResponseWriter, r *http.Request) {
+	allowed := map[string]bool{"code": true, "ml": true}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		python, err = exec.LookPath("python")
+	}
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"available": []string{"code", "ml"}, "python": false, "installed": map[string]bool{}})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		installed := map[string]bool{}
+		output, _ := exec.Command(python, "-m", "pip", "list", "--format=json").Output()
+		var packages []map[string]any
+		if json.Unmarshal(output, &packages) == nil {
+			for _, pkg := range packages {
+				name, _ := pkg["name"].(string)
+				if name == "tree-sitter" || name == "tree-sitter-language-pack" {
+					installed["code"] = true
+				}
+				if name == "torch" || name == "huggingface-hub" {
+					installed["ml"] = true
+				}
+			}
+		}
+		writeJSON(w, 200, map[string]any{"available": []string{"code", "ml"}, "python": true, "installed": installed})
+	case http.MethodPost, http.MethodDelete:
+		var input struct {
+			Extras []string `json:"extras"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input)
+		requested := []string{}
+		for _, extra := range input.Extras {
+			if allowed[extra] {
+				requested = append(requested, extra)
+			}
+		}
+		if len(requested) == 0 {
+			writeJSON(w, 400, map[string]string{"error": "no valid extras"})
+			return
+		}
+		args := []string{"-m", "pip"}
+		if r.Method == http.MethodPost {
+			spec := "headroom-ai[proxy," + strings.Join(requested, ",") + "]"
+			args = append(args, "install", "--upgrade", spec)
+		} else {
+			packages := []string{}
+			for _, extra := range requested {
+				if extra == "code" {
+					packages = append(packages, "tree-sitter", "tree-sitter-language-pack")
+				}
+				if extra == "ml" {
+					packages = append(packages, "torch", "huggingface-hub")
+				}
+			}
+			args = append(args, "uninstall", "-y")
+			args = append(args, packages...)
+		}
+		command := exec.Command(python, args...)
+		if output, err := command.CombinedOutput(); err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error(), "output": string(output)})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "extras": requested})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func replaceTOMLLine(content, prefix, replacement string) string {
