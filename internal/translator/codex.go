@@ -1,0 +1,87 @@
+package translator
+
+import "strings"
+
+var codexResponseFields = map[string]bool{"model": true, "input": true, "instructions": true, "tools": true, "tool_choice": true, "stream": true, "store": true, "reasoning": true, "service_tier": true, "include": true, "prompt_cache_key": true, "client_metadata": true, "text": true}
+
+func NormalizeCodexRequest(body map[string]any) map[string]any {
+	result := map[string]any{}
+	for key, value := range body {
+		if codexResponseFields[key] {
+			result[key] = value
+		}
+	}
+	if instructions, ok := result["instructions"].(string); ok && instructions != "" {
+		result["instructions"] = instructions
+	}
+	if items, ok := result["input"].([]any); ok {
+		clean := make([]any, 0, len(items))
+		for _, raw := range items {
+			if id, ok := raw.(string); ok && (strings.HasPrefix(id, "rs_") || strings.HasPrefix(id, "fc_") || strings.HasPrefix(id, "resp_") || strings.HasPrefix(id, "msg_")) {
+				continue
+			}
+			item, ok := raw.(map[string]any)
+			if !ok {
+				clean = append(clean, raw)
+				continue
+			}
+			if kind, _ := item["type"].(string); kind == "item_reference" {
+				continue
+			}
+			if id, ok := item["id"].(string); ok && (strings.HasPrefix(id, "rs_") || strings.HasPrefix(id, "fc_") || strings.HasPrefix(id, "resp_") || strings.HasPrefix(id, "msg_")) {
+				delete(item, "id")
+			}
+			if role, _ := item["role"].(string); role == "system" {
+				item["role"] = "developer"
+			}
+			clean = append(clean, item)
+		}
+		result["input"] = clean
+	}
+	if tools, ok := result["tools"].([]any); ok {
+		result["tools"] = normalizeCodexTools(tools)
+	}
+	return result
+}
+
+func normalizeCodexTools(tools []any) []any {
+	result := make([]any, 0, len(tools))
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		kind, _ := tool["type"].(string)
+		if kind != "function" {
+			if kind == "custom" || kind == "web_search" || kind == "web_search_preview" || kind == "file_search" || kind == "computer" || kind == "code_interpreter" || kind == "mcp" {
+				result = append(result, tool)
+			}
+			continue
+		}
+		fn, _ := tool["function"].(map[string]any)
+		name, _ := tool["name"].(string)
+		if name == "" {
+			name, _ = fn["name"].(string)
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if len(name) > 128 {
+			name = name[:128]
+		}
+		description, _ := tool["description"].(string)
+		if description == "" {
+			description, _ = fn["description"].(string)
+		}
+		parameters := tool["parameters"]
+		if parameters == nil {
+			parameters = fn["parameters"]
+		}
+		if parameters == nil {
+			parameters = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		result = append(result, map[string]any{"type": "function", "name": name, "description": description, "parameters": parameters, "strict": tool["strict"]})
+	}
+	return result
+}
