@@ -218,6 +218,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
+	mux.HandleFunc("/api/provider-nodes/validate", s.validateProviderNodeAPI)
 	mux.HandleFunc("/api/provider-nodes/", s.providerNodeResourceAPI)
 	mux.HandleFunc("/api/proxy-pools", s.proxyPoolsAPI)
 	mux.HandleFunc("/api/proxy-pools/", s.proxyPoolResourceAPI)
