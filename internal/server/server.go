@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -2044,6 +2045,11 @@ func (s *Server) proxyWithExecutor(w http.ResponseWriter, incoming *http.Request
 	headers := map[string]string{}
 	if authorization := incoming.Header.Get("Authorization"); authorization != "" {
 		headers["Authorization"] = authorization
+	}
+	if strings.Contains(baseURL, "chatgpt.com/backend-api/codex") {
+		sum := sha256.Sum256(body)
+		headers["originator"] = "codex_cli_rs"
+		headers["session_id"] = hex.EncodeToString(sum[:16])
 	}
 	result, err := executor.Execute(incoming.Context(), s.client, executor.Config{BaseURLs: []string{baseURL}, Headers: headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, path, body, incoming.Header.Get("Accept") == "text/event-stream")
 	if err != nil {
