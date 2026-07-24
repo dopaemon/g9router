@@ -2176,6 +2176,10 @@ func (s *Server) providerNodesAPI(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) providerNodeResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/provider-nodes/"), "/")
+	if id == "validate" {
+		s.validateProviderNodeAPI(w, r)
+		return
+	}
 	if id == "" || strings.Contains(id, "/") {
 		writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
 		return
@@ -2218,6 +2222,77 @@ func (s *Server) providerNodeResourceAPI(w http.ResponseWriter, r *http.Request)
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) validateProviderNodeAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		BaseURL string `json:"baseUrl"`
+		APIKey  string `json:"apiKey"`
+		ModelID string `json:"modelId"`
+		Type    string `json:"type"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" {
+		writeJSON(w, 400, map[string]string{"error": "baseUrl is required"})
+		return
+	}
+	base := strings.TrimRight(input.BaseURL, "/")
+	if input.Type == "anthropic-compatible" {
+		base = strings.TrimSuffix(base, "/messages")
+	}
+	if input.Type == "custom-embedding" {
+		base = strings.TrimSuffix(base, "/embeddings")
+	}
+	probe := func(method, endpoint string, payload any) (int, error) {
+		var body io.Reader
+		if payload != nil {
+			encoded, _ := json.Marshal(payload)
+			body = strings.NewReader(string(encoded))
+		}
+		request, err := http.NewRequestWithContext(r.Context(), method, endpoint, body)
+		if err != nil {
+			return 0, err
+		}
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+		request.Header.Set("Content-Type", "application/json")
+		if input.Type == "anthropic-compatible" {
+			request.Header.Set("x-api-key", input.APIKey)
+			request.Header.Set("anthropic-version", "2023-06-01")
+		}
+		response, err := s.client.Do(request)
+		if err != nil {
+			return 0, err
+		}
+		defer response.Body.Close()
+		return response.StatusCode, nil
+	}
+	if input.Type == "custom-embedding" {
+		status, err := probe(http.MethodPost, base+"/embeddings", map[string]any{"model": input.ModelID, "input": "ping"})
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"valid": status >= 200 && status < 300, "method": "embeddings", "status": status})
+		return
+	}
+	status, err := probe(http.MethodGet, base+"/models", nil)
+	if err == nil && status >= 200 && status < 300 {
+		writeJSON(w, 200, map[string]any{"valid": true})
+		return
+	}
+	if input.ModelID == "" {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": fmt.Sprintf("models request failed (%d)", status)})
+		return
+	}
+	status, err = probe(http.MethodPost, base+"/chat/completions", map[string]any{"model": input.ModelID, "messages": []any{map[string]any{"role": "user", "content": "ping"}}, "max_tokens": 1})
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error(), "method": "chat"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"valid": status >= 200 && status < 300, "method": "chat", "status": status})
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
