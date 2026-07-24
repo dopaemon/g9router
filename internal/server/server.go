@@ -98,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
+	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
@@ -831,6 +832,70 @@ func (s *Server) opencodeSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed from OpenCode"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/mcp/"), "/"), "/")
+	if len(parts) != 2 || (parts[1] != "sse" && parts[1] != "message") {
+		http.NotFound(w, r)
+		return
+	}
+	plugin := parts[0]
+	envKey := "G9ROUTER_MCP_" + strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(plugin)) + "_URL"
+	target := strings.TrimSpace(os.Getenv(envKey))
+	if target == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Unknown plugin: " + plugin})
+		return
+	}
+	if parts[1] == "message" {
+		if r.Method != http.MethodPost {
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, strings.NewReader(string(body)))
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(response.StatusCode)
+	if flusher, ok := w.(http.Flusher); ok {
+		_, _ = io.WriteString(w, "event: endpoint\ndata: /api/mcp/"+plugin+"/message\n\n")
+		flusher.Flush()
+		streamCopy(w, response.Body, flusher)
 	}
 }
 
