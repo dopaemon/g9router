@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -40,9 +41,93 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 		return s.binaryTTSSpeech(w, r, providerID, apiKey, input)
 	case "minimax", "minimax-cn":
 		return s.minimaxSpeech(w, r, providerID, apiKey, input)
+	case "openai", "openrouter":
+		return s.openAICompatibleSpeech(w, r, providerID, apiKey, input)
 	default:
 		return false
 	}
+}
+
+func (s *Server) openAICompatibleSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+	if apiKey == "" {
+		return false
+	}
+	model := stringValue(input["model"])
+	voice := "alloy"
+	if index := strings.LastIndex(model, "/"); index >= 0 {
+		voice = model[index+1:]
+		model = model[:index]
+	} else if model != "" {
+		voice = model
+	}
+	if providerID == "openai" {
+		model = nonEmpty(model, "tts-1")
+		body, _ := json.Marshal(map[string]any{"model": model, "voice": voice, "input": stringValue(input["input"])})
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.openai.com/v1/audio/speech", strings.NewReader(string(body)))
+		if err != nil {
+			return false
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		audio, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+		if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 || len(audio) == 0 {
+			return false
+		}
+		writeSpeechAudio(w, input, audio, "mp3")
+		return true
+	}
+	model = nonEmpty(model, "openai/gpt-4o-mini-tts")
+	body, _ := json.Marshal(map[string]any{"model": model, "modalities": []string{"text", "audio"}, "audio": map[string]string{"voice": voice, "format": "wav"}, "stream": true, "messages": []map[string]string{{"role": "user", "content": stringValue(input["input"])}}})
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("HTTP-Referer", "https://endpoint-proxy.local")
+	request.Header.Set("X-Title", "Endpoint Proxy")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var encoded strings.Builder
+	scanner := bufio.NewScanner(io.LimitReader(response.Body, 32<<20))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+			continue
+		}
+		var event struct {
+			Choices []struct {
+				Delta struct {
+					Audio struct {
+						Data string `json:"data"`
+					} `json:"audio"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) == nil && len(event.Choices) > 0 {
+			encoded.WriteString(event.Choices[0].Delta.Audio.Data)
+		}
+	}
+	if encoded.Len() == 0 {
+		return false
+	}
+	audio, err := base64.StdEncoding.DecodeString(encoded.String())
+	if err != nil {
+		return false
+	}
+	writeSpeechAudio(w, input, audio, "wav")
+	return true
 }
 
 func (s *Server) minimaxSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
