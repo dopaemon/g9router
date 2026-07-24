@@ -3304,6 +3304,10 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			if s.tavilySearch(w, specialized) {
 				return
 			}
+			specialized.Body = io.NopCloser(bytes.NewReader(data))
+			if s.braveSearch(w, specialized) {
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewReader(data))
 		}
 	}
