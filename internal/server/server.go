@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/droid-settings", s.droidSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/cline-settings", s.clineSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/kilo-settings", s.kiloSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/openclaw-settings", s.openclawSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -1172,6 +1173,161 @@ func (s *Server) kiloSettingsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) openclawSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir, path := filepath.Join(home, ".openclaw"), filepath.Join(home, ".openclaw", "openclaw.json")
+	read := func(path string) map[string]any {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return map[string]any{}
+		}
+		raw = regexp.MustCompile(`,\s*([}\]])`).ReplaceAll(raw, []byte(`$1`))
+		var value map[string]any
+		if json.Unmarshal(raw, &value) != nil {
+			return map[string]any{}
+		}
+		return value
+	}
+	write := func(path string, value map[string]any) error {
+		raw, _ := json.MarshalIndent(value, "", "  ")
+		return os.WriteFile(path, raw, 0600)
+	}
+	switch r.Method {
+	case http.MethodGet:
+		_, cliErr := exec.LookPath("openclaw")
+		_, fileErr := os.Stat(path)
+		if cliErr != nil && fileErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "Open Claw CLI is not installed"})
+			return
+		}
+		settings := read(path)
+		models, _ := settings["models"].(map[string]any)
+		providers, _ := models["providers"].(map[string]any)
+		agents, _ := settings["agents"].(map[string]any)
+		list, _ := agents["list"].([]any)
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": settings, "agents": list, "has9Router": providers["9router"] != nil, "settingsPath": path})
+	case http.MethodPost:
+		var input struct {
+			BaseURL     string            `json:"baseUrl"`
+			APIKey      string            `json:"apiKey"`
+			Model       string            `json:"model"`
+			AgentModels map[string]string `json:"agentModels"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl and model are required"})
+			return
+		}
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		settings := read(path)
+		models, _ := settings["models"].(map[string]any)
+		if models == nil {
+			models = map[string]any{}
+		}
+		providers, _ := models["providers"].(map[string]any)
+		if providers == nil {
+			providers = map[string]any{}
+		}
+		agents, _ := settings["agents"].(map[string]any)
+		if agents == nil {
+			agents = map[string]any{}
+		}
+		defaults, _ := agents["defaults"].(map[string]any)
+		if defaults == nil {
+			defaults = map[string]any{}
+		}
+		allow, _ := defaults["models"].(map[string]any)
+		if allow == nil {
+			allow = map[string]any{}
+		}
+		for key := range allow {
+			if strings.HasPrefix(key, "9router/") {
+				delete(allow, key)
+			}
+		}
+		base := strings.TrimRight(input.BaseURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		all := map[string]bool{input.Model: true}
+		for _, model := range input.AgentModels {
+			if model != "" {
+				all[model] = true
+			}
+		}
+		for model := range all {
+			allow["9router/"+model] = map[string]any{}
+		}
+		defaults["models"] = allow
+		modelConfig, _ := defaults["model"].(map[string]any)
+		if modelConfig == nil {
+			modelConfig = map[string]any{}
+		}
+		modelConfig["primary"] = "9router/" + input.Model
+		defaults["model"] = modelConfig
+		agents["defaults"] = defaults
+		providers["9router"] = map[string]any{"baseUrl": base, "apiKey": valueOr(input.APIKey, "your_api_key"), "api": "openai-completions", "models": []any{map[string]any{"id": input.Model, "name": input.Model}}}
+		models["providers"] = providers
+		settings["models"], settings["agents"] = models, agents
+		if err := write(path, settings); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Open Claw settings applied successfully!", "settingsPath": path})
+	case http.MethodDelete:
+		settings := read(path)
+		if len(settings) == 0 {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No settings file to reset"})
+			return
+		}
+		if models, ok := settings["models"].(map[string]any); ok {
+			if providers, ok := models["providers"].(map[string]any); ok {
+				delete(providers, "9router")
+				if len(providers) == 0 {
+					delete(models, "providers")
+				}
+			}
+		}
+		if agents, ok := settings["agents"].(map[string]any); ok {
+			if defaults, ok := agents["defaults"].(map[string]any); ok {
+				if allow, ok := defaults["models"].(map[string]any); ok {
+					for key := range allow {
+						if strings.HasPrefix(key, "9router/") {
+							delete(allow, key)
+						}
+					}
+					if len(allow) == 0 {
+						delete(defaults, "models")
+					}
+				}
+				if model, ok := defaults["model"].(map[string]any); ok && strings.HasPrefix(anyString(model["primary"]), "9router/") {
+					delete(model, "primary")
+				}
+			}
+		}
+		if err := write(path, settings); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func valueOr(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func anyString(value any) string {
