@@ -15,4 +15,8 @@ func TestRegistryDescriptors(t *testing.T) {
 	if !ok || gemini.Format != "gemini" || len(gemini.Models) == 0 {
 		t.Fatal(gemini)
 	}
+	github, ok := Lookup("github")
+	if !ok || github.Alias != "gh" || github.Headers["copilot-integration-id"] == "" {
+		t.Fatal(github)
+	}
 }
