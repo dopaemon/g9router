@@ -125,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/translator/save", s.translatorSaveAPI)
 	mux.HandleFunc("/api/translator/console-logs", s.consoleLogsAPI)
 	mux.HandleFunc("/api/translator/console-logs/stream", s.consoleLogsStreamAPI)
+	mux.HandleFunc("/api/translator/translate", s.translatorAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
 	mux.HandleFunc("/api/usage/request-logs", s.usageLogsAPI)
