@@ -44,6 +44,15 @@ func init() {
 		"voyage-ai":      {ID: "voyage-ai", Alias: "voyage-ai", BaseURL: "https://api.voyageai.com/v1/embeddings", Format: "voyage-ai", Services: []string{"embedding"}},
 		"topaz":          {ID: "topaz", Alias: "topaz", BaseURL: "https://api.topazlabs.com/image/v1/enhance", Format: "topaz", Services: []string{"image"}},
 		"mmf":            {ID: "mmf", Alias: "mmf", BaseURL: "https://api.xiaomimimo.com/api/free-ai/openai/chat", Format: "openai", Services: []string{"llm"}},
+		"claude":         {ID: "claude", Alias: "cc", BaseURL: "https://api.anthropic.com/v1/messages", Format: "claude", Services: []string{"llm", "imageToText"}},
+		"gemini-cli":     {ID: "gemini-cli", Alias: "gemini-cli", BaseURL: "https://cloudcode-pa.googleapis.com/v1internal", Format: "gemini-cli", Services: []string{"llm", "imageToText"}},
+		"gitlab":         {ID: "gitlab", Alias: "gitlab", BaseURL: "https://gitlab.com/api/v4/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"iflow":          {ID: "iflow", Alias: "iflow", BaseURL: "https://apis.iflow.cn/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"grok-cli":       {ID: "grok-cli", Alias: "gcli", BaseURL: "https://cli-chat-proxy.grok.com/v1/responses", Format: "openai-responses", Services: []string{"llm"}},
+		"antigravity":    {ID: "antigravity", Alias: "ag", BaseURL: "https://cloudcode-pa.googleapis.com", Format: "antigravity", Services: []string{"llm", "image", "imageToText"}},
+		"cline":          {ID: "cline", Alias: "cline", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"clinepass":      {ID: "clinepass", Alias: "clinepass", BaseURL: "https://api.cline.bot/api/v1/chat/completions", Format: "openai", Services: []string{"llm"}},
+		"codebuddy-cn":   {ID: "codebuddy-cn", Alias: "codebuddy-cn", BaseURL: "https://copilot.tencent.com/v2/chat/completions", Format: "openai", Services: []string{"llm"}},
 	} {
 		if _, exists := Registry[id]; !exists {
 			Registry[id] = descriptor
