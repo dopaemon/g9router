@@ -18,6 +18,7 @@ import (
 	"g9router/internal/auth"
 	"g9router/internal/db"
 	"g9router/internal/oauth"
+	"g9router/internal/oidc"
 	"g9router/internal/providers"
 	"g9router/internal/settings"
 	"g9router/internal/translator"
@@ -30,13 +31,14 @@ type Options struct {
 }
 
 type Server struct {
-	options  Options
-	client   *http.Client
-	store    *providers.Store
-	usage    *usage.Store
-	oauth    *oauth.Manager
-	settings *settings.Store
-	sessions *auth.Sessions
+	options    Options
+	client     *http.Client
+	store      *providers.Store
+	usage      *usage.Store
+	oauth      *oauth.Manager
+	settings   *settings.Store
+	sessions   *auth.Sessions
+	oidcConfig oidc.Config
 }
 
 func New(options Options) *Server {
@@ -53,7 +55,7 @@ func New(options Options) *Server {
 	if opened, err := db.Open("g9router.db"); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions()}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv)}
 }
 
 func (s *Server) Run() error {
@@ -79,6 +81,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/status", s.authStatus)
 	mux.HandleFunc("/api/auth/login", s.authLogin)
 	mux.HandleFunc("/api/auth/logout", s.authLogout)
+	mux.HandleFunc("/api/auth/oidc/start", s.oidcStart)
+	mux.HandleFunc("/api/auth/oidc/callback", s.oidcCallback)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
 }
@@ -120,6 +124,42 @@ func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "g9router_session", Value: "", Path: "/", MaxAge: -1})
 	writeJSON(w, 200, map[string]bool{"success": true})
+}
+
+func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request) {
+	if !s.oidcConfig.Enabled() {
+		http.Error(w, "OIDC is not configured", http.StatusNotFound)
+		return
+	}
+	state := oidc.NewState()
+	http.SetCookie(w, &http.Cookie{Name: "g9router_oidc_state", Value: state, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
+	location, err := s.oidcConfig.AuthorizationURL(r.Context(), state)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	http.Redirect(w, r, location, http.StatusFound)
+}
+
+func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
+	stateCookie, err := r.Cookie("g9router_oidc_state")
+	if err != nil || stateCookie.Value == "" || stateCookie.Value != r.URL.Query().Get("state") {
+		http.Error(w, "invalid OIDC state", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.oidcConfig.Exchange(r.Context(), r.URL.Query().Get("code")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	token := hex.EncodeToString(raw)
+	s.sessions.Create(token)
+	http.SetCookie(w, &http.Cookie{Name: "g9router_session", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
