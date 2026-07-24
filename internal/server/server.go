@@ -366,6 +366,16 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	for _, provider := range providers {
 		providerBody := body
 		translateResponse := false
+		if path == "/responses" && provider.APIType == "openai-chat" {
+			var responsesBody map[string]any
+			if json.Unmarshal(body, &responsesBody) == nil {
+				translated, _ := json.Marshal(translator.ResponsesToChat(responsesBody))
+				if s.proxyResponses(w, r, provider.BaseURL, translated, provider.APIKey) {
+					return
+				}
+				continue
+			}
+		}
 		if provider.APIType == "gemini" {
 			if s.proxyGemini(w, r, provider.BaseURL, model, request, provider.APIKey) {
 				return
@@ -394,6 +404,33 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 	}
 	s.usage.Add(0, 1, int64(len(body)), 0)
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
+}
+
+func (s *Server) proxyResponses(w http.ResponseWriter, incoming *http.Request, baseURL string, body []byte, apiKey string) bool {
+	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/chat/completions", strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 500 {
+		return false
+	}
+	var chat map[string]any
+	if json.NewDecoder(response.Body).Decode(&chat) != nil {
+		return false
+	}
+	writeJSON(w, response.StatusCode, translator.ChatToResponsesResponse(chat))
+	return true
 }
 
 func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string) bool {
