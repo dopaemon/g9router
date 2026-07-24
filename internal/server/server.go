@@ -133,7 +133,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/oidc/start", s.oidcStart)
 	mux.HandleFunc("/api/auth/oidc/callback", s.oidcCallback)
 	mux.Handle("/", web.Handler())
-	return logging(mux)
+	handler := logging(mux)
+	return auth.MiddlewareWithValidator(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, s.keys.HasActive())
 }
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
