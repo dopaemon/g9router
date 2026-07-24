@@ -1397,6 +1397,20 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot read request body"})
 		return
 	}
+	var input map[string]any
+	_ = json.Unmarshal(body, &input)
+	model, _ := input["model"].(string)
+	for _, provider := range s.store.Resolve(model) {
+		if provider.OAuthID != "" {
+			if credential, ok := s.oauth.Get(provider.OAuthID); ok {
+				provider.APIKey = credential.AccessToken
+			}
+		}
+		baseURL := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
+		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
+			return
+		}
+	}
 	if !s.proxy(w, r, s.options.Upstream, path, http.MethodPost, body, s.options.APIKey) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"})
 	}
