@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"g9router/internal/translator"
 )
 
 func (s *Server) proxyGeminiCLI(w http.ResponseWriter, incoming *http.Request, baseURL, model string, body map[string]any, accessToken string, providerData map[string]any) bool {
@@ -49,6 +51,14 @@ func (s *Server) proxyGeminiCLI(w http.ResponseWriter, incoming *http.Request, b
 		}
 	}
 	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	if stream {
+		_, _ = io.WriteString(w, antigravitySSE(response.Body, model))
+	} else {
+		var payload map[string]any
+		if json.NewDecoder(response.Body).Decode(&payload) != nil {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(translator.GeminiToOpenAI(model, payload))
+	}
 	return response.StatusCode < 500
 }
