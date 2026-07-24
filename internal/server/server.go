@@ -677,6 +677,16 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				continue
 			}
 		}
+		if path == "/responses" && (provider.APIType == "codex" || provider.APIType == "openai-responses") {
+			var responsesBody map[string]any
+			if json.Unmarshal(body, &responsesBody) == nil {
+				providerBody, _ = json.Marshal(translator.NormalizeCodexRequest(responsesBody))
+				if s.proxy(w, r, provider.BaseURL, "/responses", http.MethodPost, providerBody, provider.APIKey) {
+					return
+				}
+				continue
+			}
+		}
 		if provider.APIType == "gemini" {
 			if s.proxyGemini(w, r, provider.BaseURL, model, request, provider.APIKey) {
 				return
