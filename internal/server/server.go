@@ -3377,9 +3377,6 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
 			return
 		}
-		if provider.ID == "commandcode" && path == "/chat/completions" && s.commandCodeChat(w, r, body, provider.APIKey, request) {
-			return
-		}
 		baseURL := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
 		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
 			return
@@ -3561,6 +3558,9 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			continue
 		}
 		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
+			return
+		}
+		if provider.ID == "commandcode" && path == "/chat/completions" && s.commandCodeChat(w, r, body, provider.APIKey, request) {
 			return
 		}
 		if sourceFormat == format.Claude && provider.APIType == "openai" {
