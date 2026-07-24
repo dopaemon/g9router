@@ -88,6 +88,28 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
 }
 
+func (s *Server) specializedVoicesAPI(w http.ResponseWriter, r *http.Request) {
+	provider := ""
+	switch {
+	case strings.Contains(r.URL.Path, "/deepgram/"):
+		provider = "deepgram"
+	case strings.Contains(r.URL.Path, "/elevenlabs/"):
+		provider = "elevenlabs"
+	case strings.Contains(r.URL.Path, "/inworld/"):
+		provider = "inworld"
+	case strings.Contains(r.URL.Path, "/minimax/"):
+		provider = r.URL.Query().Get("provider")
+		if provider != "minimax-cn" {
+			provider = "minimax"
+		}
+	}
+	query := r.URL.Query()
+	query.Set("provider", provider)
+	clone := r.Clone(r.Context())
+	clone.URL.RawQuery = query.Encode()
+	s.audioVoicesAPI(w, clone)
+}
+
 func (s *Server) inworldVoicesAPI(w http.ResponseWriter, r *http.Request, alias string) {
 	provider, ok := s.store.Find("inworld")
 	if !ok || provider.APIKey == "" {
