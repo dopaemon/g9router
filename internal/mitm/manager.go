@@ -15,6 +15,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -36,6 +37,8 @@ type Manager struct {
 	status            Status
 	certFile, keyFile string
 }
+
+var toolHosts = map[string][]string{"antigravity": {"daily-cloudcode-pa.googleapis.com", "cloudcode-pa.googleapis.com"}, "copilot": {"api.individual.githubcopilot.com"}, "kiro": {"runtime.us-east-1.kiro.dev", "q.us-east-1.amazonaws.com", "codewhisperer.us-east-1.amazonaws.com"}, "cursor": {"api2.cursor.sh"}}
 
 func New() *Manager { return &Manager{} }
 
@@ -102,6 +105,71 @@ func (m *Manager) Stop(ctx context.Context) error {
 		return nil
 	}
 	return server.Shutdown(ctx)
+}
+
+func (m *Manager) DNSStatus() map[string]bool {
+	data, err := os.ReadFile("/etc/hosts")
+	if err != nil {
+		return map[string]bool{}
+	}
+	text := string(data)
+	result := map[string]bool{}
+	for tool, hosts := range toolHosts {
+		result[tool] = true
+		for _, host := range hosts {
+			if !strings.Contains(text, "127.0.0.1 "+host) {
+				result[tool] = false
+			}
+		}
+	}
+	return result
+}
+
+func (m *Manager) SetDNS(tool, password string, enabled bool) error {
+	hosts, ok := toolHosts[tool]
+	if !ok {
+		return fmt.Errorf("unknown MITM tool: %s", tool)
+	}
+	if password != "" && strings.ContainsAny(password, "\r\n") {
+		return fmt.Errorf("invalid sudo password")
+	}
+	data, err := os.ReadFile("/etc/hosts")
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	kept := make([]string, 0, len(lines)+len(hosts))
+	for _, line := range lines {
+		remove := false
+		for _, host := range hosts {
+			if strings.Contains(line, host) {
+				remove = true
+				break
+			}
+		}
+		if !remove {
+			kept = append(kept, line)
+		}
+	}
+	if enabled {
+		for _, host := range hosts {
+			kept = append(kept, "127.0.0.1 "+host+" # g9router-mitm")
+		}
+	}
+	next := strings.TrimRight(strings.Join(kept, "\n"), "\n") + "\n"
+	if os.Geteuid() == 0 {
+		return os.WriteFile("/etc/hosts", []byte(next), 0644)
+	}
+	if password == "" {
+		return fmt.Errorf("root or sudo password required")
+	}
+	command := exec.Command("sudo", "-S", "tee", "/etc/hosts")
+	command.Stdin = strings.NewReader(password + "\n" + next)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("sudo hosts update failed: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func (m *Manager) certificateFiles() (string, string, error) {
