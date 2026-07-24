@@ -7,6 +7,7 @@
 <section><h2>Models</h2><button onclick="load('/v1/models')">Load models</button><pre id="models"></pre></section>
 <section><h2>Providers</h2><input id="pid" placeholder="id (e.g. openai)"><input id="pname" placeholder="name"><input id="purl" placeholder="base URL (e.g. https://api.openai.com/v1)"><input id="ptype" placeholder="api type: openai or native"><input id="pkey" type="password" placeholder="API key"><button onclick="saveProvider()">Save provider</button><button onclick="loadProviders()">List providers</button><pre id="providers"></pre></section>
 <section><h2>OAuth credentials</h2><input id="oid" placeholder="credential id"><input id="otoken" placeholder="token URL"><input id="orefresh" type="password" placeholder="refresh token"><input id="oclient" placeholder="client id"><button onclick="saveOAuth()">Save OAuth</button><button onclick="loadOAuth()">List OAuth</button><pre id="oauth"></pre></section>
+<section><h2>Settings and usage</h2><input id="sname" placeholder="instance name"><button onclick="saveSettings()">Save settings</button><button onclick="loadSettings()">Load settings</button><button onclick="loadUsage()">Load usage</button><button onclick="resetUsage()">Reset usage</button><pre id="settings"></pre><pre id="usage"></pre></section>
 <section><h2>Chat smoke test</h2><input id="model" placeholder="model" value="gpt-4o-mini"><textarea id="prompt" rows="4">Hello from g9router</textarea><button onclick="chat()">Send</button><pre id="answer"></pre></section>
 </main><script>
 async function load(path){const box=document.getElementById(path.includes('models')?'models':'health');try{box.textContent=JSON.stringify(await (await fetch(path)).json(),null,2)}catch(e){box.textContent=e}}
@@ -15,4 +16,8 @@ async function loadProviders(){const box=document.getElementById('providers');bo
 async function saveProvider(){const r=await fetch('/api/providers',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:pid.value,name:pname.value,baseURL:purl.value,apiType:ptype.value,apiKey:pkey.value,enabled:true})});document.getElementById('providers').textContent=JSON.stringify(await r.json(),null,2);await loadProviders()}
 async function loadOAuth(){oauth.textContent=JSON.stringify(await (await fetch('/api/oauth')).json(),null,2)}
 async function saveOAuth(){const r=await fetch('/api/oauth',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:oid.value,tokenURL:otoken.value,refreshToken:orefresh.value,clientID:oclient.value})});oauth.textContent=JSON.stringify(await r.json(),null,2);await loadOAuth()}
+async function loadSettings(){settings.textContent=JSON.stringify(await (await fetch('/api/settings')).json(),null,2)}
+async function saveSettings(){const r=await fetch('/api/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name:sname.value})});settings.textContent=JSON.stringify(await r.json(),null,2)}
+async function loadUsage(){usage.textContent=JSON.stringify(await (await fetch('/api/usage')).json(),null,2)}
+async function resetUsage(){const r=await fetch('/api/usage',{method:'DELETE'});usage.textContent=JSON.stringify(await r.json(),null,2)}
 </script></body></html>
