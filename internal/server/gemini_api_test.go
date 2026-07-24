@@ -53,3 +53,11 @@ func TestGeminiResponseMapping(t *testing.T) {
 		t.Fatalf("unexpected Gemini response: %s", recorder.Body.String())
 	}
 }
+
+func TestGeminiStreamMapping(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeGeminiStream(recorder, []byte("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n"), "gemini/x")
+	if recorder.Header().Get("Content-Type") != "text/event-stream" || !strings.Contains(recorder.Body.String(), `"candidates"`) || strings.Contains(recorder.Body.String(), "[DONE]") {
+		t.Fatalf("unexpected stream: headers=%v body=%s", recorder.Header(), recorder.Body.String())
+	}
+}
