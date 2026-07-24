@@ -468,6 +468,18 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				providerBody = translated
 			}
 		}
+		if sourceFormat == format.OpenAI && (provider.APIType == "claude" || provider.APIType == "anthropic") {
+			var openAI map[string]any
+			if json.Unmarshal(body, &openAI) == nil {
+				stream, _ := openAI["stream"].(bool)
+				providerBody, _ = json.Marshal(translator.OpenAIToClaudeRequest(model, openAI, stream))
+				providerPath = "/messages"
+				if s.proxyTranslatedResponse(w, r, provider.BaseURL, providerPath, providerBody, provider.APIKey, true) {
+					return
+				}
+				continue
+			}
+		}
 		if translateResponse {
 			if s.proxyTranslated(w, r, provider.BaseURL, providerPath, providerBody, provider.APIKey) {
 				return
@@ -557,6 +569,10 @@ func (s *Server) proxyGemini(w http.ResponseWriter, incoming *http.Request, base
 }
 
 func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string) bool {
+	return s.proxyTranslatedResponse(w, incoming, baseURL, path, body, apiKey, false)
+}
+
+func (s *Server) proxyTranslatedResponse(w http.ResponseWriter, incoming *http.Request, baseURL, path string, body []byte, apiKey string, claudeResponse bool) bool {
 	ctx, cancel := context.WithTimeout(incoming.Context(), 10*time.Minute)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, strings.NewReader(string(body)))
@@ -589,6 +605,9 @@ func (s *Server) proxyTranslated(w http.ResponseWriter, incoming *http.Request, 
 		return false
 	}
 	translated := translator.OpenAIToClaudeResponse(openAI)
+	if claudeResponse {
+		translated = translator.ClaudeToOpenAI("", openAI, false)
+	}
 	for key, values := range response.Header {
 		if key == "Content-Length" || key == "Content-Encoding" {
 			continue
