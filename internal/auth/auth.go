@@ -27,7 +27,11 @@ func (s *Sessions) Valid(token string) bool {
 func (s *Sessions) Delete(token string) { s.mu.Lock(); defer s.mu.Unlock(); delete(s.values, token) }
 
 func Middleware(next http.Handler, key string) http.Handler {
-	if key == "" {
+	return MiddlewareWithValidator(next, key, nil, false)
+}
+
+func MiddlewareWithValidator(next http.Handler, key string, validator func(string) bool, enabled bool) http.Handler {
+	if key == "" && !enabled {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +40,11 @@ func Middleware(next http.Handler, key string) http.Handler {
 			return
 		}
 		provided := r.Header.Get("X-G9Router-Key")
-		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) != 1 {
+		valid := key != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(key)) == 1
+		if !valid && validator != nil {
+			valid = validator(provided)
+		}
+		if !valid {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
