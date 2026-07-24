@@ -33,10 +33,103 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 		return s.geminiSpeech(w, r, apiKey, input)
 	case "google-tts":
 		return s.googleTranslateSpeech(w, r, input)
+	case "inworld", "cartesia", "playht", "coqui", "tortoise":
+		return s.genericTTSSpeech(w, r, providerID, apiKey, input)
 	default:
 		return false
 	}
 }
+
+func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+	text, _ := input["input"].(string)
+	model, _ := input["model"].(string)
+	voice, _ := input["voice"].(string)
+	if strings.Contains(model, "/") {
+		parts := strings.SplitN(model, "/", 2)
+		model, voice = parts[0], parts[1]
+	}
+	if voice == "" {
+		voice = "Alex"
+	}
+	var endpoint string
+	var body map[string]any
+	request := func(method, endpoint string, body map[string]any) (*http.Request, error) {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return http.NewRequestWithContext(r.Context(), method, endpoint, strings.NewReader(string(encoded)))
+	}
+	switch providerID {
+	case "inworld":
+		endpoint = "https://api.inworld.ai/tts/v1/voice"
+		body = map[string]any{"text": text, "voiceId": voice, "modelId": nonEmpty(model, "inworld-tts-1.5-mini"), "audioConfig": map[string]any{"audioEncoding": "MP3"}}
+	case "cartesia":
+		endpoint = "https://api.cartesia.ai/tts/bytes"
+		body = map[string]any{"model_id": nonEmpty(model, "sonic-2"), "transcript": text, "voice": map[string]any{"mode": "id", "id": voice}, "output_format": map[string]any{"container": "mp3", "bit_rate": 128000, "sample_rate": 44100}}
+	case "playht":
+		endpoint = "https://api.play.ht/api/v2/tts/stream"
+		parts := strings.SplitN(apiKey, ":", 2)
+		if len(parts) == 2 {
+			apiKey = parts[1]
+		}
+		body = map[string]any{"text": text, "voice": voice, "voice_engine": nonEmpty(model, "PlayDialog"), "output_format": "mp3", "speed": 1}
+	case "coqui":
+		endpoint = "http://localhost:5002/api/tts"
+		body = map[string]any{"text": text, "speaker_id": voice}
+	case "tortoise":
+		endpoint = "http://localhost:5000/api/tts"
+		body = map[string]any{"text": text, "voice": nonEmpty(voice, "random")}
+	}
+	requestObject, err := request(http.MethodPost, endpoint, body)
+	if err != nil {
+		return false
+	}
+	requestObject.Header.Set("Content-Type", "application/json")
+	if providerID == "inworld" {
+		requestObject.Header.Set("Authorization", "Basic "+apiKey)
+	} else if providerID == "cartesia" {
+		requestObject.Header.Set("X-API-Key", apiKey)
+		requestObject.Header.Set("Cartesia-Version", "2024-06-10")
+	} else if providerID == "playht" {
+		parts := strings.SplitN(s.providerAPIKey(apiKey), ":", 2)
+		if len(parts) == 2 {
+			requestObject.Header.Set("X-USER-ID", parts[0])
+		}
+		requestObject.Header.Set("Authorization", "Bearer "+apiKey)
+		requestObject.Header.Set("Accept", "audio/mpeg")
+	}
+	response, err := s.client.Do(requestObject)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	audio, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 || len(audio) == 0 {
+		return false
+	}
+	if providerID == "inworld" {
+		var payload struct {
+			AudioContent string `json:"audioContent"`
+		}
+		if json.Unmarshal(audio, &payload) != nil || payload.AudioContent == "" {
+			return false
+		}
+		decoded, err := base64.StdEncoding.DecodeString(payload.AudioContent)
+		if err != nil {
+			return false
+		}
+		audio = decoded
+	}
+	format := "mp3"
+	if providerID == "coqui" || providerID == "tortoise" {
+		format = "wav"
+	}
+	writeSpeechAudio(w, input, audio, format)
+	return true
+}
+
+func (s *Server) providerAPIKey(value string) string { return value }
 
 func (s *Server) googleTranslateSpeech(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
 	model, _ := input["model"].(string)
