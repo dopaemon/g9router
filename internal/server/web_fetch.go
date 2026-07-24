@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -41,6 +42,10 @@ func (s *Server) webFetchAPI(w http.ResponseWriter, r *http.Request) {
 	target, err := url.Parse(input.URL)
 	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid URL"})
+		return
+	}
+	if blockedFetchHost(target.Hostname()) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "private or local URLs are not allowed"})
 		return
 	}
 	provider, _ := s.store.Find(input.Provider)
@@ -106,6 +111,18 @@ func (s *Server) webFetchAPI(w http.ResponseWriter, r *http.Request) {
 		text = text[:input.MaxCharacters]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"provider": input.Provider, "url": input.URL, "title": nil, "content": map[string]any{"format": nonEmpty(input.Format, "markdown"), "text": text, "length": len(text)}, "metadata": map[string]any{"author": nil, "published_at": nil, "language": nil}, "usage": map[string]any{"fetch_cost_usd": nil}, "metrics": map[string]any{"response_time_ms": time.Since(started).Milliseconds()}})
+}
+
+func blockedFetchHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "metadata.google.internal" {
+		return true
+	}
+	address, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	return address.IsPrivate() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() || address.IsUnspecified() || address.IsMulticast()
 }
 
 func nonEmpty(value, fallback string) string {
