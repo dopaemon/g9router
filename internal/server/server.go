@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/settings/require-login", s.requireLoginAPI)
 	mux.HandleFunc("/api/settings/database", s.databaseSettingsAPI)
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
+	mux.HandleFunc("/api/models", s.modelsAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
 	mux.HandleFunc("/api/models/availability", s.modelsAvailabilityAPI)
