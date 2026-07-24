@@ -3014,6 +3014,18 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		s.audioVoicesAPI(w, r)
 		return
 	}
+	if provider == "local-device" {
+		voices := localDeviceVoices(r.Context())
+		filter := r.URL.Query().Get("lang")
+		filtered := make([]map[string]any, 0, len(voices))
+		for _, voice := range voices {
+			if filter == "" || voice["lang"] == filter {
+				filtered = append(filtered, voice)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"voices": filtered, "languages": []any{}, "byLang": map[string]any{}})
+		return
+	}
 	if provider == "elevenlabs" {
 		apiKey := r.URL.Query().Get("apiKey")
 		if apiKey == "" {
