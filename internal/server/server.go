@@ -110,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/usage", s.usageAPI)
+	mux.HandleFunc("/api/usage/logs", s.usageLogsAPI)
+	mux.HandleFunc("/api/usage/request-logs", s.usageLogsAPI)
+	mux.HandleFunc("/api/usage/providers", s.usageProvidersAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
@@ -2496,6 +2499,22 @@ func (s *Server) usageAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.usage.Snapshot())
+}
+
+func (s *Server) usageLogsAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.usage.Recent(200))
+}
+
+func (s *Server) usageProvidersAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": s.usage.Providers()})
 }
 
 func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
