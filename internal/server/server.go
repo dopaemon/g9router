@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
+	mux.HandleFunc("/api/settings/require-login", s.requireLoginAPI)
 	mux.HandleFunc("/api/models/alias", s.modelAliasAPI)
 	mux.HandleFunc("/api/models/custom", s.customModelsAPI)
 	mux.HandleFunc("/api/models/disabled", s.disabledModelsAPI)
@@ -354,6 +355,23 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) requireLoginAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	values := s.settings.Get()
+	requireLogin, ok := values["requireLogin"].(bool)
+	if !ok {
+		requireLogin = true
+	}
+	dashboardAccess, ok := values["tunnelDashboardAccess"].(bool)
+	if !ok {
+		dashboardAccess = true
+	}
+	writeJSON(w, 200, map[string]any{"requireLogin": requireLogin, "tunnelDashboardAccess": dashboardAccess, "tunnelUrl": anyString(values["tunnelUrl"]), "tailscaleUrl": anyString(values["tailscaleUrl"])})
 }
 
 func (s *Server) modelAliasAPI(w http.ResponseWriter, r *http.Request) {
