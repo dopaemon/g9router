@@ -42,8 +42,7 @@ func (s *Server) pxpipeHealthAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	status := s.pxpipeManager.Status()
-	writeJSON(w, http.StatusOK, map[string]any{"healthy": status["available"] == true, "checks": []any{map[string]any{"name": "module", "ok": false, "detail": "PXPIPE native module is not installed"}}})
+	writeJSON(w, http.StatusOK, s.pxpipeManager.Health(r.Context()))
 }
 
 func (s *Server) pxpipeInstallAPI(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +55,7 @@ func (s *Server) pxpipeInstallAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "info": result, "health": map[string]any{"healthy": false, "checks": []any{map[string]any{"name": "module", "ok": false, "detail": "PXPIPE native module requires runtime integration"}}}})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "info": result, "health": s.pxpipeManager.Health(r.Context())})
 }
 
 func (s *Server) pxpipeStartAPI(w http.ResponseWriter, r *http.Request) {
