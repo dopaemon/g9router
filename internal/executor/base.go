@@ -86,6 +86,17 @@ func Execute(ctx context.Context, client *http.Client, config Config, path strin
 				continue
 			}
 			result := Result{Status: response.StatusCode, Header: response.Header, Body: resultBody}
+			if config.Provider == "codex" && response.StatusCode < 400 && codexTransientBody(resultBody) {
+				last = fmt.Errorf("codex transient SSE error")
+				if attempt+1 < attempts {
+					select {
+					case <-ctx.Done():
+						return Result{}, ctx.Err()
+					case <-time.After(delay):
+					}
+				}
+				continue
+			}
 			if response.StatusCode < 400 || (response.StatusCode >= 400 && response.StatusCode < 500 && response.StatusCode != http.StatusTooManyRequests) {
 				return result, nil
 			}
@@ -103,4 +114,9 @@ func Execute(ctx context.Context, client *http.Client, config Config, path strin
 		}
 	}
 	return Result{}, last
+}
+
+func codexTransientBody(body []byte) bool {
+	text := strings.ToLower(string(body))
+	return strings.Contains(text, "server_is_overloaded") || strings.Contains(text, "service_unavailable_error")
 }
