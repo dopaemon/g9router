@@ -17,6 +17,14 @@ import (
 
 const mimoSystemMarker = "You are MiMoCode, an interactive CLI tool that helps users with software engineering tasks."
 
+var mimoUserAgents = []string{
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+}
+
+var mimoSessionID = "ses_" + randomAlphaNumeric(24)
+
 var mimoJWT struct {
 	sync.Mutex
 	value string
@@ -39,8 +47,8 @@ func (s *Server) mimoFreeChat(w http.ResponseWriter, r *http.Request, body []byt
 	if !hasMarker {
 		request["messages"] = append([]any{map[string]any{"role": "system", "content": mimoSystemMarker}}, messages...)
 	}
-	request["stream"] = true
 	encoded, _ := json.Marshal(request)
+	stream, _ := request["stream"].(bool)
 	doRequest := func(token string) (*http.Response, error) {
 		upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.xiaomimimo.com/api/free-ai/openai/chat", strings.NewReader(string(encoded)))
 		if err != nil {
@@ -49,9 +57,13 @@ func (s *Server) mimoFreeChat(w http.ResponseWriter, r *http.Request, body []byt
 		upstream.Header.Set("Content-Type", "application/json")
 		upstream.Header.Set("Authorization", "Bearer "+token)
 		upstream.Header.Set("X-Mimo-Source", "mimocode-cli-free")
-		upstream.Header.Set("User-Agent", "Mozilla/5.0 Chrome/131.0.0.0")
-		upstream.Header.Set("x-session-affinity", "ses_"+uuidToken(string(body))[:24])
-		upstream.Header.Set("Accept", "text/event-stream")
+		upstream.Header.Set("User-Agent", mimoUserAgents[time.Now().UnixNano()%int64(len(mimoUserAgents))])
+		upstream.Header.Set("x-session-affinity", mimoSessionID)
+		if stream {
+			upstream.Header.Set("Accept", "text/event-stream")
+		} else {
+			upstream.Header.Set("Accept", "application/json")
+		}
 		return s.client.Do(upstream)
 	}
 	response, err := doRequest(jwt)
@@ -102,7 +114,17 @@ func (s *Server) mimoJWT(r *http.Request) (string, error) {
 	if current, err := user.Current(); err == nil {
 		name = current.Username
 	}
-	seed := fmt.Sprintf("%s|%s|%s|%s", host, runtime.GOOS, runtime.GOARCH, name)
+	cpu := "unknown-cpu"
+	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "model name") {
+				cpu = strings.TrimSpace(strings.TrimPrefix(line, "model name"))
+				cpu = strings.TrimSpace(strings.TrimPrefix(cpu, ":"))
+				break
+			}
+		}
+	}
+	seed := fmt.Sprintf("%s|%s|%s|%s|%s", host, runtime.GOOS, runtime.GOARCH, cpu, name)
 	hash := sha256.Sum256([]byte(seed))
 	body, _ := json.Marshal(map[string]string{"client": fmt.Sprintf("%x", hash[:])})
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.xiaomimimo.com/api/free-ai/bootstrap", strings.NewReader(string(body)))
@@ -110,7 +132,7 @@ func (s *Server) mimoJWT(r *http.Request) (string, error) {
 		return "", err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "Mozilla/5.0 Chrome/131.0.0.0")
+	request.Header.Set("User-Agent", mimoUserAgents[time.Now().UnixNano()%int64(len(mimoUserAgents))])
 	response, err := s.client.Do(request)
 	if err != nil {
 		return "", err
@@ -138,4 +160,14 @@ func (s *Server) mimoJWT(r *http.Request) (string, error) {
 	mimoJWT.value, mimoJWT.exp = payload.JWT, exp
 	mimoJWT.Unlock()
 	return payload.JWT, nil
+}
+
+func randomAlphaNumeric(length int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	seed := uuidToken(fmt.Sprint(time.Now().UnixNano()))
+	var result strings.Builder
+	for index := 0; index < length; index++ {
+		result.WriteByte(chars[int(seed[index%len(seed)])%len(chars)])
+	}
+	return result.String()
 }
