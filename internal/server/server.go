@@ -107,6 +107,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/api/v1/chat/completions", s.chatCompletions)
 	mux.HandleFunc("/v1/responses", s.responses)
+	mux.HandleFunc("/v1/responses/compact", s.responsesCompactAPI)
+	mux.HandleFunc("/api/v1/responses/compact", s.responsesCompactAPI)
 	mux.HandleFunc("/api/v1/responses", s.responses)
 	mux.HandleFunc("/v1/messages", s.messages)
 	mux.HandleFunc("/v1/messages/count_tokens", s.countTokensAPI)
