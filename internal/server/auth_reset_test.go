@@ -28,4 +28,9 @@ func TestSettingsPasswordChangeAndLogin(t *testing.T) {
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status=%d body=%s", login.Code, login.Body.String())
 	}
+	protected := httptest.NewRecorder()
+	app.Handler().ServeHTTP(protected, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if protected.Code != http.StatusUnauthorized {
+		t.Fatalf("protected status=%d body=%s", protected.Code, protected.Body.String())
+	}
 }

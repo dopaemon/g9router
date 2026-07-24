@@ -297,7 +297,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/oidc/test", s.oidcTestAPI)
 	mux.Handle("/", web.Handler())
 	handler := logging(mux)
-	return auth.MiddlewareWithSession(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, s.keys.HasActive(), s.sessions)
+	_, passwordConfigured := s.settings.Secret("password")
+	loginRequired := s.keys.HasActive() || os.Getenv("G9ROUTER_PASSWORD") != "" || passwordConfigured
+	return auth.MiddlewareWithSession(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, loginRequired, s.sessions)
 }
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
