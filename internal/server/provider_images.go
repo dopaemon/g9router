@@ -1,8 +1,10 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -30,6 +32,8 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 			return s.sdWebUIImage(w, r, input)
 		case "nanobanana":
 			return s.nanoBananaImage(w, r, apiKey, input)
+		case "antigravity":
+			return s.antigravityImage(w, r, apiKey, providerData, input)
 		default:
 			return false
 		}
@@ -86,6 +90,83 @@ func (s *Server) providerImage(w http.ResponseWriter, r *http.Request, providerI
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": time.Now().Unix(), "data": images})
 	return true
+}
+
+func (s *Server) antigravityImage(w http.ResponseWriter, r *http.Request, apiKey string, providerData map[string]any, input map[string]any) bool {
+	model := stringValue(input["model"])
+	if model == "" || apiKey == "" {
+		return false
+	}
+	cleanModel := model
+	if index := strings.LastIndex(cleanModel, "-"); index > 0 && strings.Contains(cleanModel[index+1:], "x") {
+		cleanModel = cleanModel[:index]
+	}
+	projectID := stringValue(providerData["projectId"])
+	if projectID == "" {
+		projectID = stringValue(providerData["projectID"])
+	}
+	if projectID == "" {
+		return false
+	}
+	body := map[string]any{
+		"project": projectID, "model": cleanModel, "userAgent": "antigravity", "requestType": "image_gen",
+		"requestId": "agent/" + uuidToken(projectID+model),
+		"request": map[string]any{
+			"contents":         []map[string]any{{"role": "user", "parts": []map[string]string{{"text": stringValue(input["prompt"])}}}},
+			"generationConfig": map[string]any{"temperature": 1.0, "topP": 0.95, "topK": 40, "maxOutputTokens": 8192, "imageConfig": map[string]string{"aspectRatio": imageAspectRatio(stringValue(input["size"]))}},
+			"sessionId":        projectID,
+		},
+	}
+	encoded, _ := json.Marshal(body)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://cloudcode-pa.googleapis.com/v1internal:generateContent", strings.NewReader(string(encoded)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	request.Header.Set("User-Agent", "antigravity")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return false
+	}
+	var payload struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					InlineData struct {
+						Data string `json:"data"`
+					} `json:"inlineData"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	images := []map[string]string{}
+	for _, candidate := range payload.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData.Data != "" {
+				images = append(images, map[string]string{"b64_json": part.InlineData.Data})
+			}
+		}
+	}
+	if len(images) == 0 {
+		images = append(images, map[string]string{"b64_json": "", "revised_prompt": stringValue(input["prompt"])})
+	}
+	writeJSON(w, http.StatusOK, imageResult(images))
+	return true
+}
+
+func uuidToken(seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	hexValue := fmt.Sprintf("%x", sum[:16])
+	return hexValue[:8] + "/" + hexValue[8:20] + "/" + hexValue[20:]
 }
 
 func (s *Server) sdWebUIImage(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
