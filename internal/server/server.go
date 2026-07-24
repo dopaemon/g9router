@@ -2050,6 +2050,14 @@ func (s *Server) proxyWithExecutor(w http.ResponseWriter, incoming *http.Request
 		sum := sha256.Sum256(body)
 		headers["originator"] = "codex_cli_rs"
 		headers["session_id"] = hex.EncodeToString(sum[:16])
+		headers["User-Agent"] = "codex_cli_rs/0.136.0"
+	}
+	if strings.Contains(baseURL, "api.githubcopilot.com") {
+		headers["copilot-integration-id"] = "vscode-chat"
+		headers["editor-version"] = "vscode/1.110.0"
+		headers["editor-plugin-version"] = "copilot-chat/0.38.0"
+		headers["openai-intent"] = "conversation-panel"
+		headers["x-github-api-version"] = "2025-04-01"
 	}
 	result, err := executor.Execute(incoming.Context(), s.client, executor.Config{BaseURLs: []string{baseURL}, Headers: headers, APIKey: apiKey, RetryAttempts: 2, RetryDelay: 250 * time.Millisecond}, path, body, incoming.Header.Get("Accept") == "text/event-stream")
 	if err != nil {
