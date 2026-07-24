@@ -532,6 +532,7 @@ func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
 		Data []map[string]any `json:"data"`
 	}
 	merged := map[string]map[string]any{}
+	disabled := s.settings.DisabledModels()
 	sources := append([]providers.Provider{{BaseURL: s.options.Upstream, APIKey: s.options.APIKey, Enabled: true}}, s.store.Enabled()...)
 	for _, provider := range sources {
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -546,6 +547,9 @@ func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
 				if json.NewDecoder(resp.Body).Decode(&payload) == nil {
 					for _, model := range payload.Data {
 						if id, ok := model["id"].(string); ok && id != "" {
+							if containsString(disabled[provider.ID], id) {
+								continue
+							}
 							if _, exists := merged[id]; !exists {
 								merged[id] = model
 							}
@@ -557,12 +561,30 @@ func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
 		}
 		cancel()
 	}
+	for _, model := range s.settings.CustomModels() {
+		id, _ := model["id"].(string)
+		provider, _ := model["providerAlias"].(string)
+		if id != "" && !containsString(disabled[provider], id) {
+			if _, exists := merged[id]; !exists {
+				merged[id] = map[string]any{"id": id, "object": "model", "owned_by": provider, "name": model["name"], "type": model["type"]}
+			}
+		}
+	}
 	data := make([]map[string]any, 0, len(merged))
 	for _, model := range merged {
 		data = append(data, model)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
 	return true
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
