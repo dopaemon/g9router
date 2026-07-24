@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -3253,9 +3254,17 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
-		if s.transcriptionProvider(w, r) {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot read request body"})
 			return
 		}
+		specialized := r.Clone(r.Context())
+		specialized.Body = io.NopCloser(bytes.NewReader(data))
+		if s.transcriptionProvider(w, specialized) {
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(data))
 	}
 	s.forwardRaw(w, r, "/audio/transcriptions")
 }
