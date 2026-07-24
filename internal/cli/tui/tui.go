@@ -42,7 +42,7 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 		case "2":
 			err = ui.apiKeys(reader)
 		case "3":
-			err = ui.showJSON(reader, "/api/combos")
+			err = ui.combos(reader)
 		case "4":
 			err = ui.showJSON(reader, "/api/cli-tools/all-statuses")
 		case "5":
@@ -99,6 +99,93 @@ type provider struct {
 	APIKey  string `json:"apiKey"`
 	APIType string `json:"apiType"`
 	Enabled bool   `json:"enabled"`
+}
+
+type combo struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Models []any  `json:"models"`
+	Kind   string `json:"kind,omitempty"`
+}
+
+func (ui *UI) combos(reader *bufio.Reader) error {
+	for {
+		var payload struct {
+			Combos []combo `json:"combos"`
+		}
+		if err := ui.request(http.MethodGet, "/api/combos", nil, &payload); err != nil {
+			return err
+		}
+		fmt.Fprintln(ui.Out, "\nCombos")
+		for i, item := range payload.Combos {
+			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, item.Name, item.Models)
+		}
+		fmt.Fprintln(ui.Out, "a. Create  e. Edit  d. Delete  b. Back")
+		fmt.Fprint(ui.Out, "Select action: ")
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return err
+		}
+		action := strings.ToLower(strings.TrimSpace(line))
+		if action == "b" || action == "0" {
+			return nil
+		}
+		if action == "a" {
+			var item combo
+			fmt.Fprint(ui.Out, "Name: ")
+			value, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			item.Name = strings.TrimSpace(value)
+			fmt.Fprint(ui.Out, "Models (comma-separated): ")
+			value, err = reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			for _, model := range strings.Split(strings.TrimSpace(value), ",") {
+				if strings.TrimSpace(model) != "" {
+					item.Models = append(item.Models, strings.TrimSpace(model))
+				}
+			}
+			if err := ui.request(http.MethodPost, "/api/combos", item, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		if action != "e" && action != "d" || len(payload.Combos) == 0 {
+			fmt.Fprintln(ui.Out, "Invalid selection")
+			continue
+		}
+		fmt.Fprint(ui.Out, "Combo number: ")
+		value, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		index, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || index < 1 || index > len(payload.Combos) {
+			fmt.Fprintln(ui.Out, "Invalid combo number")
+			continue
+		}
+		item := payload.Combos[index-1]
+		if action == "d" {
+			if err := ui.request(http.MethodDelete, "/api/combos/"+item.ID, nil, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		fmt.Fprintf(ui.Out, "New name (Enter keeps %s): ", item.Name)
+		value, err = reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(value) != "" {
+			item.Name = strings.TrimSpace(value)
+		}
+		if err := ui.request(http.MethodPut, "/api/combos/"+item.ID, item, nil); err != nil {
+			return err
+		}
+	}
 }
 
 func (ui *UI) providers(reader *bufio.Reader) error {
