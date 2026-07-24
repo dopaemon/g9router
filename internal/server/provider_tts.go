@@ -53,6 +53,7 @@ func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, provid
 	}
 	var endpoint string
 	var body map[string]any
+	playHTUserID := ""
 	request := func(method, endpoint string, body map[string]any) (*http.Request, error) {
 		encoded, err := json.Marshal(body)
 		if err != nil {
@@ -71,6 +72,7 @@ func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, provid
 		endpoint = "https://api.play.ht/api/v2/tts/stream"
 		parts := strings.SplitN(apiKey, ":", 2)
 		if len(parts) == 2 {
+			playHTUserID = parts[0]
 			apiKey = parts[1]
 		}
 		body = map[string]any{"text": text, "voice": voice, "voice_engine": nonEmpty(model, "PlayDialog"), "output_format": "mp3", "speed": 1}
@@ -92,10 +94,7 @@ func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, provid
 		requestObject.Header.Set("X-API-Key", apiKey)
 		requestObject.Header.Set("Cartesia-Version", "2024-06-10")
 	} else if providerID == "playht" {
-		parts := strings.SplitN(s.providerAPIKey(apiKey), ":", 2)
-		if len(parts) == 2 {
-			requestObject.Header.Set("X-USER-ID", parts[0])
-		}
+		requestObject.Header.Set("X-USER-ID", playHTUserID)
 		requestObject.Header.Set("Authorization", "Bearer "+apiKey)
 		requestObject.Header.Set("Accept", "audio/mpeg")
 	}
@@ -128,8 +127,6 @@ func (s *Server) genericTTSSpeech(w http.ResponseWriter, r *http.Request, provid
 	writeSpeechAudio(w, input, audio, format)
 	return true
 }
-
-func (s *Server) providerAPIKey(value string) string { return value }
 
 func (s *Server) googleTranslateSpeech(w http.ResponseWriter, r *http.Request, input map[string]any) bool {
 	model, _ := input["model"].(string)
