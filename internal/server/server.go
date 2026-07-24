@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"g9router/internal/db"
 	"g9router/internal/oauth"
 	"g9router/internal/providers"
+	"g9router/internal/settings"
 	"g9router/internal/translator"
 	"g9router/internal/usage"
 	"g9router/internal/web"
@@ -23,11 +26,12 @@ type Options struct {
 }
 
 type Server struct {
-	options Options
-	client  *http.Client
-	store   *providers.Store
-	usage   *usage.Store
-	oauth   *oauth.Manager
+	options  Options
+	client   *http.Client
+	store    *providers.Store
+	usage    *usage.Store
+	oauth    *oauth.Manager
+	settings *settings.Store
 }
 
 func New(options Options) *Server {
@@ -40,7 +44,11 @@ func New(options Options) *Server {
 	if options.OAuthPath == "" {
 		options.OAuthPath = "g9router.db"
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath)}
+	var database *sql.DB
+	if opened, err := db.Open("g9router.db"); err == nil {
+		database = opened
+	}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database)}
 }
 
 func (s *Server) Run() error {
@@ -58,8 +66,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/usage", s.usageAPI)
 	mux.HandleFunc("/api/oauth", s.oauthAPI)
+	mux.HandleFunc("/api/settings", s.settingsAPI)
 	mux.Handle("/", web.Handler())
 	return logging(mux)
+}
+
+func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, 200, s.settings.Get())
+	case http.MethodPut, http.MethodPost:
+		var values map[string]any
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&values) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		if err := s.settings.Update(values); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "saved"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
 }
 
 func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
