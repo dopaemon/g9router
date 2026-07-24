@@ -2,10 +2,13 @@ package server
 
 import (
 	"bufio"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -27,8 +30,10 @@ var googleTranslateSID = regexp.MustCompile(`"FdrFJe":"(.*?)"`)
 var googleTranslateBL = regexp.MustCompile(`"cfb2h":"(.*?)"`)
 var googleTranslateIndex atomic.Uint64
 
-func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {
+func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, providerData, input map[string]any) bool {
 	switch providerID {
+	case "aws-polly":
+		return s.awsPollySpeech(w, r, apiKey, providerData, input)
 	case "elevenlabs":
 		return s.elevenLabsSpeech(w, r, apiKey, input)
 	case "gemini":
@@ -46,6 +51,70 @@ func (s *Server) providerSpeech(w http.ResponseWriter, r *http.Request, provider
 	default:
 		return false
 	}
+}
+
+func (s *Server) awsPollySpeech(w http.ResponseWriter, r *http.Request, secret string, data, input map[string]any) bool {
+	region := nonEmpty(stringValue(data["region"]), "us-east-1")
+	accessKey := stringValue(data["accessKeyId"])
+	if accessKey == "" || secret == "" {
+		return false
+	}
+	voice := nonEmpty(stringValue(input["voice"]), "Joanna")
+	engine := nonEmpty(stringValue(input["model"]), "standard")
+	format := nonEmpty(stringValue(input["response_format"]), "mp3")
+	if format == "wav" {
+		format = "pcm"
+	}
+	payload, _ := json.Marshal(map[string]any{"Engine": engine, "OutputFormat": format, "Text": stringValue(input["input"]), "VoiceId": voice})
+	host := "polly." + region + ".amazonaws.com"
+	endpoint := "https://" + host + "/v1/speech"
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, strings.NewReader(string(payload)))
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Host", host)
+	if !signAWSRequest(request, payload, accessKey, secret, region, "polly") {
+		return false
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	audio, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
+	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 || len(audio) == 0 {
+		return false
+	}
+	writeSpeechAudio(w, input, audio, format)
+	return true
+}
+
+func signAWSRequest(request *http.Request, payload []byte, accessKey, secret, region, service string) bool {
+	now := time.Now().UTC()
+	date, stamp := now.Format("20060102"), now.Format("20060102T150405Z")
+	hashPayload := fmt.Sprintf("%x", sha256.Sum256(payload))
+	request.Header.Set("X-Amz-Date", stamp)
+	request.Header.Set("X-Amz-Content-Sha256", hashPayload)
+	canonicalHeaders := "content-type:" + request.Header.Get("Content-Type") + "\nhost:" + request.Host + "\nx-amz-content-sha256:" + hashPayload + "\nx-amz-date:" + stamp + "\n"
+	signed := "content-type;host;x-amz-content-sha256;x-amz-date"
+	canonical := request.Method + "\n" + request.URL.EscapedPath() + "\n\n" + canonicalHeaders + "\n" + signed + "\n" + hashPayload
+	algorithm, scope := "AWS4-HMAC-SHA256", date+"/"+region+"/"+service+"/aws4_request"
+	requestHash := fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
+	stringToSign := algorithm + "\n" + stamp + "\n" + scope + "\n" + requestHash
+	kDate := awsHMAC([]byte("AWS4"+secret), date)
+	kRegion := awsHMAC(kDate, region)
+	kService := awsHMAC(kRegion, service)
+	key := awsHMAC(kService, "aws4_request")
+	signature := fmt.Sprintf("%x", awsHMAC(key, stringToSign))
+	request.Header.Set("Authorization", algorithm+" Credential="+accessKey+"/"+scope+", SignedHeaders="+signed+", Signature="+signature)
+	return true
+}
+
+func awsHMAC(key []byte, value string) []byte {
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(value))
+	return mac.Sum(nil)
 }
 
 func (s *Server) openAICompatibleSpeech(w http.ResponseWriter, r *http.Request, providerID, apiKey string, input map[string]any) bool {

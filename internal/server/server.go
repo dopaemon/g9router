@@ -3371,7 +3371,7 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 		if path == "/images/generations" && s.providerImage(w, r, provider.ID, provider.APIKey, provider.ProviderSpecificData, input) {
 			return
 		}
-		if path == "/audio/speech" && s.providerSpeech(w, r, provider.ID, provider.APIKey, input) {
+		if path == "/audio/speech" && s.providerSpeech(w, r, provider.ID, provider.APIKey, provider.ProviderSpecificData, input) {
 			return
 		}
 		if provider.ID == "azure" && s.proxyAzure(w, r, path, body, provider.APIKey, provider.ProviderSpecificData) {
