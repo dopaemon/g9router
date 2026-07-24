@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>g9router</title>
+<style>body{font:15px system-ui;margin:0;background:#10131a;color:#e8edf5}main{max-width:960px;margin:40px auto;padding:0 20px}section{background:#191e29;border:1px solid #2d3545;border-radius:12px;padding:20px;margin:16px 0}input,textarea,button{box-sizing:border-box;width:100%;margin:6px 0;padding:10px;border-radius:7px;border:1px solid #39445a;background:#11151d;color:inherit}button{cursor:pointer;background:#356ae6;border:0}pre{white-space:pre-wrap;background:#11151d;padding:12px;border-radius:8px;min-height:80px}</style></head>
+<body><main><h1>g9router</h1><p>Go OpenAI-compatible router dashboard</p>
+<section><h2>Health</h2><button onclick="load('/healthz')">Check server</button><pre id="health"></pre></section>
+<section><h2>Models</h2><button onclick="load('/v1/models')">Load models</button><pre id="models"></pre></section>
+<section><h2>Chat smoke test</h2><input id="model" placeholder="model" value="gpt-4o-mini"><textarea id="prompt" rows="4">Hello from g9router</textarea><button onclick="chat()">Send</button><pre id="answer"></pre></section>
+</main><script>
+async function load(path){const box=document.getElementById(path.includes('models')?'models':'health');try{box.textContent=JSON.stringify(await (await fetch(path)).json(),null,2)}catch(e){box.textContent=e}}
+async function chat(){const box=document.getElementById('answer');box.textContent='Loading...';try{const r=await fetch('/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:document.getElementById('model').value,messages:[{role:'user',content:document.getElementById('prompt').value}]})});box.textContent=JSON.stringify(await r.json(),null,2)}catch(e){box.textContent=e}}
+</script></body></html>
