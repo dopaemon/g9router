@@ -2,14 +2,26 @@ package server
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
+
+type perplexitySession struct {
+	backend string
+	at      time.Time
+}
+
+var perplexitySessions = struct {
+	sync.Mutex
+	values map[string]perplexitySession
+}{values: map[string]perplexitySession{}}
 
 func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, request map[string]any, token string) bool {
 	messages, _ := request["messages"].([]any)
@@ -23,6 +35,8 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 		mode, preference = mapped[0], mapped[1]
 	}
 	query := ""
+	history := make([]any, 0, len(messages))
+	lastUser := -1
 	for _, raw := range messages {
 		message, _ := raw.(map[string]any)
 		content := grokMessageContent(message["content"])
@@ -33,14 +47,25 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 			query += content + "\n"
 		} else {
 			query += content + "\n"
+			if stringValue(message["role"]) == "user" {
+				lastUser = len(history)
+			}
+			history = append(history, map[string]string{"role": stringValue(message["role"]), "content": content})
 		}
 	}
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return false
 	}
+	followUUID := perplexitySessionLookup(history[:maxInt(lastUser, 0)])
+	if followUUID != "" && lastUser >= 0 {
+		query = stringValue(history[lastUser].(map[string]string)["content"])
+	}
 	frontend := uuidToken(query + fmt.Sprint(time.Now().UnixNano()))
 	payload := map[string]any{"query_str": query, "params": map[string]any{"query_str": query, "search_focus": "internet", "mode": mode, "model_preference": preference, "sources": []string{"web"}, "attachments": []any{}, "frontend_uuid": frontend, "frontend_context_uuid": uuidToken(frontend), "version": "2.18", "language": "en-US", "timezone": "UTC", "search_recency_filter": nil, "is_incognito": true, "use_schematized_api": true, "last_backend_uuid": nil}}
+	if followUUID != "" {
+		payload["params"].(map[string]any)["last_backend_uuid"] = followUUID
+	}
 	encoded, _ := json.Marshal(payload)
 	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://www.perplexity.ai/rest/sse/perplexity_ask", strings.NewReader(string(encoded)))
 	if err != nil {
@@ -70,6 +95,7 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 		w.WriteHeader(http.StatusOK)
 	}
 	full := ""
+	backendUUID := ""
 	scanner := bufio.NewScanner(io.LimitReader(response.Body, 64<<20))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -80,6 +106,7 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 		if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event) != nil {
 			continue
 		}
+		backendUUID = nonEmpty(stringValue(event["backend_uuid"]), backendUUID)
 		text := perplexityBlockText(event)
 		for _, thought := range perplexityThinking(event) {
 			if stream {
@@ -106,10 +133,49 @@ func (s *Server) perplexityWebChat(w http.ResponseWriter, r *http.Request, reque
 	if stream {
 		chunk, _ := json.Marshal(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
 		_, _ = fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
+		perplexitySessionStore(history[:maxInt(lastUser, 0)], query, cleanPerplexityText(full), backendUUID)
 		return true
 	}
+	perplexitySessionStore(history[:maxInt(lastUser, 0)], query, cleanPerplexityText(full), backendUUID)
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "object": "chat.completion", "created": created, "model": model, "choices": []any{map[string]any{"index": 0, "message": map[string]string{"role": "assistant", "content": cleanPerplexityText(full)}, "finish_reason": "stop"}}})
 	return true
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func perplexitySessionKey(history []any, current, answer string) string {
+	data, _ := json.Marshal(append(append([]any{}, history...), map[string]string{"role": "user", "content": current}, map[string]string{"role": "assistant", "content": answer}))
+	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+func perplexitySessionLookup(history []any) string {
+	if len(history) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(history)
+	key := fmt.Sprintf("%x", sha256.Sum256(data))
+	perplexitySessions.Lock()
+	defer perplexitySessions.Unlock()
+	entry, ok := perplexitySessions.values[key]
+	if !ok || time.Since(entry.at) > time.Hour {
+		return ""
+	}
+	return entry.backend
+}
+
+func perplexitySessionStore(history []any, current, answer, backend string) {
+	if backend == "" {
+		return
+	}
+	key := perplexitySessionKey(history, current, answer)
+	perplexitySessions.Lock()
+	defer perplexitySessions.Unlock()
+	perplexitySessions.values[key] = perplexitySession{backend: backend, at: time.Now()}
 }
 
 func perplexityBlockText(event map[string]any) string {
