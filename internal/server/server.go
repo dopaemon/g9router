@@ -833,6 +833,27 @@ func (s *Server) cliToolsStatusAPI(w http.ResponseWriter, r *http.Request) {
 		opencodeInstalled := opencodeCLIErr == nil || opencodeReadErr == nil
 		opencodeConfigured := strings.Contains(string(opencodeRaw), `"9router"`)
 		result["opencode"] = map[string]any{"installed": opencodeInstalled, "configured": opencodeConfigured, "available": opencodeInstalled}
+		coworkInstalled := false
+		coworkConfigured := false
+		for _, candidate := range []string{filepath.Join(home, ".config", "Claude-3p"), filepath.Join(home, ".config", "Claude"), filepath.Join(home, ".config", "Claude-3p", "configLibrary")} {
+			if _, err := os.Stat(candidate); err == nil {
+				coworkInstalled = true
+			}
+		}
+		if coworkInstalled {
+			matches, _ := filepath.Glob(filepath.Join(home, ".config", "Claude-3p", "configLibrary", "*.json"))
+			for _, match := range matches {
+				if strings.Contains(readText(match), "inferenceGatewayBaseUrl") {
+					coworkConfigured = true
+					break
+				}
+			}
+		}
+		result["cowork"] = map[string]any{"installed": coworkInstalled, "configured": coworkConfigured, "available": coworkInstalled}
+		jcodeConfig, _, _ := jcodePaths()
+		jcodeInstalledState := jcodeInstalled()
+		jcodeConfigured := jcodeHas9Router(readText(jcodeConfig))
+		result["jcode"] = map[string]any{"installed": jcodeInstalledState, "configured": jcodeConfigured, "available": jcodeInstalledState}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
