@@ -179,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/kiro/api-key", s.kiroAPIKeyAPI)
 	mux.HandleFunc("/api/oauth/kiro/auto-import", s.kiroAutoImportAPI)
 	mux.HandleFunc("/api/oauth/cursor/import", s.cursorImportAPI)
+	mux.HandleFunc("/api/oauth/cursor/auto-import", s.cursorAutoImportAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
 	mux.HandleFunc("/api/provider-nodes", s.providerNodesAPI)
 	mux.HandleFunc("/api/provider-nodes/", s.providerNodeResourceAPI)
