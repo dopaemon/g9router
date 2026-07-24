@@ -1804,10 +1804,30 @@ func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, base
 	if err != nil || response == nil {
 		return false
 	}
-	defer response.Body.Close()
 	if response.StatusCode >= 500 {
+		response.Body.Close()
 		return false
 	}
+	stream, _ := request["stream"].(bool)
+	if !stream {
+		defer response.Body.Close()
+		payload, err := io.ReadAll(response.Body)
+		if err != nil {
+			return false
+		}
+		text := ""
+		for len(payload) >= 5 {
+			decoded, consumed, valid := cursor.ParseFrame(payload)
+			if !valid {
+				break
+			}
+			payload = payload[consumed:]
+			text += decoded.Text
+		}
+		writeJSON(w, response.StatusCode, map[string]any{"id": "chatcmpl-" + hex.EncodeToString(randomBytes(12)), "object": "chat.completion", "created": time.Now().Unix(), "model": model, "choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": text}, "finish_reason": "stop"}}})
+		return response.StatusCode < 400
+	}
+	defer response.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(response.StatusCode)
