@@ -17,6 +17,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -105,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/codex-settings", s.codexSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/copilot-settings", s.copilotSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -721,6 +724,113 @@ func (s *Server) codexSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) copilotSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	configPath := filepath.Join(home, ".config", "Code", "User", "chatLanguageModels.json")
+	if runtime.GOOS == "darwin" {
+		configPath = filepath.Join(home, "Library", "Application Support", "Code", "User", "chatLanguageModels.json")
+	}
+	if runtime.GOOS == "windows" {
+		configPath = filepath.Join(os.Getenv("APPDATA"), "Code", "User", "chatLanguageModels.json")
+	}
+	read := func() []any {
+		raw, readErr := os.ReadFile(configPath)
+		if readErr != nil {
+			return []any{}
+		}
+		clean := regexp.MustCompile(`,\s*([}\]])`).ReplaceAll(raw, []byte(`$1`))
+		var config []any
+		if json.Unmarshal(clean, &config) != nil {
+			return []any{}
+		}
+		return config
+	}
+	write := func(config []any) error {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			return err
+		}
+		raw, _ := json.MarshalIndent(config, "", "  ")
+		return os.WriteFile(configPath, raw, 0600)
+	}
+	find := func(config []any) (int, map[string]any) {
+		for index, raw := range config {
+			if entry, ok := raw.(map[string]any); ok && entry["name"] == "9Router" {
+				return index, entry
+			}
+		}
+		return -1, nil
+	}
+	switch r.Method {
+	case http.MethodGet:
+		config := read()
+		_, entry := find(config)
+		response := map[string]any{"installed": true, "config": config, "has9Router": entry != nil, "configPath": configPath, "currentModel": nil, "currentUrl": nil}
+		if entry != nil {
+			if models, ok := entry["models"].([]any); ok && len(models) > 0 {
+				if model, ok := models[0].(map[string]any); ok {
+					response["currentModel"] = model["id"]
+					response["currentUrl"] = model["url"]
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var input struct {
+			BaseURL string   `json:"baseUrl"`
+			APIKey  string   `json:"apiKey"`
+			Models  []string `json:"models"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || len(input.Models) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "baseUrl and models are required"})
+			return
+		}
+		models := make([]any, 0, len(input.Models))
+		endpoint := strings.TrimRight(input.BaseURL, "/") + "/chat/completions#models.ai.azure.com"
+		for _, id := range input.Models {
+			models = append(models, map[string]any{"id": id, "name": id, "url": endpoint, "toolCalling": true, "vision": false, "maxInputTokens": 128000, "maxOutputTokens": 16000})
+		}
+		config := read()
+		entry := map[string]any{"name": "9Router", "vendor": "azure", "apiKey": input.APIKey, "models": models}
+		if entry["apiKey"] == "" {
+			entry["apiKey"] = "sk_9router"
+		}
+		index, _ := find(config)
+		if index >= 0 {
+			config[index] = entry
+		} else {
+			config = append(config, entry)
+		}
+		if err := write(config); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Copilot settings applied! Reload VS Code to take effect.", "configPath": configPath})
+	case http.MethodDelete:
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "No config file to reset"})
+			return
+		}
+		config := read()
+		filtered := make([]any, 0, len(config))
+		for _, raw := range config {
+			if entry, ok := raw.(map[string]any); !ok || entry["name"] != "9Router" {
+				filtered = append(filtered, raw)
+			}
+		}
+		if err := write(filtered); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "9Router removed from Copilot config"})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
 }
 
