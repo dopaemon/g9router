@@ -11,4 +11,8 @@ func TestRegistryDescriptors(t *testing.T) {
 	if !ok || anthropic.Format != "claude" || anthropic.Headers["anthropic-version"] == "" {
 		t.Fatal(anthropic)
 	}
+	gemini, ok := Lookup("gemini")
+	if !ok || gemini.Format != "gemini" || len(gemini.Models) == 0 {
+		t.Fatal(gemini)
+	}
 }
