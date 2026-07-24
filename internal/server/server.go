@@ -102,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/search", s.search)
 	mux.HandleFunc("/api/providers", s.providerAPI)
 	mux.HandleFunc("/api/providers/validate", s.validateProviderAPI)
+	mux.HandleFunc("/api/providers/test-batch", s.providerBatchTestAPI)
 	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
 	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
 	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
@@ -320,6 +321,64 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 	defer response.Body.Close()
 	valid := response.StatusCode != 401 && response.StatusCode != 403
 	writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]string{true: "", false: "Invalid API key"}[valid]})
+}
+
+func (s *Server) providerBatchTestAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var input struct {
+		Mode       string `json:"mode"`
+		ProviderID string `json:"providerId"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Mode == "" {
+		writeJSON(w, 400, map[string]string{"error": "mode is required"})
+		return
+	}
+	if input.Mode != "all" && input.Mode != "provider" && input.Mode != "oauth" && input.Mode != "apikey" {
+		writeJSON(w, 400, map[string]string{"error": "Invalid mode"})
+		return
+	}
+	results := []map[string]any{}
+	for _, provider := range s.store.Enabled() {
+		if input.Mode == "provider" && provider.ID != input.ProviderID {
+			continue
+		}
+		if input.Mode == "oauth" && provider.OAuthID == "" {
+			continue
+		}
+		if input.Mode == "apikey" && provider.OAuthID != "" {
+			continue
+		}
+		started := time.Now()
+		base := strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+		if err == nil && provider.APIKey != "" {
+			request.Header.Set("Authorization", "Bearer "+provider.APIKey)
+		}
+		status, valid, message := 0, false, ""
+		if err != nil {
+			message = err.Error()
+		} else if response, requestErr := s.client.Do(request); requestErr != nil {
+			message = requestErr.Error()
+		} else {
+			status = response.StatusCode
+			valid = status >= 200 && status < 300
+			if !valid {
+				message = response.Status
+			}
+			response.Body.Close()
+		}
+		results = append(results, map[string]any{"provider": provider.ID, "connectionId": provider.ID, "connectionName": provider.Name, "authType": map[bool]string{true: "oauth", false: "apikey"}[provider.OAuthID != ""], "valid": valid, "latencyMs": time.Since(started).Milliseconds(), "statusCode": status, "error": message})
+	}
+	passed := 0
+	for _, result := range results {
+		if result["valid"] == true {
+			passed++
+		}
+	}
+	writeJSON(w, 200, map[string]any{"mode": input.Mode, "providerId": input.ProviderID, "results": results, "summary": map[string]int{"total": len(results), "passed": passed, "failed": len(results) - passed}, "testedAt": time.Now().UTC()})
 }
 
 func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id string) {
