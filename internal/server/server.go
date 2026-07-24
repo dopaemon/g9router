@@ -206,6 +206,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/kilocode/poll", s.kiloCodePollAPI)
 	mux.HandleFunc("/api/oauth/codebuddy-cn/device-code", s.codeBuddyDeviceCodeAPI)
 	mux.HandleFunc("/api/oauth/codebuddy-cn/poll", s.codeBuddyPollAPI)
+	mux.HandleFunc("/api/oauth/kimchi/authorize", s.kimchiAuthorizeAPI)
+	mux.HandleFunc("/api/oauth/kimchi/exchange", s.kimchiExchangeAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
