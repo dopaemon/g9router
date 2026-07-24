@@ -25,3 +25,18 @@ func TestRefreshPersistsAccessToken(t *testing.T) {
 		t.Fatal(credential)
 	}
 }
+
+func TestRefreshSupportsKiroCamelCase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"accessToken":"kiro-token","refreshToken":"next-refresh","expiresIn":3600}`)
+	}))
+	defer server.Close()
+	manager := New(t.TempDir() + "/kiro.json")
+	if err := manager.Upsert(Credential{ID: "kiro", RefreshToken: "refresh", TokenURL: server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	credential, err := manager.Refresh(t.Context(), "kiro")
+	if err != nil || credential.AccessToken != "kiro-token" || credential.RefreshToken != "next-refresh" {
+		t.Fatal(credential, err)
+	}
+}

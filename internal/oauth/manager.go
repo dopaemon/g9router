@@ -91,12 +91,24 @@ func (m *Manager) Refresh(ctx context.Context, id string) (Credential, error) {
 		return item, fmt.Errorf("token refresh status %s", response.Status)
 	}
 	var payload struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int64  `json:"expires_in"`
+		AccessToken       string `json:"access_token"`
+		RefreshToken      string `json:"refresh_token"`
+		ExpiresIn         int64  `json:"expires_in"`
+		AccessTokenCamel  string `json:"accessToken"`
+		RefreshTokenCamel string `json:"refreshToken"`
+		ExpiresInCamel    int64  `json:"expiresIn"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return item, err
+	}
+	if payload.AccessToken == "" {
+		payload.AccessToken = payload.AccessTokenCamel
+	}
+	if payload.RefreshToken == "" {
+		payload.RefreshToken = payload.RefreshTokenCamel
+	}
+	if payload.ExpiresIn == 0 {
+		payload.ExpiresIn = payload.ExpiresInCamel
 	}
 	if payload.AccessToken == "" {
 		return item, fmt.Errorf("token response missing access_token")
