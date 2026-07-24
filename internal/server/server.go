@@ -133,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/openclaw-settings", s.openclawSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/deepseek-tui-settings", s.deepSeekTUISettingsAPI)
 	mux.HandleFunc("/api/cli-tools/grok-build-settings", s.grokBuildSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/hermes-settings", s.hermesSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -1699,6 +1700,100 @@ func (s *Server) grokBuildSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9router model slots removed from Grok Build"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) hermesSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir, configPath, envPath := filepath.Join(home, ".hermes"), filepath.Join(home, ".hermes", "config.yaml"), filepath.Join(home, ".hermes", ".env")
+	switch r.Method {
+	case http.MethodGet:
+		raw, readErr := os.ReadFile(configPath)
+		_, cliErr := exec.LookPath("hermes")
+		if os.IsNotExist(readErr) && cliErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "Hermes Agent is not installed"})
+			return
+		}
+		text := string(raw)
+		has := strings.Contains(text, "provider: \"custom\"") && (strings.Contains(text, "localhost") || strings.Contains(text, "127.0.0.1") || strings.Contains(text, "0.0.0.0"))
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": map[string]any{"raw": text}, "has9Router": has, "configPath": configPath})
+	case http.MethodPost:
+		var input struct {
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+			Model   string `json:"model"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl and model are required"})
+			return
+		}
+		base := strings.TrimRight(input.BaseURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		raw, _ := os.ReadFile(configPath)
+		block := fmt.Sprintf("model:\n  default: \"%s\"\n  provider: \"custom\"\n  base_url: \"%s\"\n", input.Model, base)
+		text := string(raw)
+		if strings.HasPrefix(text, "model:") {
+			if index := strings.Index(text, "\n\n"); index >= 0 {
+				text = block + text[index+2:]
+			} else {
+				text = block
+			}
+		} else if text != "" {
+			text = block + "\n" + text
+		} else {
+			text = block
+		}
+		if err := os.WriteFile(configPath, []byte(text), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if input.APIKey != "" {
+			env, _ := os.ReadFile(envPath)
+			envText := string(env)
+			line := "OPENAI_API_KEY=" + input.APIKey
+			if strings.Contains(envText, "OPENAI_API_KEY=") {
+				lines := strings.Split(envText, "\n")
+				for index, value := range lines {
+					if strings.HasPrefix(value, "OPENAI_API_KEY=") {
+						lines[index] = line
+					}
+				}
+				envText = strings.Join(lines, "\n")
+			} else {
+				envText += line + "\n"
+			}
+			_ = os.WriteFile(envPath, []byte(envText), 0600)
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Hermes settings applied successfully!", "configPath": configPath})
+	case http.MethodDelete:
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No config file to reset"})
+			return
+		}
+		raw, _ := os.ReadFile(configPath)
+		text := string(raw)
+		if index := strings.Index(text, "\n\n"); index >= 0 {
+			text = strings.TrimLeft(text[index+2:], "\n")
+		} else {
+			text = ""
+		}
+		if err := os.WriteFile(configPath, []byte(text), 0600); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9router model block removed"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
