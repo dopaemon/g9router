@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"g9router/internal/oauth"
 	"g9router/internal/providers"
 )
 
@@ -106,5 +107,34 @@ func TestClaudeMessagesTranslationRoundTrip(t *testing.T) {
 	}
 	if result["type"] != "message" || result["role"] != "assistant" {
 		t.Fatal(result)
+	}
+}
+
+func TestProviderOAuthCredentialIsUsed(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer oauth-token" {
+			t.Errorf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"chat-1","model":"x","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	defer upstream.Close()
+	app := New(Options{ProviderPath: os.TempDir() + "/oauth-provider.json", OAuthPath: os.TempDir() + "/oauth-provider.json"})
+	if err := app.oauth.Upsert(oauth.Credential{ID: "gh", AccessToken: "oauth-token"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.store.Upsert(providers.Provider{ID: "github", BaseURL: upstream.URL + "/v1", APIType: "openai", OAuthID: "gh", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(app.Handler())
+	defer server.Close()
+	request, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", strings.NewReader(`{"model":"github/gpt","messages":[{"role":"user","content":"hi"}]}`))
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatal(response.StatusCode)
 	}
 }
