@@ -171,6 +171,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/media-providers/tts/voices", s.ttsVoicesAPI)
 	mux.HandleFunc("/api/keys", s.keysAPI)
 	mux.HandleFunc("/api/keys/", s.keyResourceAPI)
+	mux.HandleFunc("/api/combos", s.combosAPI)
+	mux.HandleFunc("/api/combos/", s.comboResourceAPI)
 	mux.HandleFunc("/api/settings", s.settingsAPI)
 	mux.HandleFunc("/api/settings/require-login", s.requireLoginAPI)
 	mux.HandleFunc("/api/settings/database", s.databaseSettingsAPI)
