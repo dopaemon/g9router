@@ -32,6 +32,7 @@ import (
 	"g9router/internal/format"
 	"g9router/internal/headroom"
 	keyStore "g9router/internal/keys"
+	"g9router/internal/kiro"
 	"g9router/internal/mcp"
 	"g9router/internal/mitm"
 	"g9router/internal/oauth"
@@ -3898,6 +3899,9 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 	if response.StatusCode >= 500 {
 		return false
 	}
+	if strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "eventstream") {
+		return s.proxyKiroEventStream(w, response.Body)
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(response.StatusCode)
@@ -3929,6 +3933,43 @@ func (s *Server) proxyKiro(w http.ResponseWriter, incoming *http.Request, baseUR
 		}
 	}
 	return scanner.Err() == nil
+}
+
+func (s *Server) proxyKiroEventStream(w http.ResponseWriter, body io.Reader) bool {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return false
+	}
+	state := &translator.KiroStreamState{}
+	pending := make([]byte, 0, 32*1024)
+	buffer := make([]byte, 32*1024)
+	for {
+		count, err := body.Read(buffer)
+		if count > 0 {
+			pending = append(pending, buffer[:count]...)
+			remaining, events, parseErr := kiro.Parse(pending)
+			if parseErr != nil {
+				return false
+			}
+			pending = remaining
+			for _, event := range events {
+				eventType := event.Headers[":event-type"]
+				for _, output := range translator.KiroEventToOpenAISSE(eventType, event.Payload, state) {
+					_, _ = io.WriteString(w, output)
+					flusher.Flush()
+				}
+			}
+		}
+		if err == io.EOF {
+			return len(pending) == 0
+		}
+		if err != nil {
+			return false
+		}
+	}
 }
 
 func (s *Server) proxyCursor(w http.ResponseWriter, incoming *http.Request, baseURL, model string, request map[string]any, apiKey string, specific map[string]any) bool {
