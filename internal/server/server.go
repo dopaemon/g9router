@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/opencode-settings", s.opencodeSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/copilot-settings", s.copilotSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/droid-settings", s.droidSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/cline-settings", s.clineSettingsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
 	mux.HandleFunc("/api/headroom/start", s.headroomStartAPI)
@@ -968,6 +969,102 @@ func (s *Server) droidSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed successfully"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (s *Server) clineSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	dir := filepath.Join(home, ".cline", "data")
+	statePath, secretsPath := filepath.Join(dir, "globalState.json"), filepath.Join(dir, "secrets.json")
+	read := func(path string) map[string]any {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return map[string]any{}
+		}
+		raw = regexp.MustCompile(`,\s*([}\]])`).ReplaceAll(raw, []byte(`$1`))
+		var value map[string]any
+		if json.Unmarshal(raw, &value) != nil {
+			return map[string]any{}
+		}
+		return value
+	}
+	write := func(path string, value map[string]any) error {
+		raw, _ := json.MarshalIndent(value, "", "  ")
+		return os.WriteFile(path, raw, 0600)
+	}
+	switch r.Method {
+	case http.MethodGet:
+		_, cliErr := exec.LookPath("cline")
+		_, fileErr := os.Stat(statePath)
+		if cliErr != nil && fileErr != nil {
+			writeJSON(w, 200, map[string]any{"installed": false, "settings": nil, "message": "Cline CLI is not installed"})
+			return
+		}
+		state := read(statePath)
+		settings := map[string]any{"actModeApiProvider": state["actModeApiProvider"], "planModeApiProvider": state["planModeApiProvider"], "openAiBaseUrl": state["openAiBaseUrl"], "openAiModelId": state["openAiModelId"]}
+		base := anyString(state["openAiBaseUrl"])
+		isOpenAI := state["actModeApiProvider"] == "openai" || state["planModeApiProvider"] == "openai"
+		has := isOpenAI && (strings.Contains(base, "localhost") || strings.Contains(base, "127.0.0.1") || strings.Contains(base, "9router"))
+		writeJSON(w, 200, map[string]any{"installed": true, "settings": settings, "has9Router": has, "globalStatePath": statePath})
+	case http.MethodPost:
+		var input struct {
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+			Model   string `json:"model"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.BaseURL == "" || input.APIKey == "" || input.Model == "" {
+			writeJSON(w, 400, map[string]string{"error": "baseUrl, apiKey and model are required"})
+			return
+		}
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		base := strings.TrimRight(input.BaseURL, "/")
+		base = strings.TrimSuffix(base, "/v1")
+		state := read(statePath)
+		state["actModeApiProvider"], state["planModeApiProvider"] = "openai", "openai"
+		state["openAiBaseUrl"], state["openAiModelId"], state["planModeOpenAiModelId"] = base, input.Model, input.Model
+		secrets := read(secretsPath)
+		secrets["openAiApiKey"] = input.APIKey
+		if err := write(statePath, state); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := write(secretsPath, secrets); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "Cline settings applied successfully!", "globalStatePath": statePath})
+	case http.MethodDelete:
+		state := read(statePath)
+		if len(state) == 0 {
+			writeJSON(w, 200, map[string]any{"success": true, "message": "No settings file to reset"})
+			return
+		}
+		if state["actModeApiProvider"] == "openai" {
+			delete(state, "openAiBaseUrl")
+			delete(state, "openAiModelId")
+			delete(state, "planModeOpenAiModelId")
+			state["actModeApiProvider"], state["planModeApiProvider"] = "cline", "cline"
+		}
+		secrets := read(secretsPath)
+		delete(secrets, "openAiApiKey")
+		if err := write(statePath, state); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := write(secretsPath, secrets); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "message": "9Router settings removed from Cline"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
