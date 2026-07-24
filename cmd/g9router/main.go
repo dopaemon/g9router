@@ -20,9 +20,14 @@ func main() {
 		os.Exit(xai.Run(context.Background(), os.Args[3:], os.Stdout, os.Stderr))
 	}
 	port := flag.Int("port", 0, "port to run the server")
+	flag.IntVar(port, "p", 0, "port to run the server")
 	host := flag.String("host", "", "host to bind")
+	flag.StringVar(host, "H", "", "host to bind")
 	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
 	flag.BoolVar(noBrowser, "n", false, "do not open the dashboard")
+	flag.Bool("log", false, "show server logs")
+	flag.Bool("tray", false, "run in system tray mode")
+	flag.Bool("skip-update", false, "skip update check")
 	version := flag.Bool("version", false, "show version")
 	flag.Parse()
 	if *version {
