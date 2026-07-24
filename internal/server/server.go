@@ -135,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cli-tools/grok-build-settings", s.grokBuildSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/hermes-settings", s.hermesSettingsAPI)
 	mux.HandleFunc("/api/cli-tools/jcode-settings", s.jcodeSettingsAPI)
+	mux.HandleFunc("/api/cli-tools/cowork-mcp-registry", s.coworkMCPRegistryAPI)
 	mux.HandleFunc("/api/cli-tools/cowork-mcp-tools", s.coworkMCPToolsAPI)
 	mux.HandleFunc("/api/mcp/", s.mcpAPI)
 	mux.HandleFunc("/api/headroom/status", s.headroomStatusAPI)
