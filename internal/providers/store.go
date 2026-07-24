@@ -11,9 +11,9 @@ import (
 )
 
 type Provider struct {
-	ID, Name, BaseURL, APIKey, APIType string
-	Enabled                            bool      `json:"enabled"`
-	Accounts                           []Account `json:"accounts,omitempty"`
+	ID, Name, BaseURL, APIKey, APIType, OAuthID string
+	Enabled                                     bool      `json:"enabled"`
+	Accounts                                    []Account `json:"accounts,omitempty"`
 }
 
 type Account struct {
