@@ -159,9 +159,9 @@ func TestValidateGenericProviderFallsBackToChat(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
 	app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
-		case "/v1/models":
+		case "/models":
 			return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody, Header: make(http.Header)}, nil
-		case "/v1/chat/completions":
+		case "/chat/completions":
 			return &http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody, Header: make(http.Header)}, nil
 		default:
 			t.Fatalf("path=%s", request.URL.Path)
