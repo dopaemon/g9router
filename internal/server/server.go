@@ -352,15 +352,74 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPut {
-		var provider providers.Provider
-		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&provider) != nil {
+		var input map[string]any
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
 			return
 		}
-		provider.ID = id
-		if provider.BaseURL == "" {
-			writeJSON(w, 400, map[string]string{"error": "baseURL is required"})
+		provider, ok := s.store.Find(id)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "provider not found"})
 			return
+		}
+		if value, ok := input["name"].(string); ok {
+			provider.Name = value
+		}
+		if value, ok := input["baseURL"].(string); ok {
+			provider.BaseURL = value
+		}
+		if value, ok := input["apiType"].(string); ok {
+			provider.APIType = value
+		}
+		if value, ok := input["oauthId"].(string); ok {
+			provider.OAuthID = value
+		}
+		if value, ok := input["apiKey"].(string); ok && provider.OAuthID == "" {
+			provider.APIKey = value
+		}
+		if value, ok := input["enabled"].(bool); ok {
+			provider.Enabled = value
+		}
+		if value, ok := input["isActive"].(bool); ok {
+			provider.Enabled = value
+		}
+		if value, ok := input["testStatus"].(string); ok {
+			provider.TestStatus = value
+		}
+		if value, ok := input["lastError"].(string); ok {
+			provider.LastError = value
+		}
+		if value, ok := input["providerSpecificData"].(map[string]any); ok {
+			if provider.ProviderSpecificData == nil {
+				provider.ProviderSpecificData = map[string]any{}
+			}
+			for key, item := range value {
+				provider.ProviderSpecificData[key] = item
+			}
+		}
+		proxyFields := []string{"connectionProxyEnabled", "connectionProxyUrl", "connectionNoProxy"}
+		hasProxyField := false
+		for _, key := range proxyFields {
+			if _, exists := input[key]; exists {
+				hasProxyField = true
+				break
+			}
+		}
+		if hasProxyField {
+			enabled, _ := input["connectionProxyEnabled"].(bool)
+			proxyURL, _ := input["connectionProxyUrl"].(string)
+			noProxy, _ := input["connectionNoProxy"].(string)
+			proxyURL = strings.TrimSpace(proxyURL)
+			if enabled && proxyURL == "" {
+				writeJSON(w, 400, map[string]string{"error": "Connection proxy URL is required when connection proxy is enabled"})
+				return
+			}
+			if provider.ProviderSpecificData == nil {
+				provider.ProviderSpecificData = map[string]any{}
+			}
+			provider.ProviderSpecificData["connectionProxyEnabled"] = enabled
+			provider.ProviderSpecificData["connectionProxyUrl"] = proxyURL
+			provider.ProviderSpecificData["connectionNoProxy"] = strings.TrimSpace(noProxy)
 		}
 		if err := s.store.Upsert(provider); err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})

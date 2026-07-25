@@ -216,3 +216,20 @@ func TestSettingsAPIHidesProtectedFields(t *testing.T) {
 		t.Fatalf("protected setting changed: %q", value)
 	}
 }
+
+func TestProviderResourcePutMergesPartialConnection(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "demo", Name: "Old", BaseURL: "http://old", APIKey: "secret", Enabled: true, ProviderSpecificData: map[string]any{"region": "ams"}}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/api/providers/demo", strings.NewReader(`{"name":"New"}`))
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	provider, ok := app.store.Find("demo")
+	if !ok || provider.Name != "New" || provider.BaseURL != "http://old" || provider.APIKey != "secret" || provider.ProviderSpecificData["region"] != "ams" {
+		t.Fatalf("partial update lost data: %#v", provider)
+	}
+}
