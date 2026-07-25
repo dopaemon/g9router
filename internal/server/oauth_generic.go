@@ -18,6 +18,10 @@ func (s *Server) genericOAuthAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/oauth/"), "/"), "/")
+	if len(parts) == 2 && (parts[1] == "start-proxy" || parts[1] == "poll-status" || parts[1] == "stop-proxy") {
+		s.oauthProxyAPI(w, r)
+		return
+	}
 	if len(parts) != 2 || parts[1] != "authorize" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Unsupported OAuth action"})
 		return
@@ -41,7 +45,7 @@ func (s *Server) genericOAuthAPI(w http.ResponseWriter, r *http.Request) {
 	challenge := base64.RawURLEncoding.EncodeToString(hash[:])
 	config := map[string]struct {
 		clientID, authURL, scope string
-		extra                        map[string]string
+		extra                    map[string]string
 	}{
 		"claude": {"9d1c250a-e61b-44d9-88ed-5944d1962f5e", "https://claude.ai/oauth/authorize", "org:create_api_key user:profile user:inference", nil},
 		"codex":  {"app_EMoamEEZ73f0CkXaXp7hrann", "https://auth.openai.com/oauth/authorize", "openid profile email offline_access", map[string]string{"id_token_add_organizations": "true", "codex_cli_simplified_flow": "true", "originator": "codex_cli_rs"}},

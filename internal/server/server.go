@@ -236,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/oauth/iflow/exchange", s.iflowExchangeAPI)
 	mux.HandleFunc("/api/oauth/xai/authorize", s.xaiAuthorizeAPI)
 	mux.HandleFunc("/api/oauth/xai/exchange", s.xaiExchangeAPI)
+	mux.HandleFunc("/api/oauth/xai/", s.oauthProxyAPI)
 	mux.HandleFunc("/api/oauth/claude/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/codex/", s.genericOAuthAPI)
 	mux.HandleFunc("/api/oauth/", s.oauthResourceAPI)
