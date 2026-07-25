@@ -205,6 +205,9 @@ func TestProvidersScreenSupportsSelection(t *testing.T) {
 	if !strings.Contains(model.notice, "anthropic") {
 		t.Fatalf("enter did not select provider: %q", model.notice)
 	}
+	if !strings.Contains(model.content(model.raw), "[A]") || !strings.Contains(model.content(model.raw), "[T]") {
+		t.Fatalf("provider actions missing: %s", model.content(model.raw))
+	}
 }
 
 func TestNonResourceScreensUseReadableViews(t *testing.T) {

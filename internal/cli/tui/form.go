@@ -66,6 +66,8 @@ func (form formModel) update(message tea.Msg) (formModel, tea.Cmd) {
 				label := strings.TrimSuffix(strings.TrimSpace(field.Prompt), ":")
 				key := strings.ToLower(label)
 				switch label {
+				case "Provider ID":
+					key = "id"
 				case "Base URL":
 					key = "baseURL"
 				case "API key":

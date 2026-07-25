@@ -33,7 +33,7 @@ var styles = struct {
 	Title:    lipgloss.NewStyle().Bold(true).Foreground(palette.Text),
 	Subtitle: lipgloss.NewStyle().Foreground(palette.Muted),
 	Panel:    lipgloss.NewStyle().Background(palette.Surface).Border(lipgloss.RoundedBorder()).BorderForeground(palette.Rose).Padding(1, 2),
-	Selected: lipgloss.NewStyle().Bold(true).Foreground(palette.Text).Background(palette.Pink).Padding(0, 1),
+	Selected: lipgloss.NewStyle().Bold(true).Foreground(palette.Pink).Padding(0, 1),
 	Item:     lipgloss.NewStyle().Foreground(palette.Text).Padding(0, 1),
 	Muted:    lipgloss.NewStyle().Foreground(palette.Muted),
 	Success:  lipgloss.NewStyle().Bold(true).Foreground(palette.Green),

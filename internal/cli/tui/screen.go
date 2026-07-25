@@ -189,7 +189,7 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "a":
 			switch model.current.title {
 			case "Providers":
-				form := newForm("Add provider", model.baseURL, "/api/providers", model.client, "Name", "Base URL", "API key")
+				form := newForm("Add provider", model.baseURL, "/api/providers", model.client, "Provider ID", "Name", "Base URL", "API key")
 				model.form = &form
 			case "API Keys":
 				form := newForm("Create API key", model.baseURL, "/api/keys", model.client, "Name")
@@ -270,11 +270,26 @@ func (model screenModel) content(raw string) string {
 		}
 		lines = append(lines, marker+styles.Item.Render(fmt.Sprintf("%-24s %-42s %s", item.label, item.detail, status)))
 	}
-	hint := "enter select"
-	if model.current.title == "Providers" || model.current.title == "API Keys" {
-		hint += "  a add"
-	}
+	hint := model.actionHint()
 	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render(hint)
+}
+
+func (model screenModel) actionHint() string {
+	button := func(key, label string) string {
+		return styles.Selected.Render("[" + key + "] " + label)
+	}
+	switch model.current.title {
+	case "Providers":
+		return "↑↓ select  enter details  " + button("A", "Add") + " " + button("D", "Delete") + " " + button("T", "Test")
+	case "API Keys":
+		return "↑↓ select  enter details  " + button("A", "Add") + " " + button("X", "Toggle") + " " + button("D", "Delete")
+	case "Combos":
+		return "↑↓ select  enter details  " + button("D", "Delete")
+	case "OAuth":
+		return "↑↓ select  enter details  " + button("U", "Refresh") + " " + button("D", "Delete")
+	default:
+		return "↑↓ select  enter details  r refresh"
+	}
 }
 
 func (model screenModel) actionFor(key string) *resourceAction {
