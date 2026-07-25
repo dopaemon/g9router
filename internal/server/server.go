@@ -52,7 +52,7 @@ import (
 )
 
 type Options struct {
-	Addr, Upstream, APIKey, ProviderPath, OAuthPath string
+	Addr, Upstream, APIKey, ProviderPath, OAuthPath, DatabasePath string
 }
 
 type Server struct {
@@ -86,11 +86,14 @@ func New(options Options) *Server {
 	if options.OAuthPath == "" {
 		options.OAuthPath = "g9router.db"
 	}
+	if options.DatabasePath == "" {
+		options.DatabasePath = "g9router.db"
+	}
 	var database *sql.DB
-	if opened, err := db.Open("g9router.db"); err == nil {
+	if opened, err := db.Open(options.DatabasePath); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New("g9router.db"), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New(options.DatabasePath), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
 }
 
 func (s *Server) Run() error {
