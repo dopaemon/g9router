@@ -273,7 +273,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "No API keys found. Create one in API Keys menu first.")
 		return nil
 	}
-	fmt.Fprint(ui.Out, "Tool (claude/codex/opencode/droid/openclaw/hermes): ")
+	fmt.Fprint(ui.Out, "Tool (claude/codex/opencode/copilot/droid/openclaw/hermes/cline/kilo/deepseek-tui/grok-build/jcode/cowork): ")
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -292,7 +292,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "cc/claude-haiku-4-5-20251001",
 			},
 		}, nil)
-	case "codex", "droid", "openclaw", "hermes":
+	case "codex", "droid", "openclaw", "hermes", "copilot", "cline", "kilo", "deepseek-tui", "grok-build", "jcode", "cowork":
 		fmt.Fprint(ui.Out, "Model: ")
 		model, err := reader.ReadString('\n')
 		if err != nil {
@@ -303,17 +303,20 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 			model = "cx/claude-sonnet-4-5-20250929"
 		}
 		path := "/api/cli-tools/" + tool + "-settings"
-		if tool == "opencode" {
-			return ui.request(http.MethodPost, path, map[string]any{
-				"baseUrl":     strings.TrimRight(ui.BaseURL, "/") + "/v1",
-				"apiKey":      key,
-				"models":      []string{model},
-				"activeModel": model,
-			}, nil)
+		return ui.request(http.MethodPost, path, map[string]any{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "model": model, "models": []string{model}, "activeModel": model}, nil)
+	case "opencode":
+		fmt.Fprint(ui.Out, "Model: ")
+		model, err := reader.ReadString('\n')
+		if err != nil {
+			return err
 		}
-		return ui.request(http.MethodPost, path, map[string]string{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "model": model}, nil)
+		model = strings.TrimSpace(model)
+		if model == "" {
+			model = "cc/claude-sonnet-4-5-20250929"
+		}
+		return ui.request(http.MethodPost, "/api/cli-tools/opencode-settings", map[string]any{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "models": []string{model}, "activeModel": model, "subagentModel": model}, nil)
 	default:
-		fmt.Fprintln(ui.Out, "Quick setup supports claude and codex.")
+		fmt.Fprintln(ui.Out, "Tool does not support quick setup.")
 		return nil
 	}
 }
