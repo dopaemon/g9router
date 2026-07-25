@@ -65,9 +65,6 @@ func (s *Store) List() []Key {
 	defer s.mu.Unlock()
 	result := make([]Key, len(s.items))
 	copy(result, s.items)
-	for i := range result {
-		result[i].Key = mask(result[i].Key)
-	}
 	return result
 }
 func (s *Store) Get(id string) (Key, bool) {
@@ -75,7 +72,6 @@ func (s *Store) Get(id string) (Key, bool) {
 	defer s.mu.Unlock()
 	for _, item := range s.items {
 		if item.ID == id {
-			item.Key = mask(item.Key)
 			return item, true
 		}
 	}
@@ -105,7 +101,6 @@ func (s *Store) Update(id string, active bool) (Key, bool, error) {
 				return Key{}, false, err
 			}
 			item := s.items[index]
-			item.Key = mask(item.Key)
 			return item, true, nil
 		}
 	}
@@ -143,10 +138,4 @@ func (s *Store) HasActive() bool {
 		}
 	}
 	return false
-}
-func mask(value string) string {
-	if len(value) < 8 {
-		return "********"
-	}
-	return value[:4] + "..." + value[len(value)-4:]
 }
