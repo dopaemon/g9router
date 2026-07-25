@@ -43,3 +43,12 @@ func TestModelCatalogParity(t *testing.T) {
 		t.Fatalf("unknown kind status=%d", response.Code)
 	}
 }
+
+func TestCLIToolGuidesAPI(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/cli-tools/guides", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"claude"`) || !strings.Contains(response.Body.String(), `"id":"opencode"`) {
+		t.Fatalf("guide metadata status=%d body=%s", response.Code, response.Body.String())
+	}
+}
