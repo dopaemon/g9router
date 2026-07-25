@@ -233,3 +233,26 @@ func TestProviderResourcePutMergesPartialConnection(t *testing.T) {
 		t.Fatalf("partial update lost data: %#v", provider)
 	}
 }
+
+func TestProviderTestPersistsStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "demo", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/providers/demo/test", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	provider, ok := app.store.Find("demo")
+	if !ok || provider.TestStatus != "active" || provider.LastError != "" {
+		t.Fatalf("status not persisted: %#v", provider)
+	}
+}

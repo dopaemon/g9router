@@ -923,9 +923,19 @@ func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
 	}
+	finish := func(valid bool, errValue any) {
+		provider.TestStatus = "error"
+		provider.LastError = fmt.Sprint(errValue)
+		if valid {
+			provider.TestStatus = "active"
+			provider.LastError = ""
+		}
+		_ = s.store.Upsert(provider)
+		writeJSON(w, http.StatusOK, map[string]any{"valid": valid, "error": errValue, "refreshed": false})
+	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"valid": false, "error": err.Error()})
+		finish(false, err.Error())
 		return
 	}
 	if provider.APIType == "claude" || provider.APIType == "anthropic" {
@@ -936,15 +946,15 @@ func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id stri
 	}
 	response, err := s.client.Do(request)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": err.Error(), "refreshed": false})
+		finish(false, err.Error())
 		return
 	}
 	defer response.Body.Close()
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		writeJSON(w, http.StatusOK, map[string]any{"valid": true, "error": nil, "refreshed": false})
+		finish(true, nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": fmt.Sprintf("upstream status %d", response.StatusCode), "refreshed": false})
+	finish(false, fmt.Sprintf("upstream status %d", response.StatusCode))
 }
 
 func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id string) {
