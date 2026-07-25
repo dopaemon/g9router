@@ -20,3 +20,22 @@ func TestPricingValidation(t *testing.T) {
 		t.Fatalf("status=%d body=%s", good.Code, good.Body.String())
 	}
 }
+
+func TestPricingDefaultsAndMerge(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	defaults := httptest.NewRecorder()
+	app.Handler().ServeHTTP(defaults, httptest.NewRequest(http.MethodGet, "/api/pricing/defaults", nil))
+	if defaults.Code != http.StatusOK || !strings.Contains(defaults.Body.String(), `"gh"`) {
+		t.Fatalf("defaults status=%d body=%s", defaults.Code, defaults.Body.String())
+	}
+	update := httptest.NewRecorder()
+	app.Handler().ServeHTTP(update, httptest.NewRequest(http.MethodPatch, "/api/pricing", strings.NewReader(`{"custom":{"model":{"input":1,"output":2}}}`)))
+	if update.Code != http.StatusOK || !strings.Contains(update.Body.String(), `"gh"`) || !strings.Contains(update.Body.String(), `"custom"`) {
+		t.Fatalf("merged status=%d body=%s", update.Code, update.Body.String())
+	}
+	reset := httptest.NewRecorder()
+	app.Handler().ServeHTTP(reset, httptest.NewRequest(http.MethodDelete, "/api/pricing?provider=custom", nil))
+	if reset.Code != http.StatusOK || strings.Contains(reset.Body.String(), `"custom"`) {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+}
