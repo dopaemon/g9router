@@ -3074,12 +3074,25 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		voices := localDeviceVoices(r.Context())
 		filter := r.URL.Query().Get("lang")
 		filtered := make([]map[string]any, 0, len(voices))
+		byLang := map[string]map[string]any{}
 		for _, voice := range voices {
 			if filter == "" || voice["lang"] == filter {
 				filtered = append(filtered, voice)
+				lang, _ := voice["lang"].(string)
+				if lang == "" {
+					continue
+				}
+				if byLang[lang] == nil {
+					byLang[lang] = map[string]any{"code": lang, "name": lang, "voices": []any{}}
+				}
+				byLang[lang]["voices"] = append(byLang[lang]["voices"].([]any), voice)
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"voices": filtered, "languages": []any{}, "byLang": map[string]any{}})
+		languages := make([]any, 0, len(byLang))
+		for _, group := range byLang {
+			languages = append(languages, group)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"voices": filtered, "languages": languages, "byLang": byLang})
 		return
 	}
 	if provider == "gemini" {
