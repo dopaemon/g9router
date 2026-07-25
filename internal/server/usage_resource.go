@@ -12,6 +12,16 @@ import (
 	"g9router/internal/providers"
 )
 
+var usageAPIKeyProviders = map[string]bool{
+	"vercel-ai-gateway": true,
+	"codebuddy-cn":      true,
+	"minimax":           true,
+	"glm":               true,
+	"minimax-cn":        true,
+	"glm-cn":            true,
+	"kiro":              true,
+}
+
 func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/usage/"), "/")
 	parts := strings.Split(path, "/")
@@ -69,6 +79,10 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if providerName == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
+		return
+	}
+	if selected.OAuthID == "" && !usageAPIKeyProviders[providerName] {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Usage not available for this connection"})
 		return
 	}
 	if selected.OAuthID != "" {
