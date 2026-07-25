@@ -106,6 +106,10 @@ type provider struct {
 	Enabled bool   `json:"enabled"`
 }
 
+type providersResponse struct {
+	Connections []provider `json:"connections"`
+}
+
 type combo struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -498,10 +502,11 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 
 func (ui *UI) providers(reader *bufio.Reader) error {
 	for {
-		var items []provider
-		if err := ui.request(http.MethodGet, "/api/providers", nil, &items); err != nil {
+		var response providersResponse
+		if err := ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
 			return err
 		}
+		items := response.Connections
 		fmt.Fprintln(ui.Out, "\nProviders")
 		for i, item := range items {
 			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])

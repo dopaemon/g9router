@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,5 +80,25 @@ func TestSelectClaudeModel(t *testing.T) {
 	ui := &UI{BaseURL: server.URL, Out: &bytes.Buffer{}, Client: server.Client()}
 	if err := ui.selectClaudeModel(bufio.NewReader(strings.NewReader("opus\ncc/opus-test\n"))); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProvidersReadsConnectionsEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/providers" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"connections":[{"id":"openai","baseURL":"https://example.com","enabled":true}]}`)
+	}))
+	defer server.Close()
+
+	var output strings.Builder
+	ui := &UI{BaseURL: server.URL, Out: &output, Client: server.Client()}
+	if err := ui.providers(bufio.NewReader(strings.NewReader("b\n"))); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "openai (https://example.com) [enabled]") {
+		t.Fatalf("output=%s", output.String())
 	}
 }
