@@ -445,11 +445,71 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Provider string `json:"provider"`
-		APIKey   string `json:"apiKey"`
+		Provider             string         `json:"provider"`
+		APIKey               string         `json:"apiKey"`
+		ProviderSpecificData map[string]any `json:"providerSpecificData"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || input.APIKey == "" {
 		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
+		return
+	}
+	if input.Provider == "azure" {
+		endpoint, _ := input.ProviderSpecificData["azureEndpoint"].(string)
+		deployment, _ := input.ProviderSpecificData["deployment"].(string)
+		apiVersion, _ := input.ProviderSpecificData["apiVersion"].(string)
+		if endpoint == "" {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": "Missing Azure endpoint"})
+			return
+		}
+		if deployment == "" {
+			deployment = "gpt-4"
+		}
+		if apiVersion == "" {
+			apiVersion = "2024-10-01-preview"
+		}
+		target := strings.TrimRight(endpoint, "/") + "/openai/deployments/" + url.PathEscape(deployment) + "/chat/completions?api-version=" + url.QueryEscape(apiVersion)
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, strings.NewReader(`{"messages":[{"role":"user","content":"test"}],"max_tokens":1}`))
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("api-key", input.APIKey)
+		request.Header.Set("Content-Type", "application/json")
+		if organization, ok := input.ProviderSpecificData["organization"].(string); ok && organization != "" {
+			request.Header.Set("OpenAI-Organization", organization)
+		}
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key or Azure configuration"}[valid]})
+		return
+	}
+	if input.Provider == "cloudflare-ai" {
+		accountID, _ := input.ProviderSpecificData["accountId"].(string)
+		if accountID == "" {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": "Missing Account ID"})
+			return
+		}
+		target := "https://api.cloudflare.com/client/v4/accounts/" + url.PathEscape(accountID) + "/ai/v1/chat/completions"
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, strings.NewReader(`{"model":"@cf/meta/llama-3.1-8b-instruct","messages":[{"role":"user","content":"test"}],"max_tokens":1}`))
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+		request.Header.Set("Content-Type", "application/json")
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden && response.StatusCode != http.StatusNotFound
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API token or Account ID"}[valid]})
 		return
 	}
 	descriptor, ok := providers.Lookup(input.Provider)
