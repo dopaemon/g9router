@@ -22,9 +22,6 @@ import (
 
 func main() {
 	if len(os.Args) >= 3 && os.Args[1] == "xai" && os.Args[2] == "video" {
-		if tui.IsTerminal(os.Stdin) {
-			os.Exit(xai.RunTTY(context.Background(), os.Stdout))
-		}
 		os.Exit(xai.Run(context.Background(), os.Args[3:], os.Stdout, os.Stderr))
 	}
 	port := flag.Int("port", 0, "port to run the server")

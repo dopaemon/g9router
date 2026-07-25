@@ -26,13 +26,10 @@ type UI struct {
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
-	if file, ok := in.(*os.File); ok && IsTerminal(file) {
-		return runFullInteractive(strings.TrimRight(baseURL, "/"), out, http.DefaultClient)
-	}
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
 	reader := bufio.NewReader(in)
 	for {
-		fmt.Fprintln(out, "\n9Router Terminal UI")
+		fmt.Fprintln(out, "\n9Router CLI")
 		fmt.Fprintln(out, "1. Providers")
 		fmt.Fprintln(out, "2. API Keys")
 		fmt.Fprintln(out, "3. Combos")
