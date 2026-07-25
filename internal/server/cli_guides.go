@@ -22,5 +22,9 @@ func (s *Server) cliToolsGuidesAPI(w http.ResponseWriter, r *http.Request) {
 		{"id": "grok-build", "name": "Grok Build", "description": "Grok Build coding assistant", "configType": "custom"},
 		{"id": "jcode", "name": "JCode", "description": "JCode coding assistant", "configType": "custom"},
 		{"id": "copilot", "name": "GitHub Copilot", "description": "GitHub Copilot custom model configuration", "configType": "custom"},
+		{"id": "roo", "name": "Roo", "description": "Roo AI Assistant", "configType": "guide"},
+		{"id": "continue", "name": "Continue", "description": "Continue AI Assistant", "configType": "guide"},
+		{"id": "amp", "name": "Amp CLI", "description": "Sourcegraph Amp coding assistant CLI", "configType": "guide"},
+		{"id": "qwen", "name": "Qwen Code", "description": "Alibaba Qwen Code CLI", "configType": "guide"},
 	}})
 }
