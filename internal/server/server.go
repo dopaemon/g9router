@@ -984,9 +984,26 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	defer response.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeJSON(w, response.StatusCode, map[string]string{"error": fmt.Sprintf("Failed to fetch models: %d", response.StatusCode)})
+		return
+	}
+	var payload map[string]any
+	if json.NewDecoder(response.Body).Decode(&payload) != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Failed to fetch models"})
+		return
+	}
+	models := payload["data"]
+	if models == nil {
+		models = payload["models"]
+	}
+	if models == nil {
+		models = payload["results"]
+	}
+	if models == nil {
+		models = []any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"provider": provider.ID, "connectionId": provider.ID, "models": models})
 }
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {

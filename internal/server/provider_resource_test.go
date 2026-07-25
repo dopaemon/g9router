@@ -36,6 +36,10 @@ func TestProviderModelsEndpoint(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatal(response.StatusCode)
 	}
+	body, _ := io.ReadAll(response.Body)
+	if !strings.Contains(string(body), `"provider":"demo"`) || !strings.Contains(string(body), `"connectionId":"demo"`) || !strings.Contains(string(body), `"models"`) {
+		t.Fatalf("unexpected model response: %s", body)
+	}
 }
 
 func TestProviderClientReturnsPaginatedConnections(t *testing.T) {
