@@ -139,3 +139,26 @@ func TestGradientAndTeaViewRenderAtNarrowWidth(t *testing.T) {
 		t.Fatal("empty gradient should stay empty")
 	}
 }
+
+func TestLoadScreenFormatsJSONAndHTTPFailures(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ok" {
+			_, _ = fmt.Fprint(w, `{"items":[{"name":"rose"}]}`)
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprint(w, `{"error":"upstream unavailable"}`)
+	}))
+	defer server.Close()
+
+	loaded := loadScreen(server.URL, server.Client(), "/ok")()
+	message, ok := loaded.(screenLoadedMsg)
+	if !ok || message.err != nil || !strings.Contains(message.content, "rose") {
+		t.Fatalf("loaded = %#v", loaded)
+	}
+
+	failed := loadScreen(server.URL, server.Client(), "/fail")().(screenLoadedMsg)
+	if failed.err == nil || !strings.Contains(failed.err.Error(), "502") {
+		t.Fatalf("failure = %#v", failed.err)
+	}
+}
