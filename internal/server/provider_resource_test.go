@@ -112,6 +112,9 @@ func TestProviderResourceCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if response.StatusCode != http.StatusCreated {
+		t.Fatal(response.StatusCode)
+	}
 	response.Body.Close()
 	response, err = http.Get(server.URL + "/api/providers/demo")
 	if err != nil {
@@ -120,6 +123,23 @@ func TestProviderResourceCRUD(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
 		t.Fatal(response.StatusCode)
+	}
+	body, _ := io.ReadAll(response.Body)
+	if !strings.Contains(string(body), `"connection"`) {
+		t.Fatalf("unexpected detail response: %s", body)
+	}
+}
+
+func TestProviderAPIListsSafeConnections(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "demo", BaseURL: "http://demo", APIKey: "secret", Enabled: true, ProviderSpecificData: map[string]any{"region": "ams", "refreshToken": "refresh"}}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/providers", nil))
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, `"connections"`) || !strings.Contains(body, `"region":"ams"`) || strings.Contains(body, "secret") || strings.Contains(body, "refresh") {
+		t.Fatalf("status=%d body=%s", response.Code, body)
 	}
 }
 

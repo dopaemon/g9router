@@ -344,7 +344,7 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		for _, provider := range s.store.List() {
 			if provider.ID == id {
-				writeJSON(w, 200, provider)
+				writeJSON(w, 200, map[string]any{"connection": safeProviderConnection(provider)})
 				return
 			}
 		}
@@ -366,7 +366,7 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, 200, map[string]string{"status": "saved"})
+		writeJSON(w, 200, map[string]any{"connection": safeProviderConnection(provider)})
 		return
 	}
 	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
@@ -3052,7 +3052,12 @@ func (s *Server) usageProvidersAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.store.List())
+		connections := s.store.List()
+		safe := make([]map[string]any, 0, len(connections))
+		for _, provider := range connections {
+			safe = append(safe, safeProviderConnection(provider))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"connections": safe})
 	case http.MethodPost:
 		var provider providers.Provider
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&provider); err != nil || provider.ID == "" || provider.BaseURL == "" {
@@ -3063,16 +3068,35 @@ func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+		writeJSON(w, http.StatusCreated, map[string]any{"connection": safeProviderConnection(provider)})
 	case http.MethodDelete:
 		if err := s.store.Delete(r.URL.Query().Get("id")); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Connection deleted successfully"})
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func safeProviderConnection(provider providers.Provider) map[string]any {
+	result := map[string]any{
+		"id":                   provider.ID,
+		"provider":             provider.ID,
+		"name":                 provider.Name,
+		"baseURL":              provider.BaseURL,
+		"apiType":              provider.APIType,
+		"oauthId":              provider.OAuthID,
+		"isActive":             provider.Enabled,
+		"enabled":              provider.Enabled,
+		"accounts":             provider.Accounts,
+		"providerSpecificData": safeProviderSpecificData(provider.ProviderSpecificData),
+		"modelLocks":           provider.ModelLocks,
+		"testStatus":           provider.TestStatus,
+		"lastError":            provider.LastError,
+	}
+	return result
 }
 
 func (s *Server) keysAPI(w http.ResponseWriter, r *http.Request) {
