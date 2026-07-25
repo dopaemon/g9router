@@ -3640,9 +3640,26 @@ func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
 		} else if isNoAuthProvider(provider.ID) {
 			authType = "free"
 		}
-		connections = append(connections, map[string]any{"id": provider.ID, "provider": provider.ID, "authType": authType, "name": provider.Name, "isActive": provider.Enabled, "testStatus": provider.TestStatus, "lastError": provider.LastError, "providerSpecificData": provider.ProviderSpecificData})
+		connections = append(connections, map[string]any{"id": provider.ID, "provider": provider.ID, "authType": authType, "name": provider.Name, "isActive": provider.Enabled, "testStatus": provider.TestStatus, "lastError": provider.LastError, "providerSpecificData": safeProviderSpecificData(provider.ProviderSpecificData)})
 	}
 	writeJSON(w, 200, map[string]any{"connections": connections, "providerOptions": options, "pagination": map[string]int{"page": page, "pageSize": pageSize, "total": total, "totalPages": totalPages}, "totals": map[string]int{"eligibleConnections": len(eligible), "providerFilteredConnections": total}})
+}
+
+func safeProviderSpecificData(data map[string]any) map[string]any {
+	allowed := map[string]bool{
+		"baseUrl": true, "azureEndpoint": true, "deployment": true, "apiVersion": true, "accountId": true,
+		"region": true, "projectId": true, "resourceUrl": true, "proxyPoolId": true, "connectionProxyEnabled": true,
+		"connectionProxyUrl": true, "connectionNoProxy": true, "githubLogin": true, "githubName": true,
+		"githubEmail": true, "githubUserId": true, "username": true, "firstName": true, "lastName": true,
+		"authMethod": true, "authKind": true, "profileArn": true,
+	}
+	safe := map[string]any{}
+	for key, value := range data {
+		if allowed[key] {
+			safe[key] = value
+		}
+	}
+	return safe
 }
 
 func positiveQueryInt(value string, fallback int) int {

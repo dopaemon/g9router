@@ -69,6 +69,18 @@ func TestProviderClientFiltersInactiveConnections(t *testing.T) {
 	}
 }
 
+func TestProviderClientRedactsUnsafeProviderData(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "demo", Enabled: true, ProviderSpecificData: map[string]any{"region": "ams", "apiKey": "secret", "refreshToken": "refresh"}}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/providers/client", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"region":"ams"`) || strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "refresh") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProviderTestModelsDiscoversCustomModels(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/models" {
