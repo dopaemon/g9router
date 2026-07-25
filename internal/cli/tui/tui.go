@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -431,7 +432,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		for i, key := range payload.Keys {
 			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], key.Key)
 		}
-		fmt.Fprintln(ui.Out, "a. Create  v. View full  d. Delete  t. Toggle  b. Back")
+		fmt.Fprintln(ui.Out, "a. Create  v. View full  c. Copy  d. Delete  t. Toggle  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -451,7 +452,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				return err
 			}
 			fmt.Fprintf(ui.Out, "Created key: %s\nSave it now; it is not shown again.\n", created.Key)
-		case "d", "t", "v":
+		case "c", "d", "t", "v":
 			if len(payload.Keys) == 0 {
 				fmt.Fprintln(ui.Out, "No API keys found.")
 				continue
@@ -477,6 +478,14 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				fmt.Fprintf(ui.Out, "Name: %s\nID: %s\nKey: %s\n", detail.Key.Name, detail.Key.ID, detail.Key.Key)
 				continue
 			}
+			if strings.ToLower(strings.TrimSpace(line)) == "c" {
+				if err := copyClipboard(key.Key); err != nil {
+					fmt.Fprintln(ui.Out, "Clipboard unavailable:", err)
+				} else {
+					fmt.Fprintln(ui.Out, "Key copied to clipboard")
+				}
+				continue
+			}
 			method, path, body := http.MethodDelete, "/api/keys/"+key.ID, any(nil)
 			if strings.ToLower(strings.TrimSpace(line)) == "t" {
 				method, body = http.MethodPut, map[string]bool{"isActive": !key.IsActive}
@@ -488,6 +497,27 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
 	}
+}
+
+func copyClipboard(value string) error {
+	for _, command := range []string{"pbcopy", "wl-copy", "xclip", "xsel"} {
+		if _, err := exec.LookPath(command); err != nil {
+			continue
+		}
+		arguments := []string{}
+		if command == "xclip" {
+			arguments = []string{"-selection", "clipboard"}
+		}
+		if command == "xsel" {
+			arguments = []string{"--clipboard", "--input"}
+		}
+		process := exec.Command(command, arguments...)
+		process.Stdin = strings.NewReader(value)
+		if err := process.Run(); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("no clipboard command succeeded")
 }
 
 func (ui *UI) request(method, path string, body any, result any) error {
