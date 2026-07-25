@@ -181,3 +181,25 @@ func TestProvidersScreenRendersConnectionTable(t *testing.T) {
 		t.Fatalf("provider view leaked raw JSON: %s", view)
 	}
 }
+
+func TestProvidersScreenSupportsSelection(t *testing.T) {
+	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
+	model.current = &screens[0]
+	model.viewport = viewport.New(92, 19)
+	message := screenLoadedMsg{content: `{"connections":[{"id":"openai","baseURL":"https://openai.test","enabled":true},{"id":"anthropic","baseURL":"https://anthropic.test","enabled":false}]}`}
+	updated, _ := model.Update(message)
+	model = updated.(screenModel)
+	if model.selected != 0 || !strings.Contains(model.View(), "▸") {
+		t.Fatalf("initial selection missing: %s", model.View())
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(screenModel)
+	if model.selected != 1 || !strings.Contains(model.View(), "anthropic") {
+		t.Fatalf("selection did not move: %s", model.View())
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(screenModel)
+	if !strings.Contains(model.notice, "anthropic") {
+		t.Fatalf("enter did not select provider: %q", model.notice)
+	}
+}

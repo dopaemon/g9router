@@ -37,6 +37,10 @@ type screenModel struct {
 	viewport viewport.Model
 	spinner  spinner.Model
 	form     *formModel
+	items    []resourceItem
+	selected int
+	notice   string
+	raw      string
 	loading  bool
 	err      error
 	width    int
@@ -49,6 +53,10 @@ type screenLoadedMsg struct {
 }
 
 type screenTickMsg struct{}
+
+type resourceItem struct {
+	id, label, detail, status string
+}
 
 func newScreenModel(baseURL string, output io.Writer, client *http.Client) screenModel {
 	spin := spinner.New()
@@ -102,7 +110,10 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.viewport.Height = message.Height - 11
 	case screenLoadedMsg:
 		model.loading, model.err = false, message.err
-		model.viewport.SetContent(formatScreenContent(model.current.title, message.content))
+		model.raw = message.content
+		model.items = resourceItems(model.current.title, message.content)
+		model.selected = 0
+		model.viewport.SetContent(model.content(message.content))
 	case spinner.TickMsg:
 		var command tea.Cmd
 		model.spinner, command = model.spinner.Update(message)
@@ -120,6 +131,20 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			model.loading = true
 			return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
+		case "up", "k":
+			if len(model.items) > 0 && model.selected > 0 {
+				model.selected--
+				model.viewport.SetContent(model.content(model.raw))
+			}
+		case "down", "j":
+			if len(model.items) > 0 && model.selected < len(model.items)-1 {
+				model.selected++
+				model.viewport.SetContent(model.content(model.raw))
+			}
+		case "enter":
+			if len(model.items) > 0 {
+				model.notice = "Selected " + model.items[model.selected].label
+			}
 		case "a":
 			switch model.current.title {
 			case "Providers":
@@ -152,7 +177,11 @@ func (model screenModel) View() string {
 	header := styles.Brand.Render(gradient("9ROUTER")) + "  " + styles.Subtitle.Render(model.baseURL)
 	title := styles.Title.Render(model.current.title) + "\n" + styles.Subtitle.Render(model.current.description)
 	content := styles.Panel.Width(width - 4).Render(model.renderContent())
-	footer := styles.Footer.Width(width - 4).Render(styles.Muted.Render("↑/↓ scroll  r refresh  b back  q quit"))
+	footerText := "↑/↓ select  enter open  r refresh  b back  q quit"
+	if model.notice != "" {
+		footerText += "  " + styles.Success.Render(model.notice)
+	}
+	footer := styles.Footer.Width(width - 4).Render(styles.Muted.Render(footerText))
 	return "\n" + header + "\n\n" + title + "\n\n" + content + "\n" + footer + "\n"
 }
 
@@ -167,6 +196,80 @@ func (model screenModel) renderContent() string {
 		return styles.Error.Render("✗ "+model.err.Error()) + "\n\n" + styles.Muted.Render("Press r to retry")
 	}
 	return model.viewport.View()
+}
+
+func (model screenModel) content(raw string) string {
+	if len(model.items) == 0 {
+		return formatScreenContent(model.current.title, raw)
+	}
+	lines := make([]string, 0, len(model.items)+2)
+	for index, item := range model.items {
+		marker := "  "
+		if index == model.selected {
+			marker = styles.Selected.Render("▸ ")
+		}
+		status := item.status
+		if status == "enabled" || status == "active" || status == "installed" {
+			status = styles.Success.Render(status)
+		} else if status != "" {
+			status = styles.Warning.Render(status)
+		}
+		lines = append(lines, marker+styles.Item.Render(fmt.Sprintf("%-24s %-42s %s", item.label, item.detail, status)))
+	}
+	hint := "enter select"
+	if model.current.title == "Providers" || model.current.title == "API Keys" {
+		hint += "  a add"
+	}
+	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render(hint)
+}
+
+func resourceItems(title, content string) []resourceItem {
+	var value any
+	if json.Unmarshal([]byte(content), &value) != nil {
+		return nil
+	}
+	result := make([]resourceItem, 0)
+	if title == "Providers" || title == "API Keys" || title == "Combos" {
+		key := map[string]string{"Providers": "connections", "API Keys": "keys", "Combos": "combos"}[title]
+		items, _ := value.(map[string]any)[key].([]any)
+		for _, raw := range items {
+			item, _ := raw.(map[string]any)
+			label, _ := item["name"].(string)
+			if label == "" {
+				label, _ = item["id"].(string)
+			}
+			detail, _ := item["baseURL"].(string)
+			status := ""
+			if enabled, ok := item["enabled"].(bool); ok {
+				status = map[bool]string{true: "enabled", false: "disabled"}[enabled]
+			}
+			if active, ok := item["isActive"].(bool); ok {
+				status = map[bool]string{true: "active", false: "inactive"}[active]
+			}
+			if models, ok := item["models"].([]any); ok {
+				detail = fmt.Sprintf("%d models", len(models))
+			}
+			id, _ := item["id"].(string)
+			result = append(result, resourceItem{id: id, label: label, detail: detail, status: status})
+		}
+	}
+	if title == "CLI Tools" {
+		items, _ := value.(map[string]any)
+		for label, raw := range items {
+			item, _ := raw.(map[string]any)
+			installed, _ := item["installed"].(bool)
+			configured, _ := item["configured"].(bool)
+			status := "not installed"
+			if installed && configured {
+				status = "configured"
+			} else if installed {
+				status = "installed"
+			}
+			result = append(result, resourceItem{label: label, status: status})
+		}
+		sort.Slice(result, func(left, right int) bool { return result[left].label < result[right].label })
+	}
+	return result
 }
 
 func loadScreen(baseURL string, client *http.Client, path string) tea.Cmd {
