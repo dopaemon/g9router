@@ -519,6 +519,46 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
 		return
 	}
+	if input.Provider == "openai" || input.Provider == "vercel-ai-gateway" {
+		target := "https://api.openai.com/v1/models"
+		if input.Provider == "vercel-ai-gateway" {
+			target = "https://ai-gateway.vercel.sh/v1/models"
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode >= 200 && response.StatusCode < 300
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+		return
+	}
+	if input.Provider == "anthropic" {
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://api.anthropic.com/v1/messages", strings.NewReader(`{"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","content":"test"}]}`))
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("x-api-key", input.APIKey)
+		request.Header.Set("anthropic-version", "2023-06-01")
+		request.Header.Set("Content-Type", "application/json")
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode != http.StatusUnauthorized
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+		return
+	}
 	if input.Provider == "azure" {
 		endpoint, _ := input.ProviderSpecificData["azureEndpoint"].(string)
 		deployment, _ := input.ProviderSpecificData["deployment"].(string)

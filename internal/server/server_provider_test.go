@@ -118,6 +118,43 @@ func TestValidateXAIAcceptsForbiddenButRejectsBadRequest(t *testing.T) {
 	}
 }
 
+func TestValidateOpenAIRequiresSuccessStatus(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusInternalServerError} {
+		app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+		app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Host != "api.openai.com" || request.URL.Path != "/v1/models" {
+				t.Fatalf("url=%s", request.URL.String())
+			}
+			return &http.Response{StatusCode: status, Body: http.NoBody, Header: make(http.Header)}, nil
+		})}
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"openai","apiKey":"secret"}`))
+		request.Header.Set("Content-Type", "application/json")
+		app.Handler().ServeHTTP(response, request)
+		want := status == http.StatusOK
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), `"valid":true`) != want {
+			t.Fatalf("status=%d response=%s want=%v", status, response.Body.String(), want)
+		}
+	}
+}
+
+func TestValidateAnthropicRejectsUnauthorizedOnly(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "api.anthropic.com" || request.URL.Path != "/v1/messages" {
+			t.Fatalf("url=%s", request.URL.String())
+		}
+		return &http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody, Header: make(http.Header)}, nil
+	})}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"anthropic","apiKey":"secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
