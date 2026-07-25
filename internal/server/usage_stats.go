@@ -92,6 +92,8 @@ func (s *Server) usageStreamAPI(w http.ResponseWriter, r *http.Request) {
 	if !send() {
 		return
 	}
+	updates, unsubscribe := s.usage.Subscribe()
+	defer unsubscribe()
 	ticker := time.NewTicker(25 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -103,6 +105,10 @@ func (s *Server) usageStreamAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
+			if !send() {
+				return
+			}
+		case <-updates:
 			if !send() {
 				return
 			}

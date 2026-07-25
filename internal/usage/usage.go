@@ -32,10 +32,11 @@ type Store struct {
 	snapshot Snapshot
 	path     string
 	database *sql.DB
+	updates  map[chan struct{}]struct{}
 }
 
 func New(path string) *Store {
-	store := &Store{path: path}
+	store := &Store{path: path, updates: map[chan struct{}]struct{}{}}
 	if strings.HasSuffix(path, ".db") {
 		if database, err := db.Open(path); err == nil {
 			store.database = database
@@ -67,6 +68,24 @@ func (s *Store) AddLog(requests, errors, input, output int64, log Log) {
 		s.snapshot.Logs = s.snapshot.Logs[len(s.snapshot.Logs)-1000:]
 	}
 	_ = s.saveLocked()
+	for update := range s.updates {
+		select {
+		case update <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (s *Store) Subscribe() (<-chan struct{}, func()) {
+	updates := make(chan struct{}, 1)
+	s.mu.Lock()
+	s.updates[updates] = struct{}{}
+	s.mu.Unlock()
+	return updates, func() {
+		s.mu.Lock()
+		delete(s.updates, updates)
+		s.mu.Unlock()
+	}
 }
 func (s *Store) Snapshot() Snapshot { s.mu.RLock(); defer s.mu.RUnlock(); return s.snapshot }
 func (s *Store) Recent(limit int) []Log {
