@@ -24,3 +24,12 @@ func TestAudioVoicesAcceptsLocalDevice(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestLocalDeviceVoicesExposeGroupedCatalog(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json", DatabasePath: t.TempDir() + "/state.db"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/media-providers/tts/voices?provider=local-device", nil))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"byLang"`) {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
