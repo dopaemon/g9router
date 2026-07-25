@@ -1,0 +1,9 @@
+*.db
+*.db-shm
+*.db-wal
+*.json
+logs/
+g9router
+!go.mod
+!go.sum
+!README.md
