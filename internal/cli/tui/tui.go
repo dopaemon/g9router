@@ -183,7 +183,7 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		for i, name := range keys {
 			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, name, statuses[name])
 		}
-		fmt.Fprintln(ui.Out, "s. Show settings  a. Apply JSON  r. Reset  b. Back")
+		fmt.Fprintln(ui.Out, "q. Quick setup  s. Show settings  a. Apply JSON  r. Reset  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -192,6 +192,12 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		action := strings.ToLower(strings.TrimSpace(line))
 		if action == "b" || action == "0" {
 			return nil
+		}
+		if action == "q" {
+			if err := ui.quickSetup(reader); err != nil {
+				return err
+			}
+			continue
 		}
 		if action != "s" && action != "a" && action != "r" {
 			fmt.Fprintln(ui.Out, "Invalid selection")
@@ -237,6 +243,57 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		if err := ui.request(http.MethodPost, path, payload, nil); err != nil {
 			return err
 		}
+	}
+}
+
+func (ui *UI) quickSetup(reader *bufio.Reader) error {
+	var payload struct {
+		Keys []apiKey `json:"keys"`
+	}
+	if err := ui.request(http.MethodGet, "/api/keys", nil, &payload); err != nil {
+		return err
+	}
+	if len(payload.Keys) == 0 || strings.TrimSpace(payload.Keys[0].Key) == "" {
+		fmt.Fprintln(ui.Out, "No API keys found. Create one in API Keys menu first.")
+		return nil
+	}
+	fmt.Fprint(ui.Out, "Tool (claude/codex): ")
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	tool := strings.ToLower(strings.TrimSpace(line))
+	key := payload.Keys[0].Key
+	switch tool {
+	case "claude":
+		return ui.request(http.MethodPost, "/api/cli-tools/claude-settings", map[string]any{
+			"env": map[string]string{
+				"ANTHROPIC_BASE_URL":             strings.TrimRight(ui.BaseURL, "/") + "/v1",
+				"ANTHROPIC_AUTH_TOKEN":           key,
+				"API_TIMEOUT_MS":                 "600000",
+				"ANTHROPIC_DEFAULT_SONNET_MODEL": "cc/claude-sonnet-4-5-20250929",
+				"ANTHROPIC_DEFAULT_OPUS_MODEL":   "cc/claude-opus-4-5-20251101",
+				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "cc/claude-haiku-4-5-20251001",
+			},
+		}, nil)
+	case "codex":
+		fmt.Fprint(ui.Out, "Codex model: ")
+		model, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		model = strings.TrimSpace(model)
+		if model == "" {
+			model = "cx/claude-sonnet-4-5-20250929"
+		}
+		return ui.request(http.MethodPost, "/api/cli-tools/codex-settings", map[string]string{
+			"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1",
+			"apiKey":  key,
+			"model":   model,
+		}, nil)
+	default:
+		fmt.Fprintln(ui.Out, "Quick setup supports claude and codex.")
+		return nil
 	}
 }
 
