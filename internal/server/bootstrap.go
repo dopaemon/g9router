@@ -67,6 +67,7 @@ func (s *Server) versionUpdateAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Update installed", "version": release.TagName})
+	time.AfterFunc(500*time.Millisecond, func() { os.Exit(0) })
 }
 
 func (s *Server) latestVersion(parent context.Context) string {
