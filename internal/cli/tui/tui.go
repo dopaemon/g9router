@@ -257,7 +257,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "No API keys found. Create one in API Keys menu first.")
 		return nil
 	}
-	fmt.Fprint(ui.Out, "Tool (claude/codex): ")
+	fmt.Fprint(ui.Out, "Tool (claude/codex/droid/openclaw/hermes): ")
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -276,8 +276,8 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "cc/claude-haiku-4-5-20251001",
 			},
 		}, nil)
-	case "codex":
-		fmt.Fprint(ui.Out, "Codex model: ")
+	case "codex", "droid", "openclaw", "hermes":
+		fmt.Fprint(ui.Out, "Model: ")
 		model, err := reader.ReadString('\n')
 		if err != nil {
 			return err
@@ -286,7 +286,8 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		if model == "" {
 			model = "cx/claude-sonnet-4-5-20250929"
 		}
-		return ui.request(http.MethodPost, "/api/cli-tools/codex-settings", map[string]string{
+		path := "/api/cli-tools/" + tool + "-settings"
+		return ui.request(http.MethodPost, path, map[string]string{
 			"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1",
 			"apiKey":  key,
 			"model":   model,
