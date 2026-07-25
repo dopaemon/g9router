@@ -91,7 +91,7 @@ func (s *Server) modelInfoAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if parts[1] == "fetch" && containsString(descriptor.Services, "webFetch") {
-			writeJSON(w, http.StatusOK, map[string]any{"id": id, "name": descriptor.Alias + " Fetch", "kind": "webFetch", "owned_by": descriptor.Alias, "endpoint": "/v1/web/fetch", "params": []string{"url", "format", "max_characters"}})
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "name": descriptor.Alias + " Fetch", "kind": "webFetch", "owned_by": descriptor.Alias, "endpoint": "/v1/fetch", "params": []string{"url", "format", "max_characters"}})
 			return
 		}
 	}
@@ -99,7 +99,7 @@ func (s *Server) modelInfoAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func modelEndpoint(kind string) string {
-	return map[string]string{"llm": "/v1/chat/completions", "image": "/v1/images/generations", "tts": "/v1/audio/speech", "stt": "/v1/audio/transcriptions", "embedding": "/v1/embeddings", "imageToText": "/v1/chat/completions", "webSearch": "/v1/search", "webFetch": "/v1/web/fetch"}[kind]
+	return map[string]string{"llm": "/v1/chat/completions", "image": "/v1/images/generations", "tts": "/v1/audio/speech", "stt": "/v1/audio/transcriptions", "embedding": "/v1/embeddings", "imageToText": "/v1/chat/completions", "webSearch": "/v1/search", "webFetch": "/v1/fetch"}[kind]
 }
 
 func (s *Server) modelsAPI(w http.ResponseWriter, r *http.Request) {

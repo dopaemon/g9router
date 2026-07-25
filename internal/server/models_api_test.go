@@ -71,3 +71,12 @@ func TestModelsEndpointOptions(t *testing.T) {
 		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
 	}
 }
+
+func TestModelInfoFetchEndpoint(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/info?id=firecrawl/fetch", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"endpoint":"/v1/fetch"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
