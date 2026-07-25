@@ -104,10 +104,9 @@ func codexAccount(token, name string) providers.Account {
 	if len(parts) != 3 {
 		return account
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		payload, err = base64.URLEncoding.DecodeString(parts[1])
-	}
+	encoded := strings.ReplaceAll(strings.ReplaceAll(parts[1], "-", "+"), "_", "/")
+	encoded += strings.Repeat("=", (4-len(encoded)%4)%4)
+	payload, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return account
 	}
