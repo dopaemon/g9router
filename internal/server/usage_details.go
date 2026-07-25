@@ -23,6 +23,10 @@ func (s *Server) usageChartAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logs := s.usage.Recent(1000)
+	if period == "today" || period == "24h" {
+		writeHourlyChart(w, logs, period)
+		return
+	}
 	grouped := map[string]map[string]any{}
 	for _, entry := range logs {
 		when, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
@@ -45,6 +49,32 @@ func (s *Server) usageChartAPI(w http.ResponseWriter, r *http.Request) {
 		result = append(result, point)
 	}
 	writeSortedChart(w, result)
+}
+
+func writeHourlyChart(w http.ResponseWriter, logs []usage.Log, period string) {
+	const bucketCount = 24
+	bucketDuration := time.Hour
+	start := time.Now()
+	if period == "today" {
+		now := time.Now()
+		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	} else {
+		start = start.Add(-bucketCount * bucketDuration)
+	}
+	buckets := make([]map[string]any, bucketCount)
+	for index := range buckets {
+		buckets[index] = map[string]any{"label": start.Add(time.Duration(index) * bucketDuration).Format("15:04"), "tokens": int64(0), "cost": float64(0)}
+	}
+	end := start.Add(bucketCount * bucketDuration)
+	for _, entry := range logs {
+		when, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if err != nil || when.Before(start) || !when.Before(end) {
+			continue
+		}
+		index := int(when.Sub(start) / bucketDuration)
+		buckets[index]["tokens"] = buckets[index]["tokens"].(int64) + entry.Input + entry.Output
+	}
+	writeJSON(w, http.StatusOK, buckets)
 }
 
 func usageWithin(when time.Time, period string) bool {

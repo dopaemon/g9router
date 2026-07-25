@@ -29,3 +29,14 @@ func TestUsageHistoryUsesAllPeriod(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestUsageChartUsesHourlyBuckets(t *testing.T) {
+	app := New(Options{DatabasePath: t.TempDir() + "/test.db"})
+	for _, period := range []string{"today", "24h"} {
+		response := httptest.NewRecorder()
+		app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/usage/chart?period="+period, nil))
+		if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"label"`) != 24 {
+			t.Fatalf("period=%s status=%d body=%s", period, response.Code, response.Body.String())
+		}
+	}
+}
