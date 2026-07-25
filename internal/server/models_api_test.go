@@ -20,7 +20,7 @@ func TestModelInfoOptions(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
 	response := httptest.NewRecorder()
 	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodOptions, "/v1/models/info", nil))
-	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "*" {
+	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
 	}
 }
@@ -67,7 +67,7 @@ func TestModelsEndpointOptions(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
 	response := httptest.NewRecorder()
 	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodOptions, "/v1/models", nil))
-	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "*" {
+	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
 	}
 }

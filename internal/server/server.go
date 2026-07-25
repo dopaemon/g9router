@@ -3706,7 +3706,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method == http.MethodGet {
@@ -3962,7 +3962,7 @@ func corsPreflight(w http.ResponseWriter, r *http.Request, methods string) bool 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", methods)
 	w.Header().Set("Access-Control-Allow-Headers", "*")
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 	return true
 }
 
@@ -3971,7 +3971,7 @@ func (s *Server) speech(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method == http.MethodPost {
@@ -3991,7 +3991,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method == http.MethodPost {

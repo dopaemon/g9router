@@ -13,7 +13,7 @@ func (s *Server) modelCatalogAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method != http.MethodGet {
