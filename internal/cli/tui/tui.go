@@ -249,7 +249,7 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 		var tunnel map[string]any
 		_ = ui.request(http.MethodGet, "/api/tunnel/status", nil, &tunnel)
 		fmt.Fprintf(ui.Out, "\nSettings\nRTK: %v  Headroom: %v  Tunnel: %v\n", values["rtkEnabled"] != false, values["headroomEnabled"] == true, tunnel["enabled"] == true)
-		fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  b. Back")
+		fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  6. Reset password  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -276,6 +276,10 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 			}
 		case "5":
 			if err := ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil); err != nil {
+				return err
+			}
+		case "6":
+			if err := ui.request(http.MethodPost, "/api/auth/reset-password", nil, nil); err != nil {
 				return err
 			}
 		default:
