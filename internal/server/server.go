@@ -452,8 +452,13 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		APIKey               string         `json:"apiKey"`
 		ProviderSpecificData map[string]any `json:"providerSpecificData"`
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || (input.APIKey == "" && input.Provider != "ollama-local") {
+	noAuthProviders := map[string]bool{"coqui": true, "edge-tts": true, "google-tts": true, "local-device": true, "mimo-free": true, "mmf": true, "opencode": true, "searxng": true, "tortoise": true, "ollama-local": true}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || (input.APIKey == "" && !noAuthProviders[input.Provider]) {
 		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
+		return
+	}
+	if noAuthProviders[input.Provider] && input.Provider != "ollama-local" && input.Provider != "searxng" {
+		writeJSON(w, 200, map[string]any{"valid": true, "error": nil})
 		return
 	}
 	if input.Provider == "ollama-local" {
