@@ -452,12 +452,11 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		APIKey               string         `json:"apiKey"`
 		ProviderSpecificData map[string]any `json:"providerSpecificData"`
 	}
-	noAuthProviders := map[string]bool{"coqui": true, "edge-tts": true, "google-tts": true, "local-device": true, "mimo-free": true, "mmf": true, "opencode": true, "searxng": true, "tortoise": true, "ollama-local": true}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || (input.APIKey == "" && !noAuthProviders[input.Provider]) {
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || (input.APIKey == "" && !isNoAuthProvider(input.Provider)) {
 		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
 		return
 	}
-	if noAuthProviders[input.Provider] && input.Provider != "ollama-local" {
+	if isNoAuthProvider(input.Provider) && input.Provider != "ollama-local" {
 		writeJSON(w, 200, map[string]any{"valid": true, "error": nil})
 		return
 	}
@@ -777,8 +776,8 @@ func (s *Server) providerBatchTestAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "mode is required"})
 		return
 	}
-	if input.Mode != "all" && input.Mode != "provider" && input.Mode != "oauth" && input.Mode != "apikey" {
-		writeJSON(w, 400, map[string]string{"error": "Invalid mode"})
+	if input.Mode != "all" && input.Mode != "provider" && input.Mode != "oauth" && input.Mode != "apikey" && input.Mode != "free" && input.Mode != "compatible" {
+		writeJSON(w, 400, map[string]string{"error": "Invalid mode. Use: provider, oauth, free, apikey, compatible, all"})
 		return
 	}
 	results := []map[string]any{}
@@ -789,7 +788,13 @@ func (s *Server) providerBatchTestAPI(w http.ResponseWriter, r *http.Request) {
 		if input.Mode == "oauth" && provider.OAuthID == "" {
 			continue
 		}
-		if input.Mode == "apikey" && provider.OAuthID != "" {
+		if input.Mode == "free" && !isNoAuthProvider(provider.ID) {
+			continue
+		}
+		if input.Mode == "compatible" && !isCompatibleProvider(provider.ID) {
+			continue
+		}
+		if input.Mode == "apikey" && (provider.OAuthID != "" || isNoAuthProvider(provider.ID)) {
 			continue
 		}
 		started := time.Now()
@@ -811,7 +816,19 @@ func (s *Server) providerBatchTestAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			response.Body.Close()
 		}
-		results = append(results, map[string]any{"provider": provider.ID, "connectionId": provider.ID, "connectionName": provider.Name, "authType": map[bool]string{true: "oauth", false: "apikey"}[provider.OAuthID != ""], "valid": valid, "latencyMs": time.Since(started).Milliseconds(), "statusCode": status, "error": message})
+		authType := "apikey"
+		if isNoAuthProvider(provider.ID) {
+			authType = "free"
+		} else if isCompatibleProvider(provider.ID) {
+			authType = "compatible"
+		} else if provider.OAuthID != "" {
+			authType = "oauth"
+		}
+		connectionName := provider.Name
+		if connectionName == "" {
+			connectionName = provider.ID
+		}
+		results = append(results, map[string]any{"provider": provider.ID, "connectionId": provider.ID, "connectionName": connectionName, "authType": authType, "valid": valid, "latencyMs": time.Since(started).Milliseconds(), "statusCode": status, "error": message})
 	}
 	passed := 0
 	for _, result := range results {
@@ -820,6 +837,19 @@ func (s *Server) providerBatchTestAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"mode": input.Mode, "providerId": input.ProviderID, "results": results, "summary": map[string]int{"total": len(results), "passed": passed, "failed": len(results) - passed}, "testedAt": time.Now().UTC()})
+}
+
+func isNoAuthProvider(id string) bool {
+	switch id {
+	case "coqui", "edge-tts", "google-tts", "local-device", "mimo-free", "mmf", "opencode", "searxng", "tortoise", "ollama-local":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCompatibleProvider(id string) bool {
+	return strings.HasPrefix(id, "openai-compatible-") || strings.HasPrefix(id, "anthropic-compatible-")
 }
 
 func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id string) {

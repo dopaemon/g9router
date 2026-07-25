@@ -190,6 +190,27 @@ func TestValidateNoAuthProviderAllowsEmptyKey(t *testing.T) {
 	}
 }
 
+func TestProviderBatchSupportsFreeAndCompatibleModes(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	for _, provider := range []providers.Provider{
+		{ID: "opencode", BaseURL: "http://127.0.0.1:1", Enabled: true},
+		{ID: "openai-compatible-demo", BaseURL: "http://127.0.0.1:1", Enabled: true},
+	} {
+		if err := app.store.Upsert(provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, mode := range []string{"free", "compatible"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/providers/test-batch", strings.NewReader(`{"mode":"`+mode+`"}`))
+		request.Header.Set("Content-Type", "application/json")
+		app.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"mode":"`+mode+`"`) {
+			t.Fatalf("mode=%s status=%d body=%s", mode, response.Code, response.Body.String())
+		}
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
