@@ -58,6 +58,31 @@ func TestProviderResourceCRUD(t *testing.T) {
 	}
 }
 
+func TestProviderAccountsCRUD(t *testing.T) {
+	app := New(Options{ProviderPath: os.TempDir() + "/account-resource-test.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "demo", BaseURL: "http://demo", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(app.Handler())
+	defer server.Close()
+	request, _ := http.NewRequest(http.MethodPost, server.URL+"/api/providers/demo/accounts", strings.NewReader(`{"apiKey":"secret","name":"primary"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil || response.StatusCode != http.StatusCreated {
+		t.Fatal(err, response.StatusCode)
+	}
+	response.Body.Close()
+	response, err = http.Get(server.URL + "/api/providers/demo/accounts")
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatal(err, response.StatusCode)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if strings.Contains(string(body), "secret") {
+		t.Fatal("account API key leaked")
+	}
+}
+
 func TestModelSettingsAPI(t *testing.T) {
 	app := New(Options{ProviderPath: os.TempDir() + "/model-settings-test.json"})
 	server := httptest.NewServer(app.Handler())
