@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,17 @@ func TestHandlerServesDashboardRoutes(t *testing.T) {
 		}
 		if recorder.Code != http.StatusOK || recorder.Body.Len() == 0 {
 			t.Fatalf("path %s: status=%d body=%d", path, recorder.Code, recorder.Body.Len())
+		}
+	}
+}
+
+func TestDashboardContainsPortedControls(t *testing.T) {
+	response := httptest.NewRecorder()
+	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/providers/demo", nil))
+	body := response.Body.String()
+	for _, marker := range []string{"/api/providers/", "/api/models/custom", "/api/oauth/cursor/auto-import", "/api/usage/"} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("dashboard missing %q", marker)
 		}
 	}
 }
