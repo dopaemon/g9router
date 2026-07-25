@@ -59,3 +59,25 @@ func TestQuickSetupOpenCode(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSelectClaudeModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/cli-tools/claude-settings" || r.Method != http.MethodPost {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "cc/opus-test" {
+			t.Fatalf("payload = %#v", body)
+		}
+		_, _ = fmt.Fprint(w, `{"success":true}`)
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, Out: &bytes.Buffer{}, Client: server.Client()}
+	if err := ui.selectClaudeModel(bufio.NewReader(strings.NewReader("opus\ncc/opus-test\n"))); err != nil {
+		t.Fatal(err)
+	}
+}
