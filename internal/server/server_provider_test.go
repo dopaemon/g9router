@@ -155,6 +155,28 @@ func TestValidateAnthropicRejectsUnauthorizedOnly(t *testing.T) {
 	}
 }
 
+func TestValidateGenericProviderFallsBackToChat(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/v1/models":
+			return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody, Header: make(http.Header)}, nil
+		case "/v1/chat/completions":
+			return &http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody, Header: make(http.Header)}, nil
+		default:
+			t.Fatalf("path=%s", request.URL.Path)
+			return nil, nil
+		}
+	})}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"deepseek","apiKey":"secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

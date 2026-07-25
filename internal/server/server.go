@@ -724,8 +724,38 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
 		return
 	}
+	status := response.StatusCode
+	response.Body.Close()
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": "Invalid API key"})
+		return
+	}
+	if status >= 200 && status < 300 {
+		writeJSON(w, 200, map[string]any{"valid": true, "error": nil})
+		return
+	}
+	model := "test"
+	if len(descriptor.Models) > 0 {
+		model = descriptor.Models[0].ID
+	}
+	payload, _ := json.Marshal(map[string]any{"model": model, "messages": []map[string]string{{"role": "user", "content": "ping"}}, "max_tokens": 1})
+	request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, strings.TrimRight(descriptor.BaseURL, "/"), bytes.NewReader(payload))
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+		return
+	}
+	for key, value := range descriptor.Headers {
+		request.Header.Set(key, value)
+	}
+	request.Header.Set("Authorization", "Bearer "+input.APIKey)
+	request.Header.Set("Content-Type", "application/json")
+	response, err = s.client.Do(request)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+		return
+	}
 	defer response.Body.Close()
-	valid := response.StatusCode != 401 && response.StatusCode != 403
+	valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden
 	writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]string{true: "", false: "Invalid API key"}[valid]})
 }
 
