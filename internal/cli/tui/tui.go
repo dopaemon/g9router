@@ -300,6 +300,19 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 		if strings.TrimSpace(value) != "" {
 			item.Name = strings.TrimSpace(value)
 		}
+		fmt.Fprint(ui.Out, "Models (comma-separated, Enter keeps current): ")
+		value, err = reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(value) != "" {
+			item.Models = nil
+			for _, model := range strings.Split(strings.TrimSpace(value), ",") {
+				if strings.TrimSpace(model) != "" {
+					item.Models = append(item.Models, strings.TrimSpace(model))
+				}
+			}
+		}
 		if err := ui.request(http.MethodPut, "/api/combos/"+item.ID, item, nil); err != nil {
 			return err
 		}
