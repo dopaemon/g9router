@@ -431,7 +431,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		for i, key := range payload.Keys {
 			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], key.Key)
 		}
-		fmt.Fprintln(ui.Out, "a. Create  d. Delete  t. Toggle  b. Back")
+		fmt.Fprintln(ui.Out, "a. Create  v. View full  d. Delete  t. Toggle  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -451,7 +451,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				return err
 			}
 			fmt.Fprintf(ui.Out, "Created key: %s\nSave it now; it is not shown again.\n", created.Key)
-		case "d", "t":
+		case "d", "t", "v":
 			if len(payload.Keys) == 0 {
 				fmt.Fprintln(ui.Out, "No API keys found.")
 				continue
@@ -467,6 +467,16 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				continue
 			}
 			key := payload.Keys[index-1]
+			if strings.ToLower(strings.TrimSpace(line)) == "v" {
+				var detail struct {
+					Key apiKey `json:"key"`
+				}
+				if err := ui.request(http.MethodGet, "/api/keys/"+key.ID, nil, &detail); err != nil {
+					return err
+				}
+				fmt.Fprintf(ui.Out, "Name: %s\nID: %s\nKey: %s\n", detail.Key.Name, detail.Key.ID, detail.Key.Key)
+				continue
+			}
 			method, path, body := http.MethodDelete, "/api/keys/"+key.ID, any(nil)
 			if strings.ToLower(strings.TrimSpace(line)) == "t" {
 				method, body = http.MethodPut, map[string]bool{"isActive": !key.IsActive}
