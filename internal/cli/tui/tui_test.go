@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,5 +27,35 @@ func TestRunCLIToolsBack(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "claude") {
 		t.Fatalf("output does not contain tool status: %s", output.String())
+	}
+}
+
+func TestQuickSetupOpenCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/keys":
+			_, _ = fmt.Fprint(w, `{"keys":[{"key":"sk-test"}]}`)
+		case "/api/cli-tools/opencode-settings":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["apiKey"] != "sk-test" || body["activeModel"] != "cc/test" {
+				t.Fatalf("payload = %#v", body)
+			}
+			models, ok := body["models"].([]any)
+			if !ok || len(models) != 1 || models[0] != "cc/test" {
+				t.Fatalf("models = %#v", body["models"])
+			}
+			_, _ = fmt.Fprint(w, `{"success":true}`)
+		default:
+			_, _ = fmt.Fprint(w, `{}`)
+		}
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, In: strings.NewReader(""), Out: &bytes.Buffer{}, Client: server.Client()}
+	if err := ui.quickSetup(bufio.NewReader(strings.NewReader("opencode\ncc/test\n"))); err != nil {
+		t.Fatal(err)
 	}
 }
