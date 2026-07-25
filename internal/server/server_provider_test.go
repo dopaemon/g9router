@@ -178,13 +178,15 @@ func TestValidateGenericProviderFallsBackToChat(t *testing.T) {
 }
 
 func TestValidateNoAuthProviderAllowsEmptyKey(t *testing.T) {
-	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"opencode"}`))
-	request.Header.Set("Content-Type", "application/json")
-	app.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
-		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	for _, provider := range []string{"opencode", "searxng"} {
+		app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"`+provider+`"}`))
+		request.Header.Set("Content-Type", "application/json")
+		app.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+			t.Fatalf("provider=%s status=%d body=%s", provider, response.Code, response.Body.String())
+		}
 	}
 }
 

@@ -457,7 +457,7 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
 		return
 	}
-	if noAuthProviders[input.Provider] && input.Provider != "ollama-local" && input.Provider != "searxng" {
+	if noAuthProviders[input.Provider] && input.Provider != "ollama-local" {
 		writeJSON(w, 200, map[string]any{"valid": true, "error": nil})
 		return
 	}
