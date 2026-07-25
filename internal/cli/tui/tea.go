@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -16,10 +15,11 @@ func (item menuItem) Title() string       { return item.title }
 func (item menuItem) Description() string { return item.description }
 
 type teaModel struct {
-	baseURL string
-	list    list.Model
-	width   int
-	status  string
+	baseURL  string
+	list     list.Model
+	width    int
+	status   string
+	selected string
 }
 
 func newTeaModel(baseURL string) teaModel {
@@ -51,7 +51,8 @@ func (model teaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return model, tea.Quit
 		case "enter":
-			model.status = fmt.Sprintf("Selected %s — press q to exit", model.list.SelectedItem().(menuItem).title)
+			model.selected = model.list.SelectedItem().(menuItem).title
+			return model, tea.Quit
 		case "b", "esc":
 			model.status = "Ready"
 		}
@@ -73,8 +74,11 @@ func (model teaModel) View() string {
 	return "\n" + header + "\n\n" + intro + "\n\n" + body + "\n" + status + "\n"
 }
 
-func runInteractive(baseURL string, out io.Writer) error {
+func runInteractive(baseURL string, out io.Writer) (string, error) {
 	program := tea.NewProgram(newTeaModel(baseURL), tea.WithOutput(out))
-	_, err := program.Run()
-	return err
+	value, err := program.Run()
+	if err != nil {
+		return "", err
+	}
+	return value.(teaModel).selected, nil
 }

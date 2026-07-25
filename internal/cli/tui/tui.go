@@ -27,7 +27,31 @@ type UI struct {
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
 	if file, ok := in.(*os.File); ok && IsTerminal(file) {
-		return runInteractive(strings.TrimRight(baseURL, "/"), out)
+		ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
+		reader := bufio.NewReader(in)
+		for {
+			selection, err := runInteractive(ui.BaseURL, out)
+			if err != nil || selection == "" {
+				return err
+			}
+			switch selection {
+			case "Providers":
+				err = ui.providers(reader)
+			case "API Keys":
+				err = ui.apiKeys(reader)
+			case "Combos":
+				err = ui.combos(reader)
+			case "CLI Tools":
+				err = ui.cliTools(reader)
+			case "Settings":
+				err = ui.settings(reader)
+			case "OAuth":
+				err = ui.oauth(reader)
+			}
+			if err != nil {
+				fmt.Fprintln(out, styles.Error.Render("✗ "+err.Error()))
+			}
+		}
 	}
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
 	reader := bufio.NewReader(in)
