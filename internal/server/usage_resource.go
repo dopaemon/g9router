@@ -16,9 +16,17 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/usage/"), "/")
 	parts := strings.Split(path, "/")
 	if len(parts) == 2 && parts[1] == "codex-reset-credits" {
-		token, ok := s.codexConnectionToken(parts[0])
+		provider, token, ok := s.codexConnection(parts[0])
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Codex connection not found"})
+			return
+		}
+		if provider.ID != "codex" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Codex reset credits are only available for Codex connections."})
+			return
+		}
+		if token == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Codex reset credits require an OAuth or access-token connection."})
 			return
 		}
 		if r.Method == http.MethodGet {
@@ -91,25 +99,26 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"connectionId": connectionID, "provider": providerName, "requests": requests, "errors": errors, "inputTokens": input, "outputTokens": output, "source": "g9router usage log"})
 }
 
-func (s *Server) codexConnectionToken(id string) (string, bool) {
+func (s *Server) codexConnection(id string) (providers.Provider, string, bool) {
 	for _, provider := range s.store.List() {
-		if provider.ID == id && provider.ID == "codex" {
+		if provider.ID == id {
 			if provider.APIKey != "" {
-				return provider.APIKey, true
+				return provider, provider.APIKey, true
 			}
 			for _, account := range provider.Accounts {
 				if account.APIKey != "" {
-					return account.APIKey, true
+					return provider, account.APIKey, true
 				}
 			}
+			return provider, "", true
 		}
 		for _, account := range provider.Accounts {
-			if account.ID == id && provider.ID == "codex" && account.APIKey != "" {
-				return account.APIKey, true
+			if account.ID == id {
+				return provider, account.APIKey, true
 			}
 		}
 	}
-	return "", false
+	return providers.Provider{}, "", false
 }
 
 func (s *Server) codexCreditsAPI(w http.ResponseWriter, r *http.Request, token string) {
