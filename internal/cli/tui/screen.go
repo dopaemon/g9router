@@ -309,6 +309,10 @@ func formatScreenContent(title, content string) string {
 		return formatCombos(value)
 	case "CLI Tools":
 		return formatCLITools(value)
+	case "Settings":
+		return formatSettings(value)
+	case "OAuth":
+		return formatOAuth(value)
 	default:
 		data, _ := json.MarshalIndent(value, "", "  ")
 		return string(data)
@@ -386,6 +390,46 @@ func formatCLITools(value any) string {
 	}
 	sort.Strings(lines[1:])
 	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render("r refresh  use legacy setup actions from CLI Tools")
+}
+
+func formatSettings(value any) string {
+	settings, _ := value.(map[string]any)
+	if len(settings) == 0 {
+		return styles.Muted.Render("No settings available.")
+	}
+	keys := make([]string, 0, len(settings))
+	for key := range settings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	lines := []string{styles.Title.Render("SETTING") + "                         " + styles.Title.Render("VALUE")}
+	for _, key := range keys {
+		value, _ := json.Marshal(settings[key])
+		lines = append(lines, fmt.Sprintf("%-32s %s", key, strings.Trim(string(value), `"`)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatOAuth(value any) string {
+	credentials, _ := value.(map[string]any)
+	if len(credentials) == 0 {
+		return styles.Muted.Render("No OAuth credentials connected.") + "\n\n" + styles.Success.Render("Use the legacy OAuth flow to connect one")
+	}
+	lines := []string{styles.Title.Render("ID") + "                         " + styles.Title.Render("PROVIDER") + "              " + styles.Title.Render("STATUS")}
+	for id, raw := range credentials {
+		item, _ := raw.(map[string]any)
+		provider, _ := item["provider"].(string)
+		if provider == "" {
+			provider, _ = item["type"].(string)
+		}
+		status := styles.Success.Render("connected")
+		if active, ok := item["active"].(bool); ok && !active {
+			status = styles.Warning.Render("inactive")
+		}
+		lines = append(lines, fmt.Sprintf("%-28s %-24s %s", id, provider, status))
+	}
+	sort.Strings(lines[1:])
+	return strings.Join(lines, "\n")
 }
 
 func runFullInteractive(baseURL string, output io.Writer, client *http.Client) error {

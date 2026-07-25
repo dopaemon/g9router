@@ -203,3 +203,14 @@ func TestProvidersScreenSupportsSelection(t *testing.T) {
 		t.Fatalf("enter did not select provider: %q", model.notice)
 	}
 }
+
+func TestNonResourceScreensUseReadableViews(t *testing.T) {
+	settings := formatScreenContent("Settings", `{"rtkEnabled":true,"headroom":false}`)
+	if !strings.Contains(settings, "SETTING") || strings.Contains(settings, `"rtkEnabled"`) {
+		t.Fatalf("settings view=%s", settings)
+	}
+	oauth := formatScreenContent("OAuth", `{"cred-1":{"provider":"claude","active":true}}`)
+	if !strings.Contains(oauth, "PROVIDER") || strings.Contains(oauth, `"cred-1"`) {
+		t.Fatalf("oauth view=%s", oauth)
+	}
+}
