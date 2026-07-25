@@ -72,7 +72,7 @@ func newScreenModel(baseURL string, output io.Writer, client *http.Client) scree
 	spin := spinner.New()
 	spin.Spinner = spinner.Dot
 	model := screenModel{baseURL: baseURL, client: client, output: output, menu: newTeaModel(baseURL), spinner: spin}
-	model.viewport = viewport.New(0, 0)
+	model.viewport = viewport.New(72, 13)
 	return model
 }
 
@@ -81,8 +81,8 @@ func (model screenModel) Init() tea.Cmd { return nil }
 func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := message.(tea.WindowSizeMsg); ok {
 		model.width, model.height = size.Width, size.Height
-		model.viewport.Width = size.Width - 8
-		model.viewport.Height = size.Height - 11
+		model.viewport.Width = maxInt(size.Width-8, 40)
+		model.viewport.Height = maxInt(size.Height-11, 8)
 	}
 	if model.current == nil {
 		updated, command := model.menu.Update(message)
@@ -135,8 +135,8 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
 		model.width, model.height = message.Width, message.Height
-		model.viewport.Width = message.Width - 8
-		model.viewport.Height = message.Height - 11
+		model.viewport.Width = maxInt(message.Width-8, 40)
+		model.viewport.Height = maxInt(message.Height-11, 8)
 	case screenLoadedMsg:
 		model.loading, model.err = false, message.err
 		model.raw = message.content
@@ -207,6 +207,13 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return model, nil
 }
 
+func maxInt(value, minimum int) int {
+	if value < minimum {
+		return minimum
+	}
+	return value
+}
+
 func (model screenModel) View() string {
 	if model.current == nil {
 		return model.menu.View()
@@ -238,6 +245,9 @@ func (model screenModel) renderContent() string {
 	}
 	if model.err != nil {
 		return styles.Error.Render("✗ "+model.err.Error()) + "\n\n" + styles.Muted.Render("Press r to retry")
+	}
+	if len(model.items) == 0 && model.raw != "" {
+		return formatScreenContent(model.current.title, model.raw)
 	}
 	return model.viewport.View()
 }

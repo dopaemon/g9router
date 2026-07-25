@@ -259,3 +259,12 @@ func TestScreenModelLoadsAfterRootSelection(t *testing.T) {
 		t.Fatalf("load state: loading=%v err=%v view=%s", model.loading, model.err, model.View())
 	}
 }
+
+func TestScreenModelUsesMinimumViewportWhenTerminalSizeIsUnknown(t *testing.T) {
+	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 0, Height: 0})
+	model = updated.(screenModel)
+	if model.viewport.Width != 40 || model.viewport.Height != 8 {
+		t.Fatalf("viewport=%dx%d", model.viewport.Width, model.viewport.Height)
+	}
+}
