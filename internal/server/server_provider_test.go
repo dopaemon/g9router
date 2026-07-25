@@ -1,8 +1,10 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -34,6 +36,29 @@ func TestValidateCloudflareRequiresAccount(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	app.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Missing Account ID") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestValidateOpenAICompatibleNode(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" || r.Header.Get("Authorization") != "Bearer secret" {
+			t.Fatalf("path=%s authorization=%q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	nodesPath := t.TempDir() + "/nodes.json"
+	nodes, _ := json.Marshal([]map[string]string{{"id": "node-1", "type": "openai-compatible", "baseUrl": upstream.URL}})
+	if err := os.WriteFile(nodesPath, nodes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(Options{ProviderNodesPath: nodesPath, ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"node-1","apiKey":"secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

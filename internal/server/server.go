@@ -52,7 +52,7 @@ import (
 )
 
 type Options struct {
-	Addr, Upstream, APIKey, ProviderPath, OAuthPath, DatabasePath string
+	Addr, Upstream, APIKey, ProviderPath, OAuthPath, DatabasePath, ProviderNodesPath string
 }
 
 type Server struct {
@@ -89,11 +89,14 @@ func New(options Options) *Server {
 	if options.DatabasePath == "" {
 		options.DatabasePath = "g9router.db"
 	}
+	if options.ProviderNodesPath == "" {
+		options.ProviderNodesPath = "provider-nodes.json"
+	}
 	var database *sql.DB
 	if opened, err := db.Open(options.DatabasePath); err == nil {
 		database = opened
 	}
-	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New(options.DatabasePath), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New("provider-nodes.json"), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
+	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New(options.DatabasePath), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New(options.ProviderNodesPath), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
 }
 
 func (s *Server) Run() error {
@@ -511,6 +514,81 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden && response.StatusCode != http.StatusNotFound
 		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API token or Account ID"}[valid]})
 		return
+	}
+	if node, ok := s.providerNodes.Get(input.Provider); ok {
+		base := strings.TrimRight(node.BaseURL, "/")
+		switch node.Type {
+		case "openai-compatible":
+			request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			request.Header.Set("Authorization", "Bearer "+input.APIKey)
+			response, err := s.client.Do(request)
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			defer response.Body.Close()
+			valid := response.StatusCode >= 200 && response.StatusCode < 300
+			writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+			return
+		case "custom-embedding":
+			request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			request.Header.Set("Authorization", "Bearer "+input.APIKey)
+			response, err := s.client.Do(request)
+			if err == nil {
+				response.Body.Close()
+				if response.StatusCode >= 200 && response.StatusCode < 300 {
+					writeJSON(w, 200, map[string]any{"valid": true, "error": nil})
+					return
+				}
+				if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+					writeJSON(w, 200, map[string]any{"valid": false, "error": "Invalid API key"})
+					return
+				}
+			}
+			request, err = http.NewRequestWithContext(r.Context(), http.MethodPost, base+"/embeddings", strings.NewReader(`{"model":"test","input":"ping"}`))
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			request.Header.Set("Authorization", "Bearer "+input.APIKey)
+			request.Header.Set("Content-Type", "application/json")
+			response, err = s.client.Do(request)
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			defer response.Body.Close()
+			valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden
+			writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+			return
+		case "anthropic-compatible":
+			request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, base+"/v1/messages", strings.NewReader(`{"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","content":"test"}]}`))
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			request.Header.Set("x-api-key", input.APIKey)
+			request.Header.Set("Authorization", "Bearer "+input.APIKey)
+			request.Header.Set("anthropic-version", "2023-06-01")
+			request.Header.Set("Content-Type", "application/json")
+			response, err := s.client.Do(request)
+			if err != nil {
+				writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+				return
+			}
+			defer response.Body.Close()
+			valid := response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden
+			writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+			return
+		}
 	}
 	descriptor, ok := providers.Lookup(input.Provider)
 	if !ok {
