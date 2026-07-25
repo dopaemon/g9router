@@ -257,7 +257,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "No API keys found. Create one in API Keys menu first.")
 		return nil
 	}
-	fmt.Fprint(ui.Out, "Tool (claude/codex/droid/openclaw/hermes): ")
+	fmt.Fprint(ui.Out, "Tool (claude/codex/opencode/droid/openclaw/hermes): ")
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -287,11 +287,15 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 			model = "cx/claude-sonnet-4-5-20250929"
 		}
 		path := "/api/cli-tools/" + tool + "-settings"
-		return ui.request(http.MethodPost, path, map[string]string{
-			"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1",
-			"apiKey":  key,
-			"model":   model,
-		}, nil)
+		if tool == "opencode" {
+			return ui.request(http.MethodPost, path, map[string]any{
+				"baseUrl":     strings.TrimRight(ui.BaseURL, "/") + "/v1",
+				"apiKey":      key,
+				"models":      []string{model},
+				"activeModel": model,
+			}, nil)
+		}
+		return ui.request(http.MethodPost, path, map[string]string{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "model": model}, nil)
 	default:
 		fmt.Fprintln(ui.Out, "Quick setup supports claude and codex.")
 		return nil
