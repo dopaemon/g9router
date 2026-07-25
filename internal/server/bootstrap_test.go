@@ -20,3 +20,17 @@ func TestInitAndVersionAPIs(t *testing.T) {
 		t.Fatalf("version status=%d body=%s", versionResponse.Code, versionResponse.Body.String())
 	}
 }
+
+func TestAPIHealthContract(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if response.Code != http.StatusOK || response.Header().Get("Access-Control-Allow-Origin") != "*" || response.Body.String() != "{\"ok\":true}\n" {
+		t.Fatalf("status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+	options := httptest.NewRecorder()
+	app.Handler().ServeHTTP(options, httptest.NewRequest(http.MethodOptions, "/api/health", nil))
+	if options.Code != http.StatusNoContent {
+		t.Fatalf("options status=%d", options.Code)
+	}
+}
