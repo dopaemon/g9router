@@ -1,4 +1,4 @@
-.PHONY: test build run docker
+.PHONY: test build run docker clean
 
 test:
 	go test ./...
@@ -11,3 +11,7 @@ run:
 
 docker:
 	docker build -t g9router:dev .
+
+clean:
+	rm -f g9router
+	go clean
