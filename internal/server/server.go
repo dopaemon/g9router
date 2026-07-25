@@ -3304,8 +3304,39 @@ func (s *Server) providerNodeResourceAPI(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
 			return
 		}
+		for _, provider := range s.store.List() {
+			if provider.ID != id {
+				continue
+			}
+			if provider.ProviderSpecificData == nil {
+				provider.ProviderSpecificData = map[string]any{}
+			}
+			provider.ProviderSpecificData["prefix"] = item.Prefix
+			provider.ProviderSpecificData["baseUrl"] = item.BaseURL
+			provider.ProviderSpecificData["nodeName"] = item.Name
+			if item.Type == "openai-compatible" {
+				provider.ProviderSpecificData["apiType"] = item.APIType
+			}
+			if err := s.store.Upsert(provider); err != nil {
+				writeJSON(w, 500, map[string]string{"error": err.Error()})
+				return
+			}
+		}
 		writeJSON(w, 200, map[string]any{"node": item})
 	case http.MethodDelete:
+		if _, ok := s.providerNodes.Get(id); !ok {
+			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
+			return
+		}
+		for _, provider := range s.store.List() {
+			if provider.ID == id {
+				if err := s.store.Delete(id); err != nil {
+					writeJSON(w, 500, map[string]string{"error": err.Error()})
+					return
+				}
+				break
+			}
+		}
 		ok, err := s.providerNodes.Delete(id)
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})

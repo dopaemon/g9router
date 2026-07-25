@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	providernodes "g9router/internal/providernodes"
 	"g9router/internal/providers"
 )
 
@@ -215,4 +216,38 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return fn(request)
+}
+
+func TestProviderNodeUpdateAndDeleteSyncsConnections(t *testing.T) {
+	app := New(Options{ProviderNodesPath: t.TempDir() + "/nodes.json", ProviderPath: t.TempDir() + "/providers.json"})
+	node, err := app.providerNodes.Create(providernodes.Node{Type: "openai-compatible", Prefix: "node", APIType: "chat", BaseURL: "http://old", Name: "Old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.store.Upsert(providers.Provider{ID: node.ID, BaseURL: node.BaseURL, Enabled: true, ProviderSpecificData: map[string]any{"prefix": node.Prefix, "baseUrl": node.BaseURL, "nodeName": node.Name}}); err != nil {
+		t.Fatal(err)
+	}
+
+	update := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/api/provider-nodes/"+node.ID, strings.NewReader(`{"name":"New","prefix":"new","apiType":"responses","baseUrl":"http://new"}`))
+	app.Handler().ServeHTTP(update, request)
+	if update.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", update.Code, update.Body.String())
+	}
+	provider, ok := app.store.Find(node.ID)
+	if !ok || provider.ProviderSpecificData["prefix"] != "new" || provider.ProviderSpecificData["baseUrl"] != "http://new" || provider.ProviderSpecificData["nodeName"] != "New" || provider.ProviderSpecificData["apiType"] != "responses" {
+		t.Fatalf("connection not synchronized: %#v", provider)
+	}
+
+	remove := httptest.NewRecorder()
+	app.Handler().ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/api/provider-nodes/"+node.ID, nil))
+	if remove.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", remove.Code, remove.Body.String())
+	}
+	if _, ok := app.providerNodes.Get(node.ID); ok {
+		t.Fatal("provider node still exists")
+	}
+	if _, ok := app.store.Find(node.ID); ok {
+		t.Fatal("provider connection still exists")
+	}
 }
