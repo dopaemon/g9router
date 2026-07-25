@@ -24,3 +24,22 @@ func TestModelInfoOptions(t *testing.T) {
 		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
 	}
 }
+
+func TestModelCatalogParity(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/embedding", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "text-embedding-3-small") {
+		t.Fatalf("embedding catalog status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/info?id=openai/gpt-4o", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"endpoint":"/v1/chat/completions"`) {
+		t.Fatalf("model info status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/unknown", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unknown kind status=%d", response.Code)
+	}
+}
