@@ -3904,12 +3904,23 @@ func containsString(values []string, target string) bool {
 }
 
 func (s *Server) chatCompletions(w http.ResponseWriter, r *http.Request) {
+	if corsPreflight(w, r, "GET, POST, OPTIONS") {
+		return
+	}
 	s.forwardJSON(w, r, "/chat/completions")
 }
 
 func (s *Server) responses(w http.ResponseWriter, r *http.Request) { s.forwardJSON(w, r, "/responses") }
-func (s *Server) messages(w http.ResponseWriter, r *http.Request)  { s.forwardJSON(w, r, "/messages") }
+func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
+	if corsPreflight(w, r, "GET, POST, OPTIONS") {
+		return
+	}
+	s.forwardJSON(w, r, "/messages")
+}
 func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
+	if corsPreflight(w, r, "POST, OPTIONS") {
+		return
+	}
 	if s.geminiEmbedding(w, r) {
 		return
 	}
@@ -3919,9 +3930,15 @@ func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
 	s.forwardRaw(w, r, "/embeddings")
 }
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {
+	if corsPreflight(w, r, "POST, OPTIONS") {
+		return
+	}
 	s.forwardRaw(w, r, "/images/generations")
 }
 func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
+	if corsPreflight(w, r, "POST, OPTIONS") {
+		return
+	}
 	if r.Method == http.MethodPost && strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
 		data, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 		if err != nil {
@@ -3937,6 +3954,18 @@ func (s *Server) transcriptions(w http.ResponseWriter, r *http.Request) {
 	}
 	s.forwardRaw(w, r, "/audio/transcriptions")
 }
+
+func corsPreflight(w http.ResponseWriter, r *http.Request, methods string) bool {
+	if r.Method != http.MethodOptions {
+		return false
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", methods)
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+	w.WriteHeader(http.StatusNoContent)
+	return true
+}
+
 func (s *Server) speech(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "*")

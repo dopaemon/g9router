@@ -29,3 +29,14 @@ func TestEmbeddingsProxy(t *testing.T) {
 		t.Fatal(response.StatusCode)
 	}
 }
+
+func TestMediaEndpointCORSPreflight(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/embeddings", "/v1/images/generations", "/v1/audio/transcriptions"} {
+		response := httptest.NewRecorder()
+		app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodOptions, path, nil))
+		if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatalf("path=%s status=%d headers=%v", path, response.Code, response.Header())
+		}
+	}
+}
