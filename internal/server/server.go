@@ -3589,9 +3589,6 @@ func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
 	all := s.store.List()
 	eligible := make([]providers.Provider, 0, len(all))
 	for _, provider := range all {
-		if !provider.Enabled {
-			continue
-		}
 		eligible = append(eligible, provider)
 	}
 	options := make([]string, 0, len(eligible))

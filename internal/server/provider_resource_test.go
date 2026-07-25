@@ -55,6 +55,20 @@ func TestProviderClientReturnsPaginatedConnections(t *testing.T) {
 	}
 }
 
+func TestProviderClientFiltersInactiveConnections(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	for _, provider := range []providers.Provider{{ID: "active", Enabled: true}, {ID: "inactive", Enabled: false}} {
+		if err := app.store.Upsert(provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/providers/client?accountStatus=inactive", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"inactive"`) || strings.Contains(response.Body.String(), `"id":"active"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProviderTestModelsDiscoversCustomModels(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/models" {
