@@ -10,6 +10,12 @@ import (
 )
 
 func (s *Server) modelCatalogAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -45,6 +51,7 @@ func (s *Server) modelCatalogAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) modelInfoAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": "Missing required query param: id", "type": "invalid_request_error"}})

@@ -15,3 +15,12 @@ func TestModelsAPI(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestModelInfoOptions(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodOptions, "/v1/models/info", nil))
+	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
+	}
+}
