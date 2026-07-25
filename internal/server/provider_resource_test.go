@@ -195,3 +195,24 @@ func TestModelSettingsAPI(t *testing.T) {
 	}
 	response.Body.Close()
 }
+
+func TestSettingsAPIHidesProtectedFields(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", DatabasePath: t.TempDir() + "/settings.db"})
+	if err := app.settings.Update(map[string]any{"password": "hash", "oidcClientSecret": "oidc-secret", "mitmSudoEncrypted": "sudo-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	get := httptest.NewRecorder()
+	app.settingsAPI(get, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if get.Code != http.StatusOK || get.Header().Get("Cache-Control") != "no-store" || strings.Contains(get.Body.String(), "oidc-secret") || strings.Contains(get.Body.String(), "sudo-secret") || !strings.Contains(get.Body.String(), `"hasPassword":true`) {
+		t.Fatalf("status=%d headers=%v body=%s", get.Code, get.Header(), get.Body.String())
+	}
+	patch := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/settings", strings.NewReader(`{"mitmSudoEncrypted":"attacker","oidcClientSecret":""}`))
+	app.settingsAPI(patch, request)
+	if patch.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", patch.Code, patch.Body.String())
+	}
+	if value, ok := app.settings.Secret("mitmSudoEncrypted"); !ok || value != "sudo-secret" {
+		t.Fatalf("protected setting changed: %q", value)
+	}
+}

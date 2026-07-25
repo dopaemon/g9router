@@ -1017,12 +1017,24 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, 200, s.settings.Get())
+		w.Header().Set("Cache-Control", "no-store")
+		values := s.settings.Get()
+		delete(values, "oidcClientSecret")
+		delete(values, "mitmSudoEncrypted")
+		values["oidcConfigured"] = anyString(values["oidcIssuerUrl"]) != "" && anyString(values["oidcClientId"]) != "" && func() bool { _, ok := s.settings.Secret("oidcClientSecret"); return ok }()
+		values["hasPassword"] = func() bool { _, ok := s.settings.Secret("password"); return ok }()
+		values["enableRequestLogs"] = os.Getenv("ENABLE_REQUEST_LOGS") == "true"
+		values["enableTranslator"] = os.Getenv("ENABLE_TRANSLATOR") == "true"
+		writeJSON(w, 200, values)
 	case http.MethodPatch:
 		var input map[string]any
 		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
 			return
+		}
+		delete(input, "mitmSudoEncrypted")
+		if value, ok := input["oidcClientSecret"].(string); ok && strings.TrimSpace(value) == "" {
+			delete(input, "oidcClientSecret")
 		}
 		if raw, ok := input["newPassword"].(string); ok && raw != "" {
 			current, _ := input["currentPassword"].(string)
@@ -1048,7 +1060,11 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"success": true})
+		w.Header().Set("Cache-Control", "no-store")
+		values := s.settings.Get()
+		delete(values, "oidcClientSecret")
+		delete(values, "mitmSudoEncrypted")
+		writeJSON(w, 200, values)
 	case http.MethodPut, http.MethodPost:
 		var values map[string]any
 		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&values) != nil {
