@@ -1,7 +1,13 @@
 *.db
 *.db-shm
 *.db-wal
-*.json
+providers.json
+oauth.json
+keys.json
+combos.json
+provider-nodes.json
+proxy-pools.json
+usage.json
 logs/
 g9router
 !go.mod
