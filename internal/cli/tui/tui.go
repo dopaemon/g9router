@@ -316,7 +316,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 		for i, item := range items {
 			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])
 		}
-		fmt.Fprintln(ui.Out, "a. Add API provider  d. Delete  t. Test  b. Back")
+		fmt.Fprintln(ui.Out, "a. Add API provider  e. Edit  d. Delete  t. Test  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -341,7 +341,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			if err := ui.request(http.MethodPost, "/api/providers", item, nil); err != nil {
 				return err
 			}
-		case "d", "t":
+		case "d", "e", "t":
 			if len(items) == 0 {
 				fmt.Fprintln(ui.Out, "No providers found.")
 				continue
@@ -359,6 +359,38 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			item := items[index-1]
 			if strings.ToLower(strings.TrimSpace(line)) == "d" {
 				if err := ui.request(http.MethodDelete, "/api/providers?id="+item.ID, nil, nil); err != nil {
+					return err
+				}
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(line)) == "e" {
+				var current provider
+				if err := ui.request(http.MethodGet, "/api/providers/"+item.ID, nil, &current); err != nil {
+					return err
+				}
+				fmt.Fprintf(ui.Out, "Base URL (Enter keeps %s): ", current.BaseURL)
+				value, err := reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				if strings.TrimSpace(value) != "" {
+					current.BaseURL = strings.TrimSpace(value)
+				}
+				fmt.Fprintf(ui.Out, "API key (Enter keeps current): ")
+				value, err = reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				if strings.TrimSpace(value) != "" {
+					current.APIKey = strings.TrimSpace(value)
+				}
+				fmt.Fprintf(ui.Out, "Enabled [y/N]: ")
+				value, err = reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				current.Enabled = strings.EqualFold(strings.TrimSpace(value), "y")
+				if err := ui.request(http.MethodPut, "/api/providers/"+item.ID, current, nil); err != nil {
 					return err
 				}
 				continue
