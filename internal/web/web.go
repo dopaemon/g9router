@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-//go:embed index.html favicon.svg manifest.json
+//go:embed index.html favicon.svg manifest.json icon-192.svg icon-512.svg
 var files embed.FS
 
 func Handler() http.Handler {

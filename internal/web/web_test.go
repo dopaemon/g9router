@@ -40,6 +40,16 @@ func TestHandlerServesManifest(t *testing.T) {
 	}
 }
 
+func TestHandlerServesPWAIcons(t *testing.T) {
+	for _, path := range []string{"/icon-192.svg", "/icon-512.svg"} {
+		response := httptest.NewRecorder()
+		Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<svg") {
+			t.Fatalf("%s status=%d body=%d", path, response.Code, response.Body.Len())
+		}
+	}
+}
+
 func TestDashboardContainsPortedControls(t *testing.T) {
 	response := httptest.NewRecorder()
 	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/providers/demo", nil))
