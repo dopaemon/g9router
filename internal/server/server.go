@@ -933,7 +933,7 @@ func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id stri
 		_ = s.store.Upsert(provider)
 		writeJSON(w, http.StatusOK, map[string]any{"valid": valid, "error": errValue, "refreshed": false})
 	}
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(providerProxyBaseURL(provider), "/")+"/models", nil)
 	if err != nil {
 		finish(false, err.Error())
 		return
@@ -967,7 +967,7 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
 		return
 	}
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(providerProxyBaseURL(provider), "/")+"/models", nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -3864,7 +3864,7 @@ func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
 	sources := append([]providers.Provider{{BaseURL: s.options.Upstream, APIKey: s.options.APIKey, Enabled: true}}, s.store.Enabled()...)
 	for _, provider := range sources {
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(provider.BaseURL, "/")+"/models", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(providerProxyBaseURL(provider), "/")+"/models", nil)
 		if err == nil {
 			if provider.APIKey != "" {
 				req.Header.Set("Authorization", "Bearer "+provider.APIKey)
