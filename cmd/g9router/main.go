@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"g9router/internal/auth"
+	"g9router/internal/cli/tray"
 	"g9router/internal/cli/tui"
 	"g9router/internal/cli/xai"
 	"g9router/internal/server"
@@ -29,7 +30,7 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
 	flag.BoolVar(noBrowser, "n", false, "do not open the dashboard")
 	flag.Bool("log", false, "show server logs")
-	flag.Bool("tray", false, "run in system tray mode")
+	trayMode := flag.Bool("tray", false, "run in system tray mode")
 	flag.Bool("skip-update", false, "skip update check")
 	version := flag.Bool("version", false, "show version")
 	flag.Parse()
@@ -56,6 +57,13 @@ func main() {
 	errors := make(chan error, 1)
 	go func() { errors <- http.ListenAndServe(addr, appHandler) }()
 	ready := waitReady(addr, 15*time.Second)
+	if ready && *trayMode {
+		executable, _ := os.Executable()
+		if err := tray.Run(portNumber(addr), executable, func() { os.Exit(0) }); err != nil {
+			log.Printf("tray unavailable: %v", err)
+		}
+		log.Fatal(<-errors)
+	}
 	if ready && tui.IsTerminal(os.Stdin) {
 		_ = tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout)
 		return

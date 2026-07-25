@@ -22,7 +22,7 @@ var fallbackIcon = []byte{
 	0x42, 0x60, 0x82,
 }
 
-func Run(port int, executable string, quit func()) {
+func Run(port int, executable string, quit func()) error {
 	systray.Run(func() {
 		systray.SetIcon(fallbackIcon)
 		systray.SetTitle("9Router")
@@ -55,6 +55,7 @@ func Run(port int, executable string, quit func()) {
 			}
 		}()
 	}, nil)
+	return nil
 }
 
 func openDashboard(port int) {
