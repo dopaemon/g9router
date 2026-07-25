@@ -619,6 +619,19 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			if err := ui.selectProvider(reader, &item); err != nil {
 				return err
 			}
+			mode, err := ui.selectAuthMode(reader)
+			if err != nil {
+				return err
+			}
+			if mode == "oauth" {
+				if item.ID != "codex" {
+					return fmt.Errorf("OAuth login is not available in CLI for %s", item.ID)
+				}
+				if err := ui.loginCodex(); err != nil {
+					return err
+				}
+				continue
+			}
 			for _, field := range []struct {
 				name   string
 				target *string
@@ -698,6 +711,25 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 		default:
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
+	}
+}
+
+func (ui *UI) selectAuthMode(reader *bufio.Reader) (string, error) {
+	fmt.Fprintln(ui.Out, "\nSelect authentication")
+	fmt.Fprintln(ui.Out, "1. OAuth")
+	fmt.Fprintln(ui.Out, "2. API key")
+	fmt.Fprint(ui.Out, "Authentication: ")
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	switch strings.ToLower(strings.TrimSpace(choice)) {
+	case "1", "o", "oauth":
+		return "oauth", nil
+	case "2", "a", "api", "api-key", "apikey":
+		return "apikey", nil
+	default:
+		return "", fmt.Errorf("invalid authentication selection")
 	}
 }
 

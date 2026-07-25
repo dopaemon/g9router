@@ -113,3 +113,15 @@ func TestSelectProviderUsesRegistryDefaults(t *testing.T) {
 		t.Fatalf("provider defaults = %#v", item)
 	}
 }
+
+func TestSelectAuthModeAcceptsOAuthAndAPIKey(t *testing.T) {
+	ui := &UI{Out: &bytes.Buffer{}}
+	mode, err := ui.selectAuthMode(bufio.NewReader(strings.NewReader("1\n")))
+	if err != nil || mode != "oauth" {
+		t.Fatalf("oauth mode=%q err=%v", mode, err)
+	}
+	mode, err = ui.selectAuthMode(bufio.NewReader(strings.NewReader("2\n")))
+	if err != nil || mode != "apikey" {
+		t.Fatalf("api key mode=%q err=%v", mode, err)
+	}
+}
