@@ -35,6 +35,7 @@ type screenModel struct {
 	current  *screen
 	viewport viewport.Model
 	spinner  spinner.Model
+	form     *formModel
 	loading  bool
 	err      error
 	width    int
@@ -73,6 +74,25 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return model, command
 	}
+	if model.form != nil {
+		if key, ok := message.(tea.KeyMsg); ok && strings.ToLower(key.String()) == "esc" {
+			model.form = nil
+			return model, nil
+		}
+		updated, command := model.form.update(message)
+		model.form = &updated
+		if saved, ok := message.(formSavedMsg); ok {
+			model.form.busy = false
+			if saved.err != nil {
+				model.form.err = saved.err
+				return model, nil
+			}
+			model.form = nil
+			model.loading = true
+			return model, loadScreen(model.baseURL, model.client, model.current.path)
+		}
+		return model, command
+	}
 
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
@@ -99,6 +119,18 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			model.loading = true
 			return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
+		case "a":
+			switch model.current.title {
+			case "Providers":
+				form := newForm("Add provider", model.baseURL, "/api/providers", model.client, "Name", "Base URL", "API key")
+				model.form = &form
+			case "API Keys":
+				form := newForm("Create API key", model.baseURL, "/api/keys", model.client, "Name")
+				model.form = &form
+			default:
+				model.err = fmt.Errorf("add action is not available for %s", model.current.title)
+			}
+			return model, nil
 		default:
 			var command tea.Cmd
 			model.viewport, command = model.viewport.Update(message)
@@ -124,6 +156,9 @@ func (model screenModel) View() string {
 }
 
 func (model screenModel) renderContent() string {
+	if model.form != nil {
+		return model.form.view()
+	}
 	if model.loading {
 		return model.spinner.View() + " " + styles.Subtitle.Render("Loading "+model.current.title+"…")
 	}
