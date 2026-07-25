@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -93,6 +94,7 @@ func (s *Store) Providers() []map[string]string {
 		seen[log.Provider] = true
 		providers = append(providers, map[string]string{"id": log.Provider, "name": log.Provider})
 	}
+	sort.Slice(providers, func(left, right int) bool { return providers[left]["id"] < providers[right]["id"] })
 	return providers
 }
 func (s *Store) Reset() error {

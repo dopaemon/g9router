@@ -17,3 +17,13 @@ func TestStorePersistsAndResets(t *testing.T) {
 		t.Fatal(restored.Snapshot())
 	}
 }
+
+func TestProvidersAreSorted(t *testing.T) {
+	store := New(t.TempDir() + "/usage.json")
+	store.AddLog(1, 0, 0, 0, Log{Provider: "z"})
+	store.AddLog(1, 0, 0, 0, Log{Provider: "a"})
+	providers := store.Providers()
+	if providers[0]["id"] != "a" || providers[1]["id"] != "z" {
+		t.Fatal(providers)
+	}
+}
