@@ -23,6 +23,14 @@ func (s *Server) usageStatsAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.usageStats(period))
 }
 
+func (s *Server) usageHistoryAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.usageStats("all"))
+}
+
 func (s *Server) usageStats(period string) map[string]any {
 	logs := s.usage.Recent(1000)
 	stats := map[string]any{

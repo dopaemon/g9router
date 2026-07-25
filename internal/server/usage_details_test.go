@@ -20,3 +20,12 @@ func TestUsageDetailsValidation(t *testing.T) {
 		t.Fatalf("details status=%d body=%s", details.Code, details.Body.String())
 	}
 }
+
+func TestUsageHistoryUsesAllPeriod(t *testing.T) {
+	app := New(Options{DatabasePath: t.TempDir() + "/test.db"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/usage/history", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"totalRequests"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
