@@ -3444,7 +3444,7 @@ func (s *Server) ttsVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if provider != "" && provider != "edge-tts" {
-		writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Provider %q voice listing is not implemented", provider)})
+		writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Provider '%s' does not support voice listing", provider)})
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4", nil)

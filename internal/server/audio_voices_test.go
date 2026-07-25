@@ -36,6 +36,15 @@ func TestPublicAudioVoicesRejectsInternalOnlyProviders(t *testing.T) {
 	}
 }
 
+func TestInternalVoiceCatalogRejectsUnsupportedProvider(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/media-providers/tts/voices?provider=unknown", nil))
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "does not support voice listing") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestLocalDeviceVoicesExposeGroupedCatalog(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json", DatabasePath: t.TempDir() + "/state.db"})
 	recorder := httptest.NewRecorder()
