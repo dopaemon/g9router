@@ -67,13 +67,33 @@ func (s *Server) modelInfoAPI(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		for _, model := range descriptor.Models {
-			if model.ID == parts[1] {
-				writeJSON(w, http.StatusOK, map[string]any{"id": id, "object": "model", "owned_by": provider, "name": model.Name, "kind": model.Kind, "services": descriptor.Services})
+			kind := model.Kind
+			if kind == "" {
+				kind = "llm"
+			}
+			if model.ID == parts[1] && (r.URL.Query().Get("kind") == "" || r.URL.Query().Get("kind") == kind) {
+				info := map[string]any{"id": id, "name": model.Name, "kind": kind, "owned_by": descriptor.Alias, "endpoint": modelEndpoint(kind)}
+				if len(model.Params) > 0 {
+					info["params"] = model.Params
+				}
+				writeJSON(w, http.StatusOK, info)
 				return
 			}
 		}
+		if parts[1] == "search" && containsString(descriptor.Services, "webSearch") {
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "name": descriptor.Alias + " Search", "kind": "webSearch", "owned_by": descriptor.Alias, "endpoint": "/v1/search", "params": []string{"query", "max_results", "country", "language", "time_range", "domain_filter", "search_type"}})
+			return
+		}
+		if parts[1] == "fetch" && containsString(descriptor.Services, "webFetch") {
+			writeJSON(w, http.StatusOK, map[string]any{"id": id, "name": descriptor.Alias + " Fetch", "kind": "webFetch", "owned_by": descriptor.Alias, "endpoint": "/v1/fetch", "params": []string{"url", "format", "max_characters"}})
+			return
+		}
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]string{"message": "Model not found: " + id, "type": "not_found"}})
+}
+
+func modelEndpoint(kind string) string {
+	return map[string]string{"llm": "/v1/chat/completions", "image": "/v1/images/generations", "tts": "/v1/audio/speech", "stt": "/v1/audio/transcriptions", "embedding": "/v1/embeddings", "imageToText": "/v1/chat/completions", "webSearch": "/v1/search", "webFetch": "/v1/fetch"}[kind]
 }
 
 func (s *Server) modelsAPI(w http.ResponseWriter, r *http.Request) {
