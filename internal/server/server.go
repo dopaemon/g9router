@@ -304,6 +304,10 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	if strings.HasSuffix(id, "/accounts") {
+		s.providerAccountsAPI(w, r, strings.TrimSuffix(id, "/accounts"))
+		return
+	}
 	if strings.HasSuffix(id, "/test") {
 		s.providerTestAPI(w, r, strings.TrimSuffix(id, "/test"))
 		return
