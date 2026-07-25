@@ -264,6 +264,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/models/availability", s.modelsAvailabilityAPI)
 	mux.HandleFunc("/api/models/test", s.modelTestAPI)
 	mux.HandleFunc("/api/cli-tools/all-statuses", s.cliToolsStatusAPI)
+	mux.HandleFunc("/api/cli-tools/guides", s.cliToolsGuidesAPI)
 	mux.HandleFunc("/api/cli-tools/antigravity-mitm/alias", s.antigravityAliasAPI)
 	mux.HandleFunc("/api/cli-tools/antigravity-mitm", s.antigravityMITMAPI)
 	mux.HandleFunc("/api/cli-tools/claude-settings", s.claudeSettingsAPI)
