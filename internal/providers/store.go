@@ -21,8 +21,10 @@ type Provider struct {
 }
 
 type Account struct {
-	ID, APIKey    string
-	Name, Email   string `json:"name,omitempty"`
+	ID            string `json:"id,omitempty"`
+	APIKey        string `json:"apiKey,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Email         string `json:"email,omitempty"`
 	Workspace     string `json:"workspace,omitempty"`
 	Plan          string `json:"plan,omitempty"`
 	Enabled       bool   `json:"enabled"`
