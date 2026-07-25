@@ -26,6 +26,9 @@ type UI struct {
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
+	if file, ok := in.(*os.File); ok && IsTerminal(file) {
+		return runInteractive(strings.TrimRight(baseURL, "/"), out)
+	}
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
 	reader := bufio.NewReader(in)
 	for {
