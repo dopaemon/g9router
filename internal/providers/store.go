@@ -22,9 +22,12 @@ type Provider struct {
 
 type Account struct {
 	ID, APIKey    string
-	Enabled       bool  `json:"enabled"`
-	RequestsLimit int64 `json:"requestsLimit,omitempty"`
-	RequestsUsed  int64 `json:"requestsUsed,omitempty"`
+	Name, Email   string `json:"name,omitempty"`
+	Workspace     string `json:"workspace,omitempty"`
+	Plan          string `json:"plan,omitempty"`
+	Enabled       bool   `json:"enabled"`
+	RequestsLimit int64  `json:"requestsLimit,omitempty"`
+	RequestsUsed  int64  `json:"requestsUsed,omitempty"`
 }
 type Store struct {
 	mu       sync.RWMutex
