@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRunCLIToolsBack(t *testing.T) {
@@ -123,5 +125,17 @@ func TestSelectAuthModeAcceptsOAuthAndAPIKey(t *testing.T) {
 	mode, err = ui.selectAuthMode(bufio.NewReader(strings.NewReader("2\n")))
 	if err != nil || mode != "apikey" {
 		t.Fatalf("api key mode=%q err=%v", mode, err)
+	}
+}
+
+func TestGradientAndTeaViewRenderAtNarrowWidth(t *testing.T) {
+	model := newTeaModel("http://127.0.0.1:20128")
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 40, Height: 12})
+	view := updated.(teaModel).View()
+	if !strings.Contains(view, "9ROUTER") || !strings.Contains(view, "Providers") {
+		t.Fatalf("view=%q", view)
+	}
+	if gradient("") != "" {
+		t.Fatal("empty gradient should stay empty")
 	}
 }

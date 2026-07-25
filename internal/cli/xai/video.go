@@ -14,7 +14,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
+
+var (
+	successStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#22C55E"))
+	errorStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F43F5E"))
+)
+
+func printError(out io.Writer, message string) { fmt.Fprintln(out, errorStyle.Render("✗ "+message)) }
 
 const (
 	defaultHost          = "127.0.0.1"
@@ -34,7 +43,7 @@ type Options struct {
 func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	opts, help, err := parseArgs(args)
 	if err != nil {
-		fmt.Fprintln(errOut, "❌", err)
+		printError(errOut, err.Error())
 		return 1
 	}
 	if help != "" {
@@ -42,7 +51,7 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		return 0
 	}
 	if opts.Prompt == "" {
-		fmt.Fprintln(errOut, "❌ --prompt is required")
+		printError(errOut, "--prompt is required")
 		return 1
 	}
 	body := map[string]any{"model": opts.Model, "prompt": opts.Prompt}
@@ -58,7 +67,7 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	if opts.Image != "" {
 		image, err := imageInput(opts.Image)
 		if err != nil {
-			fmt.Fprintln(errOut, "❌", err)
+			printError(errOut, err.Error())
 			return 1
 		}
 		body["image"] = map[string]string{"url": image}
@@ -72,23 +81,23 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	}
 	requestID, _ := created["request_id"].(string)
 	if status != http.StatusOK || requestID == "" {
-		fmt.Fprintf(errOut, "❌ Create failed: HTTP %d\n", status)
+		printError(errOut, fmt.Sprintf("Create failed: HTTP %d", status))
 		return 1
 	}
 	deadline := time.Now().Add(opts.Timeout)
 	var result map[string]any
 	for {
 		if time.Now().After(deadline) {
-			fmt.Fprintln(errOut, "❌ video generation timed out")
+			printError(errOut, "video generation timed out")
 			return 1
 		}
 		result, status, err = request(ctx, client, http.MethodGet, base+"/v1/videos/"+url.PathEscape(requestID), opts.APIKey, nil)
 		if err != nil {
-			fmt.Fprintln(errOut, "❌", err)
+			printError(errOut, err.Error())
 			return 1
 		}
 		if status < 200 || status >= 300 {
-			fmt.Fprintf(errOut, "❌ Poll failed: HTTP %d\n", status)
+			printError(errOut, fmt.Sprintf("Poll failed: HTTP %d", status))
 			return 1
 		}
 		state, _ := result["status"].(string)
@@ -96,12 +105,12 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 			break
 		}
 		if state == "failed" || state == "error" || state == "expired" || state == "cancelled" {
-			fmt.Fprintln(errOut, "❌ video generation", state)
+			printError(errOut, "video generation "+state)
 			return 1
 		}
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(errOut, "❌", ctx.Err())
+			printError(errOut, ctx.Err().Error())
 			return 1
 		case <-time.After(opts.PollInterval):
 		}
@@ -114,14 +123,14 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		}
 	}
 	if videoURL == "" {
-		fmt.Fprintln(errOut, "❌ Job finished but no video URL was returned")
+		printError(errOut, "Job finished but no video URL was returned")
 		return 1
 	}
 	if err := download(ctx, client, videoURL, opts.Output); err != nil {
-		fmt.Fprintln(errOut, "❌", err)
+		printError(errOut, err.Error())
 		return 1
 	}
-	fmt.Fprintln(out, "✅ Saved", opts.Output)
+	fmt.Fprintln(out, successStyle.Render("✓ Saved "+opts.Output))
 	return 0
 }
 
