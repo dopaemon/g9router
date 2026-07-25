@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -38,7 +39,7 @@ func main() {
 	version := flag.Bool("version", false, "show version")
 	flag.Parse()
 	if *version {
-		println("0.5.40")
+		fmt.Fprintln(os.Stdout, tui.Success("9Router v0.5.40"))
 		return
 	}
 	addr := os.Getenv("G9ROUTER_ADDR")
@@ -56,7 +57,7 @@ func main() {
 	}
 	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY")})
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
-	log.Printf("g9router listening on %s", addr)
+	fmt.Fprintln(os.Stderr, tui.Info("g9router listening on "+addr))
 	errors := make(chan error, 1)
 	go func() { errors <- http.ListenAndServe(addr, appHandler) }()
 	ready := waitReady(addr, 15*time.Second)
@@ -102,7 +103,7 @@ func openBrowser(target string) {
 		command = "xdg-open"
 	}
 	if err := exec.Command(command, target).Start(); err != nil {
-		log.Printf("dashboard available at %s", target)
+		fmt.Fprintln(os.Stderr, tui.Info("dashboard available at "+target))
 	}
 }
 

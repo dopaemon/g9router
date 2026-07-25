@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"g9router/internal/cli/autostart"
+	"g9router/internal/cli/tui"
 	"github.com/getlantern/systray"
 )
 
@@ -71,6 +72,6 @@ func openDashboard(port int) {
 		command = "xdg-open"
 	}
 	if err := exec.Command(command, url).Start(); err != nil {
-		fmt.Println("dashboard available at", url)
+		fmt.Println(tui.Info("dashboard available at " + url))
 	}
 }
