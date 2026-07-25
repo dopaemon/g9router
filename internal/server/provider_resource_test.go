@@ -38,6 +38,28 @@ func TestProviderModelsEndpoint(t *testing.T) {
 	}
 }
 
+func TestProviderTestModelsDiscoversCustomModels(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/models" {
+			_, _ = io.WriteString(w, `{"object":"list","data":[{"id":"custom-model","name":"Custom Model"}]}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"chatcmpl-test","choices":[]}`)
+	}))
+	defer upstream.Close()
+	app := New(Options{ProviderPath: os.TempDir() + "/test-models-discovery.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "custom", BaseURL: upstream.URL, APIKey: "secret", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/custom/test-models", nil)
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"modelId":"custom-model"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProviderResourceCRUD(t *testing.T) {
 	app := New(Options{ProviderPath: os.TempDir() + "/resource-test.json"})
 	server := httptest.NewServer(app.Handler())

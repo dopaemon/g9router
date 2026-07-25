@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,30 +16,42 @@ func (s *Server) providerTestModelsAPI(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	if _, ok := s.store.Find(id); !ok {
+	provider, found := s.store.Find(id)
+	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
 	}
-	descriptor, ok := providers.Registry[id]
+	descriptor, ok := providers.Registry[provider.ID]
 	if !ok {
 		for providerID, candidate := range providers.Registry {
-			if candidate.Alias == id {
+			if candidate.Alias == provider.ID {
 				descriptor, ok = providers.Registry[providerID]
 				break
 			}
 		}
 	}
-	if !ok || len(descriptor.Models) == 0 {
+	models := []providers.Model{}
+	if ok {
+		models = descriptor.Models
+	}
+	if len(models) == 0 {
+		models = s.discoverProviderModels(r, provider)
+	}
+	if len(models) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No models configured for this provider"})
 		return
 	}
-	results := make([]map[string]any, 0, len(descriptor.Models))
-	for _, model := range descriptor.Models {
+	alias := provider.ID
+	if ok && descriptor.Alias != "" {
+		alias = descriptor.Alias
+	}
+	results := make([]map[string]any, 0, len(models))
+	for _, model := range models {
 		kind := model.Kind
 		if kind == "" {
 			kind = "llm"
 		}
-		payload, _ := json.Marshal(map[string]string{"model": descriptor.Alias + "/" + model.ID, "kind": kind})
+		payload, _ := json.Marshal(map[string]string{"model": alias + "/" + model.ID, "kind": kind})
 		probe := httptest.NewRequest(http.MethodPost, "/api/models/test", bytes.NewReader(payload))
 		probe.Header.Set("Content-Type", "application/json")
 		recorder := httptest.NewRecorder()
@@ -50,5 +63,52 @@ func (s *Server) providerTestModelsAPI(w http.ResponseWriter, r *http.Request, i
 		result["modelId"], result["name"] = model.ID, model.Name
 		results = append(results, result)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"provider": id, "connectionId": id, "results": results})
+	writeJSON(w, http.StatusOK, map[string]any{"provider": provider.ID, "connectionId": id, "results": results})
+}
+
+func (s *Server) discoverProviderModels(r *http.Request, provider providers.Provider) []providers.Model {
+	base := strings.TrimRight(provider.BaseURL, "/")
+	base = strings.TrimSuffix(base, "/chat/completions")
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil
+	}
+	if provider.APIType == "claude" || provider.APIType == "anthropic" {
+		request.Header.Set("x-api-key", provider.APIKey)
+		request.Header.Set("anthropic-version", "2023-06-01")
+	} else if provider.APIKey != "" {
+		request.Header.Set("Authorization", "Bearer "+provider.APIKey)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if err != nil {
+		return nil
+	}
+	var payload struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(data, &payload) != nil {
+		return nil
+	}
+	models := make([]providers.Model, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		id := item.ID
+		if id == "" {
+			id = item.Name
+		}
+		if id != "" {
+			models = append(models, providers.Model{ID: id, Name: valueOr(item.Name, id)})
+		}
+	}
+	return models
 }
