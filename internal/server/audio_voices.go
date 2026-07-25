@@ -32,6 +32,14 @@ func (s *Server) audioVoicesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := r.URL.Query().Get("provider")
+	if strings.HasPrefix(r.URL.Path, "/v1/audio/voices") || strings.HasPrefix(r.URL.Path, "/api/v1/audio/voices") {
+		switch provider {
+		case "elevenlabs", "deepgram", "inworld", "edge-tts", "local-device":
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": "provider must be one of: elevenlabs, deepgram, inworld, edge-tts, local-device", "type": "invalid_request_error"}})
+			return
+		}
+	}
 	alias, ok := audioVoiceAliases[provider]
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": "provider must be one of: elevenlabs, deepgram, inworld, edge-tts, local-device", "type": "invalid_request_error"}})

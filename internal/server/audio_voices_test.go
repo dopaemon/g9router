@@ -25,6 +25,17 @@ func TestAudioVoicesAcceptsLocalDevice(t *testing.T) {
 	}
 }
 
+func TestPublicAudioVoicesRejectsInternalOnlyProviders(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	for _, provider := range []string{"minimax", "gemini"} {
+		recorder := httptest.NewRecorder()
+		app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/audio/voices?provider="+provider, nil))
+		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid_request_error") {
+			t.Fatalf("provider=%s status=%d body=%s", provider, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
 func TestLocalDeviceVoicesExposeGroupedCatalog(t *testing.T) {
 	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json", DatabasePath: t.TempDir() + "/state.db"})
 	recorder := httptest.NewRecorder()
