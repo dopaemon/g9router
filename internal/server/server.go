@@ -502,6 +502,23 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
 		return
 	}
+	if input.Provider == "xai" {
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.x.ai/v1/models", nil)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode == http.StatusOK || response.StatusCode == http.StatusForbidden
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+		return
+	}
 	if input.Provider == "azure" {
 		endpoint, _ := input.ProviderSpecificData["azureEndpoint"].(string)
 		deployment, _ := input.ProviderSpecificData["deployment"].(string)

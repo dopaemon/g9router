@@ -98,6 +98,26 @@ func TestValidateXiaomiTokenPlanUsesSelectedRegion(t *testing.T) {
 	}
 }
 
+func TestValidateXAIAcceptsForbiddenButRejectsBadRequest(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusBadRequest} {
+		app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+		app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Host != "api.x.ai" || request.URL.Path != "/v1/models" {
+				t.Fatalf("url=%s", request.URL.String())
+			}
+			return &http.Response{StatusCode: status, Body: http.NoBody, Header: make(http.Header)}, nil
+		})}
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"xai","apiKey":"secret"}`))
+		request.Header.Set("Content-Type", "application/json")
+		app.Handler().ServeHTTP(response, request)
+		want := status == http.StatusForbidden
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), `"valid":true`) != want {
+			t.Fatalf("status=%d response=%s want=%v", status, response.Body.String(), want)
+		}
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
