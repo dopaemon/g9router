@@ -212,5 +212,9 @@ func writeRedirect(connection net.Conn, location string) {
 }
 func writeProxyResponse(connection net.Conn, status int, message string) {
 	body := []byte(message)
-	_, _ = fmt.Fprintf(connection, "HTTP/1.1 %d OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", status, len(body), body)
+	statusText := http.StatusText(status)
+	if statusText == "" {
+		statusText = "Error"
+	}
+	_, _ = fmt.Fprintf(connection, "HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", status, statusText, len(body), body)
 }
