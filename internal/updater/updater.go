@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -142,6 +143,14 @@ func Update(ctx context.Context, client *http.Client, release Release, executabl
 	if err := os.Chmod(tempPath, 0755); err != nil {
 		os.Remove(tempPath)
 		return err
+	}
+	if runtime.GOOS == "windows" {
+		command := fmt.Sprintf("ping 127.0.0.1 -n 2 > nul & move /Y %q %q", tempPath, executable)
+		if err := exec.Command("cmd.exe", "/C", command).Start(); err != nil {
+			os.Remove(tempPath)
+			return err
+		}
+		return nil
 	}
 	backup := executable + ".old"
 	_ = os.Remove(backup)
