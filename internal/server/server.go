@@ -476,6 +476,32 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid Ollama endpoint"}[valid]})
 		return
 	}
+	if input.Provider == "xiaomi-tokenplan" {
+		region, _ := input.ProviderSpecificData["region"].(string)
+		base := map[string]string{
+			"sgp": "https://token-plan-sgp.xiaomimimo.com/v1",
+			"cn":  "https://token-plan-cn.xiaomimimo.com/v1",
+			"ams": "https://token-plan-ams.xiaomimimo.com/v1",
+		}[region]
+		if base == "" {
+			base = "https://token-plan-sgp.xiaomimimo.com/v1"
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		request.Header.Set("Authorization", "Bearer "+input.APIKey)
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode != http.StatusUnauthorized
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid API key"}[valid]})
+		return
+	}
 	if input.Provider == "azure" {
 		endpoint, _ := input.ProviderSpecificData["azureEndpoint"].(string)
 		deployment, _ := input.ProviderSpecificData["deployment"].(string)

@@ -80,3 +80,26 @@ func TestValidateOllamaLocalAllowsEmptyKey(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestValidateXiaomiTokenPlanUsesSelectedRegion(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	app.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "token-plan-cn.xiaomimimo.com" || request.URL.Path != "/v1/models" {
+			t.Fatalf("url=%s", request.URL.String())
+		}
+		return &http.Response{StatusCode: http.StatusForbidden, Body: http.NoBody, Header: make(http.Header)}, nil
+	})}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"xiaomi-tokenplan","apiKey":"secret","providerSpecificData":{"region":"cn"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
