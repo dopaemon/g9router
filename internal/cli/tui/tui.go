@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"g9router/internal/providers"
 )
@@ -128,7 +131,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "\nOAuth credentials")
 		pretty, _ := json.MarshalIndent(credentials, "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
-		fmt.Fprintln(ui.Out, "c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
+		fmt.Fprintln(ui.Out, "l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -162,6 +165,10 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 				return err
 			}
 			fmt.Fprintln(ui.Out, result)
+		case "l", "1":
+			if err := ui.loginCodex(); err != nil {
+				return err
+			}
 		case "i":
 			fmt.Fprint(ui.Out, "Import endpoint: ")
 			path, err := reader.ReadString('\n')
@@ -187,6 +194,91 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
 	}
+}
+
+func (ui *UI) loginCodex() error {
+	base, err := url.Parse(ui.BaseURL)
+	if err != nil {
+		return err
+	}
+	redirectURI := "http://localhost:1455/auth/callback"
+	port := base.Port()
+	if port == "" {
+		port = "20128"
+	}
+	var authData struct {
+		AuthURL      string `json:"authUrl"`
+		State        string `json:"state"`
+		CodeVerifier string `json:"codeVerifier"`
+	}
+	authorizePath := "/api/oauth/codex/authorize?redirect_uri=" + url.QueryEscape(redirectURI)
+	if err := ui.request(http.MethodGet, authorizePath, nil, &authData); err != nil {
+		return err
+	}
+	if authData.AuthURL == "" || authData.State == "" || authData.CodeVerifier == "" {
+		return fmt.Errorf("Codex authorization data is incomplete")
+	}
+	var proxyData struct {
+		Success    bool   `json:"success"`
+		ServerSide bool   `json:"serverSide"`
+		Reason     string `json:"reason"`
+	}
+	proxyPath := "/api/oauth/codex/start-proxy?app_port=" + url.QueryEscape(port) +
+		"&state=" + url.QueryEscape(authData.State) +
+		"&code_verifier=" + url.QueryEscape(authData.CodeVerifier) +
+		"&redirect_uri=" + url.QueryEscape(redirectURI)
+	if err := ui.request(http.MethodGet, proxyPath, nil, &proxyData); err != nil {
+		return err
+	}
+	if !proxyData.Success || !proxyData.ServerSide {
+		if proxyData.Reason == "" {
+			proxyData.Reason = "server-side OAuth proxy unavailable"
+		}
+		return fmt.Errorf("Codex login unavailable: %s", proxyData.Reason)
+	}
+	fmt.Fprintln(ui.Out, "Opening Codex login in browser...")
+	if err := openURL(authData.AuthURL); err != nil {
+		fmt.Fprintf(ui.Out, "Open this URL manually:\n%s\n", authData.AuthURL)
+	}
+	fmt.Fprintln(ui.Out, "Waiting for Codex callback...")
+	deadline := time.Now().Add(5 * time.Minute)
+	for time.Now().Before(deadline) {
+		var status struct {
+			Status string `json:"status"`
+			Email  string `json:"email"`
+			Error  string `json:"error"`
+		}
+		path := "/api/oauth/codex/poll-status?state=" + url.QueryEscape(authData.State)
+		if err := ui.request(http.MethodGet, path, nil, &status); err != nil {
+			return err
+		}
+		if status.Status == "done" {
+			if status.Email != "" {
+				fmt.Fprintf(ui.Out, "Codex login successful: %s\n", status.Email)
+			} else {
+				fmt.Fprintln(ui.Out, "Codex login successful.")
+			}
+			return nil
+		}
+		if status.Status == "error" {
+			return fmt.Errorf("Codex login failed: %s", status.Error)
+		}
+		time.Sleep(1500 * time.Millisecond)
+	}
+	return fmt.Errorf("Codex login timed out")
+}
+
+func openURL(target string) error {
+	command := "xdg-open"
+	args := []string{target}
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+	case "windows":
+		command = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", target}
+	}
+	return exec.Command(command, args...).Start()
 }
 
 func (ui *UI) cliTools(reader *bufio.Reader) error {
