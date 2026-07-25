@@ -24,7 +24,9 @@ func (s *Server) proxyPoolsAPI(w http.ResponseWriter, r *http.Request) {
 			active = &parsed
 		}
 		items := s.proxyPools.List(active)
-		items = s.withProxyBindingCounts(items)
+		if r.URL.Query().Get("includeUsage") == "true" {
+			items = s.withProxyBindingCounts(items)
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"proxyPools": items})
 	case http.MethodPost:
 		var input struct {

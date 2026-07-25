@@ -20,4 +20,7 @@ func TestProxyPoolCRUD(t *testing.T) {
 	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"name":"local"`) {
 		t.Fatalf("status=%d body=%s", list.Code, list.Body.String())
 	}
+	if strings.Contains(list.Body.String(), `"boundConnectionCount"`) {
+		t.Fatalf("usage included without includeUsage: %s", list.Body.String())
+	}
 }
