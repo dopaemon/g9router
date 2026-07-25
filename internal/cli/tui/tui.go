@@ -199,7 +199,7 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		for i, name := range keys {
 			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, name, statuses[name])
 		}
-		fmt.Fprintln(ui.Out, "q. Quick setup  s. Show settings  a. Apply JSON  r. Reset  b. Back")
+		fmt.Fprintln(ui.Out, "q. Quick setup  m. Claude model  s. Show settings  a. Apply JSON  r. Reset  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -211,6 +211,12 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		}
 		if action == "q" {
 			if err := ui.quickSetup(reader); err != nil {
+				return err
+			}
+			continue
+		}
+		if action == "m" {
+			if err := ui.selectClaudeModel(reader); err != nil {
 				return err
 			}
 			continue
@@ -260,6 +266,34 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			return err
 		}
 	}
+}
+
+func (ui *UI) selectClaudeModel(reader *bufio.Reader) error {
+	fmt.Fprint(ui.Out, "Model type (sonnet/opus/haiku): ")
+	typeLine, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	modelType := strings.ToLower(strings.TrimSpace(typeLine))
+	envKey := map[string]string{
+		"sonnet": "ANTHROPIC_DEFAULT_SONNET_MODEL",
+		"opus":   "ANTHROPIC_DEFAULT_OPUS_MODEL",
+		"haiku":  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	}[modelType]
+	if envKey == "" {
+		fmt.Fprintln(ui.Out, "Invalid model type")
+		return nil
+	}
+	fmt.Fprint(ui.Out, "Model: ")
+	model, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	return ui.request(http.MethodPost, "/api/cli-tools/claude-settings", map[string]any{"env": map[string]string{envKey: model}}, nil)
 }
 
 func (ui *UI) quickSetup(reader *bufio.Reader) error {
