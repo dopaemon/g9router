@@ -30,6 +30,7 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 		fmt.Fprintln(out, "3. Combos")
 		fmt.Fprintln(out, "4. CLI Tools")
 		fmt.Fprintln(out, "5. Settings")
+		fmt.Fprintln(out, "6. OAuth")
 		fmt.Fprintln(out, "0. Exit")
 		fmt.Fprint(out, "Select option: ")
 		line, err := reader.ReadString('\n')
@@ -49,6 +50,8 @@ func Run(baseURL string, in io.Reader, out io.Writer) error {
 			err = ui.cliTools(reader)
 		case "5":
 			err = ui.settings(reader)
+		case "6":
+			err = ui.oauth(reader)
 		default:
 			fmt.Fprintln(out, "Invalid selection")
 		}
@@ -108,6 +111,60 @@ type combo struct {
 	Name   string `json:"name"`
 	Models []any  `json:"models"`
 	Kind   string `json:"kind,omitempty"`
+}
+
+func (ui *UI) oauth(reader *bufio.Reader) error {
+	for {
+		var credentials any
+		if err := ui.request(http.MethodGet, "/api/oauth", nil, &credentials); err != nil {
+			return err
+		}
+		fmt.Fprintln(ui.Out, "\nOAuth credentials")
+		pretty, _ := json.MarshalIndent(credentials, "", "  ")
+		fmt.Fprintln(ui.Out, string(pretty))
+		fmt.Fprintln(ui.Out, "i. Import JSON  d. Delete credential  b. Back")
+		fmt.Fprint(ui.Out, "Select action: ")
+		line, err := reader.ReadString('\n')
+		if err != nil && len(line) == 0 {
+			return err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "b", "0":
+			return nil
+		case "d":
+			fmt.Fprint(ui.Out, "Credential ID: ")
+			id, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			if err := ui.request(http.MethodDelete, "/api/oauth/"+strings.TrimSpace(id), nil, nil); err != nil {
+				return err
+			}
+		case "i":
+			fmt.Fprint(ui.Out, "Import endpoint: ")
+			path, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(ui.Out, "JSON body: ")
+			body, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			var payload any
+			if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &payload); err != nil {
+				fmt.Fprintln(ui.Out, "Invalid JSON")
+				continue
+			}
+			var result any
+			if err := ui.request(http.MethodPost, strings.TrimSpace(path), payload, &result); err != nil {
+				return err
+			}
+			fmt.Fprintln(ui.Out, result)
+		default:
+			fmt.Fprintln(ui.Out, "Invalid selection")
+		}
+	}
 }
 
 func (ui *UI) cliTools(reader *bufio.Reader) error {
