@@ -32,6 +32,14 @@ func TestHandlerServesFavicon(t *testing.T) {
 	}
 }
 
+func TestHandlerServesManifest(t *testing.T) {
+	response := httptest.NewRecorder()
+	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest.json", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"short_name":"9Router"`) {
+		t.Fatalf("manifest status=%d body=%d", response.Code, response.Body.Len())
+	}
+}
+
 func TestDashboardContainsPortedControls(t *testing.T) {
 	response := httptest.NewRecorder()
 	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/providers/demo", nil))
