@@ -38,6 +38,16 @@ func TestModelCatalogParity(t *testing.T) {
 		t.Fatalf("model info status=%d body=%s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/info?id=el/eleven_multilingual_v2", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"voicesUrl":"/v1/audio/voices?provider=elevenlabs"`) {
+		t.Fatalf("tts model info status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/info?id=perplexity-web/search", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"endpoint":"/v1/search"`) {
+		t.Fatalf("search model info status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
 	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models/unknown", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("unknown kind status=%d", response.Code)
