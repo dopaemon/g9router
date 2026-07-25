@@ -10,7 +10,7 @@ import (
 func (s *Server) countTokensAPI(w http.ResponseWriter, r *http.Request) {
 	setCORS(w, "POST, OPTIONS")
 	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method != http.MethodPost {

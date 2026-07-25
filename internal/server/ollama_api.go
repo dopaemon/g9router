@@ -16,7 +16,7 @@ func (s *Server) ollamaChatAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodOptions {
 		setCORS(w, "GET, POST, OPTIONS")
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if r.Method != http.MethodPost {
