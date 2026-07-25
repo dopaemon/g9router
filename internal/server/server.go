@@ -3213,8 +3213,7 @@ func (s *Server) keysAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "Name is required"})
 			return
 		}
-		machineID, _ := os.Hostname()
-		item, err := s.keys.Create(strings.TrimSpace(input.Name), machineID)
+		item, err := s.keys.Create(strings.TrimSpace(input.Name), consistentMachineID())
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
@@ -3223,6 +3222,20 @@ func (s *Server) keysAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func consistentMachineID() string {
+	raw, err := os.ReadFile("/etc/machine-id")
+	if err != nil || strings.TrimSpace(string(raw)) == "" {
+		fallback, _ := os.Hostname()
+		raw = []byte(fallback)
+	}
+	salt := os.Getenv("MACHINE_ID_SALT")
+	if salt == "" {
+		salt = "endpoint-proxy-salt"
+	}
+	digest := sha256.Sum256(append(bytes.TrimSpace(raw), []byte(salt)...))
+	return hex.EncodeToString(digest[:])[:16]
 }
 
 func (s *Server) keyResourceAPI(w http.ResponseWriter, r *http.Request) {
