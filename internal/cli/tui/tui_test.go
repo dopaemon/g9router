@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -160,5 +161,23 @@ func TestLoadScreenFormatsJSONAndHTTPFailures(t *testing.T) {
 	failed := loadScreen(server.URL, server.Client(), "/fail")().(screenLoadedMsg)
 	if failed.err == nil || !strings.Contains(failed.err.Error(), "502") {
 		t.Fatalf("failure = %#v", failed.err)
+	}
+}
+
+func TestProvidersScreenRendersConnectionTable(t *testing.T) {
+	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
+	model.current = &screens[0]
+	model.loading = false
+	model.width = 100
+	model.height = 30
+	model.viewport = viewport.New(92, 19)
+	updated, _ := model.Update(screenLoadedMsg{content: `{"connections":[{"id":"openai","baseURL":"https://api.openai.com","enabled":true}]}`})
+	model = updated.(screenModel)
+	view := model.View()
+	if !strings.Contains(view, "openai") || !strings.Contains(view, "enabled") {
+		t.Fatalf("provider view missing table data: %s", view)
+	}
+	if strings.Contains(view, `"connections"`) {
+		t.Fatalf("provider view leaked raw JSON: %s", view)
 	}
 }

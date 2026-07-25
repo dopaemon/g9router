@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -101,7 +102,7 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.viewport.Height = message.Height - 11
 	case screenLoadedMsg:
 		model.loading, model.err = false, message.err
-		model.viewport.SetContent(message.content)
+		model.viewport.SetContent(formatScreenContent(model.current.title, message.content))
 	case spinner.TickMsg:
 		var command tea.Cmd
 		model.spinner, command = model.spinner.Update(message)
@@ -189,6 +190,99 @@ func loadScreen(baseURL string, client *http.Client, path string) tea.Cmd {
 		data, err := json.MarshalIndent(value, "", "  ")
 		return screenLoadedMsg{content: string(data), err: err}
 	}
+}
+
+func formatScreenContent(title, content string) string {
+	var value any
+	if json.Unmarshal([]byte(content), &value) != nil {
+		return content
+	}
+	switch title {
+	case "Providers":
+		return formatProviders(value)
+	case "API Keys":
+		return formatKeys(value)
+	case "Combos":
+		return formatCombos(value)
+	case "CLI Tools":
+		return formatCLITools(value)
+	default:
+		data, _ := json.MarshalIndent(value, "", "  ")
+		return string(data)
+	}
+}
+
+func formatProviders(value any) string {
+	connections, _ := value.(map[string]any)["connections"].([]any)
+	if len(connections) == 0 {
+		return styles.Muted.Render("No providers configured.") + "\n\n" + styles.Success.Render("Press a to add one")
+	}
+	lines := []string{styles.Title.Render("NAME") + "        " + styles.Title.Render("BASE URL") + "                         " + styles.Title.Render("STATUS")}
+	for _, raw := range connections {
+		item, _ := raw.(map[string]any)
+		name, _ := item["name"].(string)
+		if name == "" {
+			name, _ = item["id"].(string)
+		}
+		baseURL, _ := item["baseURL"].(string)
+		enabled, _ := item["enabled"].(bool)
+		status := styles.Error.Render("disabled")
+		if enabled {
+			status = styles.Success.Render("enabled")
+		}
+		lines = append(lines, fmt.Sprintf("%-12s %-42s %s", name, baseURL, status))
+	}
+	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render("a add  e edit  d delete  t test")
+}
+
+func formatKeys(value any) string {
+	keys, _ := value.(map[string]any)["keys"].([]any)
+	if len(keys) == 0 {
+		return styles.Muted.Render("No API keys configured.") + "\n\n" + styles.Success.Render("Press a to create one")
+	}
+	lines := []string{styles.Title.Render("NAME") + "                         " + styles.Title.Render("STATUS")}
+	for _, raw := range keys {
+		item, _ := raw.(map[string]any)
+		name, _ := item["name"].(string)
+		active, _ := item["isActive"].(bool)
+		status := styles.Error.Render("inactive")
+		if active {
+			status = styles.Success.Render("active")
+		}
+		lines = append(lines, fmt.Sprintf("%-32s %s", name, status))
+	}
+	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render("a create  d delete")
+}
+
+func formatCombos(value any) string {
+	combos, _ := value.(map[string]any)["combos"].([]any)
+	if len(combos) == 0 {
+		return styles.Muted.Render("No combos configured.")
+	}
+	lines := []string{styles.Title.Render("NAME") + "                         " + styles.Title.Render("MODELS")}
+	for _, raw := range combos {
+		item, _ := raw.(map[string]any)
+		name, _ := item["name"].(string)
+		models, _ := item["models"].([]any)
+		lines = append(lines, fmt.Sprintf("%-32s %d", name, len(models)))
+	}
+	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render("a add  e edit  d delete")
+}
+
+func formatCLITools(value any) string {
+	tools, _ := value.(map[string]any)
+	if len(tools) == 0 {
+		return styles.Muted.Render("No CLI tool status available.")
+	}
+	lines := []string{styles.Title.Render("TOOL") + "                         " + styles.Title.Render("INSTALLED") + "   " + styles.Title.Render("CONFIGURED")}
+	for name, raw := range tools {
+		item, _ := raw.(map[string]any)
+		installed, _ := item["installed"].(bool)
+		configured, _ := item["configured"].(bool)
+		lines = append(lines, fmt.Sprintf("%-32s %-11t %t", name, installed, configured))
+	}
+	sort.Strings(lines[1:])
+	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render("r refresh  use legacy setup actions from CLI Tools")
 }
 
 func runFullInteractive(baseURL string, output io.Writer, client *http.Client) error {
