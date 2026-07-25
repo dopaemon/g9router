@@ -131,6 +131,9 @@ func TestSelectAuthModeAcceptsOAuthAndAPIKey(t *testing.T) {
 
 func TestGradientAndTeaViewRenderAtNarrowWidth(t *testing.T) {
 	model := newTeaModel("http://127.0.0.1:20128")
+	if !strings.Contains(model.View(), "Providers") {
+		t.Fatalf("root menu missing providers: %s", model.View())
+	}
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 40, Height: 12})
 	view := updated.(teaModel).View()
 	if !strings.Contains(view, "9ROUTER") || !strings.Contains(view, "Providers") {
@@ -233,5 +236,26 @@ func TestResourceActionsUseSelectedItemAndHTTPContract(t *testing.T) {
 	message := runResourceAction(server.URL, server.Client(), *action)()
 	if message.(actionDoneMsg).err != nil || method != http.MethodDelete || path != "/api/providers?id=openai" {
 		t.Fatalf("request=%s %s result=%#v", method, path, message)
+	}
+}
+
+func TestScreenModelLoadsAfterRootSelection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"connections":[]}`)
+	}))
+	defer server.Close()
+
+	model := newScreenModel(server.URL, &bytes.Buffer{}, server.Client())
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model = updated.(screenModel)
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(screenModel)
+	if model.current == nil || command == nil {
+		t.Fatalf("selection did not start load: current=%#v command=%v", model.current, command)
+	}
+	updated, _ = model.Update(command())
+	model = updated.(screenModel)
+	if model.loading || model.err != nil || !strings.Contains(model.View(), "No providers configured") {
+		t.Fatalf("load state: loading=%v err=%v view=%s", model.loading, model.err, model.View())
 	}
 }

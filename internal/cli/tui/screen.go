@@ -79,6 +79,11 @@ func newScreenModel(baseURL string, output io.Writer, client *http.Client) scree
 func (model screenModel) Init() tea.Cmd { return nil }
 
 func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := message.(tea.WindowSizeMsg); ok {
+		model.width, model.height = size.Width, size.Height
+		model.viewport.Width = size.Width - 8
+		model.viewport.Height = size.Height - 11
+	}
 	if model.current == nil {
 		updated, command := model.menu.Update(message)
 		model.menu = updated.(teaModel)
@@ -87,7 +92,7 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				if screens[index].title == model.menu.selected {
 					model.current = &screens[index]
 					model.loading = true
-					return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
+					return model, loadScreen(model.baseURL, model.client, model.current.path)
 				}
 			}
 		}
@@ -145,12 +150,12 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		model.notice = "Action completed"
 		model.loading = true
-		return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
+		return model, loadScreen(model.baseURL, model.client, model.current.path)
 	case spinner.TickMsg:
 		var command tea.Cmd
 		model.spinner, command = model.spinner.Update(message)
 		if model.loading {
-			return model, tea.Batch(command, model.spinner.Tick)
+			return model, command
 		}
 	case tea.KeyMsg:
 		switch strings.ToLower(message.String()) {
@@ -162,7 +167,7 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.err = nil
 		case "r":
 			model.loading = true
-			return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
+			return model, loadScreen(model.baseURL, model.client, model.current.path)
 		case "up", "k":
 			if len(model.items) > 0 && model.selected > 0 {
 				model.selected--

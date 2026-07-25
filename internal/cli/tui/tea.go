@@ -69,9 +69,25 @@ func (model teaModel) View() string {
 	}
 	header := styles.Brand.Render(gradient("9ROUTER")) + "  " + styles.Subtitle.Render("AI gateway control center")
 	intro := styles.Title.Render("Make every route feel intentional.") + "\n" + styles.Subtitle.Render(model.baseURL)
-	body := styles.Panel.Width(width - 4).Render(model.list.View())
+	body := styles.Panel.Width(width - 4).Render(model.renderMenu())
 	status := styles.Footer.Width(width - 4).Render(styles.Muted.Render("↑/↓ navigate  enter select  q quit") + "  " + styles.Success.Render(model.status))
 	return "\n" + header + "\n\n" + intro + "\n\n" + body + "\n" + status + "\n"
+}
+
+func (model teaModel) renderMenu() string {
+	items := model.list.Items()
+	lines := make([]string, 0, len(items))
+	for index, raw := range items {
+		item := raw.(menuItem)
+		marker := "  "
+		style := styles.Item
+		if index == model.list.Index() {
+			marker = styles.Selected.Render("▸ ")
+			style = styles.Title
+		}
+		lines = append(lines, marker+style.Render(item.title)+"\n"+styles.Muted.Render("    "+item.description))
+	}
+	return strings.Join(lines, "\n\n")
 }
 
 func runInteractive(baseURL string, out io.Writer) (string, error) {
