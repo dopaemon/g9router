@@ -62,3 +62,21 @@ func TestValidateOpenAICompatibleNode(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestValidateOllamaLocalAllowsEmptyKey(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/providers/validate", strings.NewReader(`{"provider":"ollama-local","providerSpecificData":{"baseUrl":"`+upstream.URL+`"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"valid":true`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}

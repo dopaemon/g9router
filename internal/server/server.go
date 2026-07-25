@@ -452,8 +452,28 @@ func (s *Server) validateProviderAPI(w http.ResponseWriter, r *http.Request) {
 		APIKey               string         `json:"apiKey"`
 		ProviderSpecificData map[string]any `json:"providerSpecificData"`
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || input.APIKey == "" {
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Provider == "" || (input.APIKey == "" && input.Provider != "ollama-local") {
 		writeJSON(w, 400, map[string]string{"error": "Provider and API key required"})
+		return
+	}
+	if input.Provider == "ollama-local" {
+		base, _ := input.ProviderSpecificData["baseUrl"].(string)
+		if strings.TrimSpace(base) == "" {
+			base = "http://localhost:11434"
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(base, "/")+"/api/tags", nil)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		response, err := s.client.Do(request)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"valid": false, "error": err.Error()})
+			return
+		}
+		defer response.Body.Close()
+		valid := response.StatusCode >= 200 && response.StatusCode < 300
+		writeJSON(w, 200, map[string]any{"valid": valid, "error": map[bool]any{true: nil, false: "Invalid Ollama endpoint"}[valid]})
 		return
 	}
 	if input.Provider == "azure" {
