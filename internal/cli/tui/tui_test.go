@@ -102,3 +102,14 @@ func TestProvidersReadsConnectionsEnvelope(t *testing.T) {
 		t.Fatalf("output=%s", output.String())
 	}
 }
+
+func TestSelectProviderUsesRegistryDefaults(t *testing.T) {
+	ui := &UI{Out: &bytes.Buffer{}}
+	item := provider{}
+	if err := ui.selectProvider(bufio.NewReader(strings.NewReader("1\n")), &item); err != nil {
+		t.Fatal(err)
+	}
+	if item.ID == "" || item.Name == "" || item.APIType == "" {
+		t.Fatalf("provider defaults = %#v", item)
+	}
+}

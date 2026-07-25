@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"g9router/internal/providers"
 )
 
 type UI struct {
@@ -522,10 +524,16 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			return nil
 		case "a":
 			item := provider{Enabled: true, APIType: "openai"}
+			if err := ui.selectProvider(reader, &item); err != nil {
+				return err
+			}
 			for _, field := range []struct {
 				name   string
 				target *string
-			}{{"Provider ID", &item.ID}, {"Name", &item.Name}, {"Base URL", &item.BaseURL}, {"API key", &item.APIKey}} {
+			}{{"Name", &item.Name}, {"Base URL", &item.BaseURL}, {"API key", &item.APIKey}} {
+				if field.name != "API key" && *field.target != "" {
+					continue
+				}
 				fmt.Fprintf(ui.Out, "%s: ", field.name)
 				value, err := reader.ReadString('\n')
 				if err != nil {
@@ -599,6 +607,43 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
 	}
+}
+
+func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
+	ids := make([]string, 0, len(providers.Registry))
+	for id := range providers.Registry {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	fmt.Fprintln(ui.Out, "\nSelect provider (0. Custom provider)")
+	for index, id := range ids {
+		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, id)
+	}
+	fmt.Fprint(ui.Out, "Provider: ")
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	choice = strings.TrimSpace(choice)
+	index, err := strconv.Atoi(choice)
+	if err == nil && index > 0 && index <= len(ids) {
+		descriptor := providers.Registry[ids[index-1]]
+		item.ID = descriptor.ID
+		item.Name = descriptor.ID
+		item.BaseURL = descriptor.BaseURL
+		item.APIType = descriptor.Format
+		return nil
+	}
+	if choice == "0" {
+		fmt.Fprint(ui.Out, "Provider ID: ")
+		value, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			return readErr
+		}
+		item.ID = strings.TrimSpace(value)
+		return nil
+	}
+	return fmt.Errorf("invalid provider selection")
 }
 
 func (ui *UI) apiKeys(reader *bufio.Reader) error {
