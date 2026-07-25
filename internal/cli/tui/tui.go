@@ -122,7 +122,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "\nOAuth credentials")
 		pretty, _ := json.MarshalIndent(credentials, "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
-		fmt.Fprintln(ui.Out, "i. Import JSON  d. Delete credential  b. Back")
+		fmt.Fprintln(ui.Out, "c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -140,6 +140,22 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			if err := ui.request(http.MethodDelete, "/api/oauth/"+strings.TrimSpace(id), nil, nil); err != nil {
 				return err
 			}
+		case "c":
+			fmt.Fprint(ui.Out, "ChatGPT access token: ")
+			token, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(ui.Out, "Connection name (optional): ")
+			name, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			var result any
+			if err := ui.request(http.MethodPost, "/api/oauth/codex/import-token", map[string]string{"accessToken": strings.TrimSpace(token), "name": strings.TrimSpace(name)}, &result); err != nil {
+				return err
+			}
+			fmt.Fprintln(ui.Out, result)
 		case "i":
 			fmt.Fprint(ui.Out, "Import endpoint: ")
 			path, err := reader.ReadString('\n')
