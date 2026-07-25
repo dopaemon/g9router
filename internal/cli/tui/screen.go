@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 )
 
 type screen struct {
@@ -37,6 +38,7 @@ type screenModel struct {
 	viewport viewport.Model
 	spinner  spinner.Model
 	form     *formModel
+	huhForm  *huhFormState
 	items    []resourceItem
 	selected int
 	notice   string
@@ -117,6 +119,20 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return model, command
 	}
+	if model.huhForm != nil {
+		updated, command := model.huhForm.form.Update(message)
+		model.huhForm.form = updated.(*huh.Form)
+		if model.huhForm.form.State == huh.StateCompleted {
+			method, path, body := model.huhForm.payload()
+			model.huhForm = nil
+			model.loading = true
+			return model, saveHuhForm(model.baseURL, model.client, method, path, body, model.current.path)
+		}
+		if model.huhForm.form.State == huh.StateAborted {
+			model.huhForm = nil
+		}
+		return model, command
+	}
 	if model.pending != nil {
 		if key, ok := message.(tea.KeyMsg); ok {
 			switch strings.ToLower(key.String()) {
@@ -189,11 +205,9 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "a":
 			switch model.current.title {
 			case "Providers":
-				form := newForm("Add provider", model.baseURL, "/api/providers", model.client, "Provider ID", "Name", "Base URL", "API key")
-				model.form = &form
+				model.huhForm = newProviderHuhForm()
 			case "API Keys":
-				form := newForm("Create API key", model.baseURL, "/api/keys", model.client, "Name")
-				model.form = &form
+				model.huhForm = newAPIKeyHuhForm()
 			default:
 				model.err = fmt.Errorf("add action is not available for %s", model.current.title)
 			}
@@ -239,6 +253,9 @@ func (model screenModel) View() string {
 func (model screenModel) renderContent() string {
 	if model.form != nil {
 		return model.form.view()
+	}
+	if model.huhForm != nil {
+		return model.huhForm.form.View()
 	}
 	if model.loading {
 		return model.spinner.View() + " " + styles.Subtitle.Render("Loading "+model.current.title+"…")

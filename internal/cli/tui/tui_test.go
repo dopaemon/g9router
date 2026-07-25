@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 )
 
 func TestRunCLIToolsBack(t *testing.T) {
@@ -218,6 +219,19 @@ func TestNonResourceScreensUseReadableViews(t *testing.T) {
 	oauth := formatScreenContent("OAuth", `{"cred-1":{"provider":"claude","active":true}}`)
 	if !strings.Contains(oauth, "PROVIDER") || strings.Contains(oauth, `"cred-1"`) {
 		t.Fatalf("oauth view=%s", oauth)
+	}
+}
+
+func TestHuhProviderFormUsesCharmFields(t *testing.T) {
+	state := newProviderHuhForm()
+	state.form.Init()
+	updated, _ := state.form.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	state.form = updated.(*huh.Form)
+	view := state.form.View()
+	for _, label := range []string{"Provider ID", "Base URL", "API key"} {
+		if !strings.Contains(view, label) {
+			t.Fatalf("huh form missing %q: %s", label, view)
+		}
 	}
 }
 
