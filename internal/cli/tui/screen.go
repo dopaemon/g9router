@@ -41,6 +41,7 @@ type screenModel struct {
 	selected int
 	notice   string
 	raw      string
+	pending  *resourceAction
 	loading  bool
 	err      error
 	width    int
@@ -57,6 +58,15 @@ type screenTickMsg struct{}
 type resourceItem struct {
 	id, label, detail, status string
 }
+
+type resourceAction struct {
+	method string
+	path   string
+	body   any
+	label  string
+}
+
+type actionDoneMsg struct{ err error }
 
 func newScreenModel(baseURL string, output io.Writer, client *http.Client) screenModel {
 	spin := spinner.New()
@@ -102,6 +112,20 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return model, command
 	}
+	if model.pending != nil {
+		if key, ok := message.(tea.KeyMsg); ok {
+			switch strings.ToLower(key.String()) {
+			case "y", "enter":
+				action := *model.pending
+				model.pending = nil
+				return model, runResourceAction(model.baseURL, model.client, action)
+			case "n", "esc", "q":
+				model.pending = nil
+				return model, nil
+			}
+		}
+		return model, nil
+	}
 
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
@@ -114,6 +138,14 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.items = resourceItems(model.current.title, message.content)
 		model.selected = 0
 		model.viewport.SetContent(model.content(message.content))
+	case actionDoneMsg:
+		if message.err != nil {
+			model.err = message.err
+			return model, nil
+		}
+		model.notice = "Action completed"
+		model.loading = true
+		return model, tea.Batch(loadScreen(model.baseURL, model.client, model.current.path), model.spinner.Tick)
 	case spinner.TickMsg:
 		var command tea.Cmd
 		model.spinner, command = model.spinner.Update(message)
@@ -144,6 +176,10 @@ func (model screenModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if len(model.items) > 0 {
 				model.notice = "Selected " + model.items[model.selected].label
+			}
+		case "d", "t", "x", "u":
+			if action := model.actionFor(strings.ToLower(message.String())); action != nil {
+				model.pending = action
 			}
 		case "a":
 			switch model.current.title {
@@ -178,6 +214,9 @@ func (model screenModel) View() string {
 	title := styles.Title.Render(model.current.title) + "\n" + styles.Subtitle.Render(model.current.description)
 	content := styles.Panel.Width(width - 4).Render(model.renderContent())
 	footerText := "↑/↓ select  enter open  r refresh  b back  q quit"
+	if model.pending != nil {
+		footerText = "Confirm " + model.pending.label + "?  y/enter yes  n/esc cancel"
+	}
 	if model.notice != "" {
 		footerText += "  " + styles.Success.Render(model.notice)
 	}
@@ -221,6 +260,65 @@ func (model screenModel) content(raw string) string {
 		hint += "  a add"
 	}
 	return strings.Join(lines, "\n") + "\n\n" + styles.Muted.Render(hint)
+}
+
+func (model screenModel) actionFor(key string) *resourceAction {
+	if model.selected < 0 || model.selected >= len(model.items) {
+		return nil
+	}
+	item := model.items[model.selected]
+	if item.id == "" {
+		return nil
+	}
+	var action resourceAction
+	switch {
+	case key == "d" && model.current.title == "Providers":
+		action = resourceAction{method: http.MethodDelete, path: "/api/providers?id=" + item.id, label: "delete provider"}
+	case key == "t" && model.current.title == "Providers":
+		action = resourceAction{method: http.MethodPost, path: "/api/providers/" + item.id + "/test", label: "test provider"}
+	case key == "d" && model.current.title == "API Keys":
+		action = resourceAction{method: http.MethodDelete, path: "/api/keys/" + item.id, label: "delete API key"}
+	case key == "x" && model.current.title == "API Keys":
+		action = resourceAction{method: http.MethodPut, path: "/api/keys/" + item.id, body: map[string]bool{"isActive": item.status != "active"}, label: "toggle API key"}
+	case key == "d" && model.current.title == "Combos":
+		action = resourceAction{method: http.MethodDelete, path: "/api/combos/" + item.id, label: "delete combo"}
+	case key == "d" && model.current.title == "OAuth":
+		action = resourceAction{method: http.MethodDelete, path: "/api/oauth/" + item.id, label: "delete OAuth credential"}
+	case key == "u" && model.current.title == "OAuth":
+		action = resourceAction{method: http.MethodPut, path: "/api/oauth?id=" + item.id, label: "refresh OAuth credential"}
+	default:
+		return nil
+	}
+	return &action
+}
+
+func runResourceAction(baseURL string, client *http.Client, action resourceAction) tea.Cmd {
+	return func() tea.Msg {
+		var body io.Reader
+		if action.body != nil {
+			data, err := json.Marshal(action.body)
+			if err != nil {
+				return actionDoneMsg{err: err}
+			}
+			body = strings.NewReader(string(data))
+		}
+		request, err := http.NewRequest(action.method, strings.TrimRight(baseURL, "/")+action.path, body)
+		if err != nil {
+			return actionDoneMsg{err: err}
+		}
+		if action.body != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			return actionDoneMsg{err: err}
+		}
+		defer response.Body.Close()
+		if response.StatusCode >= 400 {
+			return actionDoneMsg{err: fmt.Errorf("HTTP %s", response.Status)}
+		}
+		return actionDoneMsg{}
+	}
 }
 
 func resourceItems(title, content string) []resourceItem {

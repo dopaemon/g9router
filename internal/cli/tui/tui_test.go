@@ -214,3 +214,24 @@ func TestNonResourceScreensUseReadableViews(t *testing.T) {
 		t.Fatalf("oauth view=%s", oauth)
 	}
 }
+
+func TestResourceActionsUseSelectedItemAndHTTPContract(t *testing.T) {
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.RequestURI()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	model := newScreenModel(server.URL, &bytes.Buffer{}, server.Client())
+	model.current = &screens[0]
+	model.items = []resourceItem{{id: "openai", label: "openai", status: "enabled"}}
+	action := model.actionFor("d")
+	if action == nil || action.path != "/api/providers?id=openai" {
+		t.Fatalf("action=%#v", action)
+	}
+	message := runResourceAction(server.URL, server.Client(), *action)()
+	if message.(actionDoneMsg).err != nil || method != http.MethodDelete || path != "/api/providers?id=openai" {
+		t.Fatalf("request=%s %s result=%#v", method, path, message)
+	}
+}
