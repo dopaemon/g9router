@@ -38,7 +38,10 @@ func TestDashboardContainsPortedControls(t *testing.T) {
 func TestDashboardInjectsCLIGuideCard(t *testing.T) {
 	response := httptest.NewRecorder()
 	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/cli-tools", nil))
-	if !strings.Contains(response.Body.String(), "cliGuideMetadata") {
-		t.Fatal("dashboard missing CLI guide metadata card")
+	body := response.Body.String()
+	for _, marker := range []string{"cliGuideMetadata", "cliGuideContent", "guideSteps", "codeBlock"} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("dashboard missing CLI guide marker %q", marker)
+		}
 	}
 }
