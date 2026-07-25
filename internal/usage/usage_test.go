@@ -27,3 +27,15 @@ func TestProvidersAreSorted(t *testing.T) {
 		t.Fatal(providers)
 	}
 }
+
+func TestSubscribeReceivesUsageUpdates(t *testing.T) {
+	store := New(t.TempDir() + "/usage.json")
+	updates, unsubscribe := store.Subscribe()
+	defer unsubscribe()
+	store.AddLog(1, 0, 0, 0, Log{Provider: "test"})
+	select {
+	case <-updates:
+	default:
+		t.Fatal("usage update was not published")
+	}
+}
