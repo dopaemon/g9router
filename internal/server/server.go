@@ -3389,10 +3389,7 @@ func (s *Server) providerNodeResourceAPI(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, 404, map[string]string{"error": "Provider node not found"})
 			return
 		}
-		for _, provider := range s.store.List() {
-			if provider.ID != id {
-				continue
-			}
+		if provider, exists := s.store.Find(id); exists {
 			if provider.ProviderSpecificData == nil {
 				provider.ProviderSpecificData = map[string]any{}
 			}

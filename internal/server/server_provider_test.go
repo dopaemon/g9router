@@ -224,7 +224,7 @@ func TestProviderNodeUpdateAndDeleteSyncsConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := app.store.Upsert(providers.Provider{ID: node.ID, BaseURL: node.BaseURL, Enabled: true, ProviderSpecificData: map[string]any{"prefix": node.Prefix, "baseUrl": node.BaseURL, "nodeName": node.Name}}); err != nil {
+	if err := app.store.Upsert(providers.Provider{ID: node.ID, BaseURL: node.BaseURL, APIKey: "secret", Enabled: true, ProviderSpecificData: map[string]any{"prefix": node.Prefix, "baseUrl": node.BaseURL, "nodeName": node.Name}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -235,7 +235,7 @@ func TestProviderNodeUpdateAndDeleteSyncsConnections(t *testing.T) {
 		t.Fatalf("update status=%d body=%s", update.Code, update.Body.String())
 	}
 	provider, ok := app.store.Find(node.ID)
-	if !ok || provider.ProviderSpecificData["prefix"] != "new" || provider.ProviderSpecificData["baseUrl"] != "http://new" || provider.ProviderSpecificData["nodeName"] != "New" || provider.ProviderSpecificData["apiType"] != "responses" {
+	if !ok || provider.APIKey != "secret" || provider.ProviderSpecificData["prefix"] != "new" || provider.ProviderSpecificData["baseUrl"] != "http://new" || provider.ProviderSpecificData["nodeName"] != "New" || provider.ProviderSpecificData["apiType"] != "responses" {
 		t.Fatalf("connection not synchronized: %#v", provider)
 	}
 
