@@ -131,7 +131,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "\nOAuth credentials")
 		pretty, _ := json.MarshalIndent(credentials, "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
-		fmt.Fprintln(ui.Out, "l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
+		fmt.Fprintln(ui.Out, "1. Login OAuth  l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
 		fmt.Fprint(ui.Out, "Select action: ")
 		line, err := reader.ReadString('\n')
 		if err != nil && len(line) == 0 {
@@ -165,8 +165,12 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 				return err
 			}
 			fmt.Fprintln(ui.Out, result)
-		case "l", "1":
+		case "l":
 			if err := ui.loginCodex(); err != nil {
+				return err
+			}
+		case "1", "o":
+			if err := ui.loginOAuthProvider(reader); err != nil {
 				return err
 			}
 		case "i":
@@ -194,6 +198,78 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
 	}
+}
+
+func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
+	providers := []string{"claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
+	fmt.Fprintln(ui.Out, "\nOAuth providers")
+	for index, provider := range providers {
+		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, provider)
+	}
+	fmt.Fprint(ui.Out, "Provider (0. Back): ")
+	value, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	index, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || index == 0 {
+		return nil
+	}
+	if index < 1 || index > len(providers) {
+		return fmt.Errorf("invalid OAuth provider selection")
+	}
+	return ui.loginBrowserOAuth(reader, providers[index-1])
+}
+
+func (ui *UI) loginBrowserOAuth(reader *bufio.Reader, provider string) error {
+	redirectURI := "http://localhost:8080/callback"
+	var authData struct {
+		AuthURL      string `json:"authUrl"`
+		State        string `json:"state"`
+		CodeVerifier string `json:"codeVerifier"`
+	}
+	path := "/api/oauth/" + url.PathEscape(provider) + "/authorize?redirect_uri=" + url.QueryEscape(redirectURI)
+	if err := ui.request(http.MethodGet, path, nil, &authData); err != nil {
+		return err
+	}
+	if authData.AuthURL == "" {
+		return fmt.Errorf("%s authorization URL is unavailable", provider)
+	}
+	fmt.Fprintln(ui.Out, "Opening OAuth login in browser...")
+	if err := openURL(authData.AuthURL); err != nil {
+		fmt.Fprintf(ui.Out, "Open this URL manually:\n%s\n", authData.AuthURL)
+	}
+	fmt.Fprint(ui.Out, "Paste callback URL: ")
+	callback, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	callback = strings.TrimSpace(callback)
+	parsed, err := url.Parse(callback)
+	if err != nil {
+		return fmt.Errorf("invalid callback URL: %w", err)
+	}
+	code := parsed.Query().Get("code")
+	if code == "" {
+		code = callback
+	}
+	payload := map[string]string{"code": code, "redirect_uri": redirectURI}
+	if authData.CodeVerifier != "" {
+		payload["code_verifier"] = authData.CodeVerifier
+	}
+	var result struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+	}
+	exchange := "/api/oauth/" + url.PathEscape(provider) + "/exchange"
+	if err := ui.request(http.MethodPost, exchange, payload, &result); err != nil {
+		return err
+	}
+	if !result.Success {
+		return fmt.Errorf("%s OAuth login failed: %s", provider, result.Error)
+	}
+	fmt.Fprintf(ui.Out, "%s OAuth login successful.\n", provider)
+	return nil
 }
 
 func (ui *UI) loginCodex() error {
