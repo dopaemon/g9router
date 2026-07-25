@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"g9router/internal/updater"
 )
 
 var versionCache struct {
@@ -45,7 +47,26 @@ func (s *Server) versionUpdateAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"success": false, "message": "Update is only available in production build"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]any{"success": false, "message": "Automatic updater is not available in the Go build"})
+	executable, err := os.Executable()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "message": err.Error()})
+		return
+	}
+	release, err := updater.Latest(r.Context(), s.client, getenv("G9ROUTER_RELEASE_REPO", "dopaemon/g9router"))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
+		return
+	}
+	current := strings.TrimSpace(getenv("G9ROUTER_VERSION", "0.1.0"))
+	if compareVersions(release.TagName, current) <= 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Already up to date", "version": current})
+		return
+	}
+	if err := updater.Update(r.Context(), s.client, release, executable); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Update installed", "version": release.TagName})
 }
 
 func (s *Server) latestVersion(parent context.Context) string {
