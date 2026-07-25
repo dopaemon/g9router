@@ -24,6 +24,14 @@ func TestHandlerServesDashboardRoutes(t *testing.T) {
 	}
 }
 
+func TestHandlerServesFavicon(t *testing.T) {
+	response := httptest.NewRecorder()
+	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/favicon.svg", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<svg") {
+		t.Fatalf("favicon status=%d body=%d", response.Code, response.Body.Len())
+	}
+}
+
 func TestDashboardContainsPortedControls(t *testing.T) {
 	response := httptest.NewRecorder()
 	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/providers/demo", nil))
