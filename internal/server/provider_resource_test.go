@@ -38,6 +38,23 @@ func TestProviderModelsEndpoint(t *testing.T) {
 	}
 }
 
+func TestProviderClientReturnsPaginatedConnections(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	for _, provider := range []providers.Provider{
+		{ID: "alpha", Enabled: true},
+		{ID: "beta", Enabled: true},
+	} {
+		if err := app.store.Upsert(provider); err != nil {
+			t.Fatal(err)
+		}
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/providers/client?page=2&pageSize=1&sort=provider", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"page":2`) || !strings.Contains(response.Body.String(), `"id":"beta"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProviderTestModelsDiscoversCustomModels(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/models" {

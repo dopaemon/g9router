@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -3576,7 +3578,82 @@ func (s *Server) providerClientAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"providers": s.store.List(), "baseURL": "/v1"})
+	providerFilter := valueOr(r.URL.Query().Get("provider"), "all")
+	accountStatus := valueOr(r.URL.Query().Get("accountStatus"), "all")
+	sortMode := valueOr(r.URL.Query().Get("sort"), "priority")
+	page := positiveQueryInt(r.URL.Query().Get("page"), 1)
+	pageSize := positiveQueryInt(r.URL.Query().Get("pageSize"), 20)
+	if pageSize > 500 {
+		pageSize = 500
+	}
+	all := s.store.List()
+	eligible := make([]providers.Provider, 0, len(all))
+	for _, provider := range all {
+		if !provider.Enabled {
+			continue
+		}
+		eligible = append(eligible, provider)
+	}
+	options := make([]string, 0, len(eligible))
+	seen := map[string]bool{}
+	for _, provider := range eligible {
+		if !seen[provider.ID] {
+			seen[provider.ID] = true
+			options = append(options, provider.ID)
+		}
+	}
+	sort.Strings(options)
+	filtered := eligible[:0]
+	for _, provider := range eligible {
+		if providerFilter != "all" && provider.ID != providerFilter {
+			continue
+		}
+		if accountStatus == "active" && !provider.Enabled {
+			continue
+		}
+		if accountStatus == "inactive" && provider.Enabled {
+			continue
+		}
+		filtered = append(filtered, provider)
+	}
+	if sortMode == "provider" {
+		sort.SliceStable(filtered, func(left, right int) bool { return filtered[left].ID < filtered[right].ID })
+	}
+	total := len(filtered)
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	connections := make([]map[string]any, 0, end-start)
+	for _, provider := range filtered[start:end] {
+		authType := "apikey"
+		if provider.OAuthID != "" {
+			authType = "oauth"
+		} else if isNoAuthProvider(provider.ID) {
+			authType = "free"
+		}
+		connections = append(connections, map[string]any{"id": provider.ID, "provider": provider.ID, "authType": authType, "name": provider.Name, "isActive": provider.Enabled, "testStatus": provider.TestStatus, "lastError": provider.LastError, "providerSpecificData": provider.ProviderSpecificData})
+	}
+	writeJSON(w, 200, map[string]any{"connections": connections, "providerOptions": options, "pagination": map[string]int{"page": page, "pageSize": pageSize, "total": total, "totalPages": totalPages}, "totals": map[string]int{"eligibleConnections": len(eligible), "providerFilteredConnections": total}})
+}
+
+func positiveQueryInt(value string, fallback int) int {
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
 
 func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
