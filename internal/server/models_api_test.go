@@ -62,3 +62,12 @@ func TestCLIToolGuidesAPI(t *testing.T) {
 		t.Fatalf("guide metadata status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestModelsEndpointOptions(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodOptions, "/v1/models", nil))
+	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("status=%d headers=%v", response.Code, response.Header())
+	}
+}

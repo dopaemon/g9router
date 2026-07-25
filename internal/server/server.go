@@ -3702,6 +3702,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method == http.MethodGet {
 		if s.aggregateModels(w, r) {
 			return
@@ -3882,6 +3889,7 @@ func (s *Server) aggregateModels(w http.ResponseWriter, r *http.Request) bool {
 	for _, model := range merged {
 		data = append(data, model)
 	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
 	return true
 }
