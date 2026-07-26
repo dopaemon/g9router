@@ -28,6 +28,9 @@ type UI struct {
 func Run(baseURL string, in io.Reader, out io.Writer) error {
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
 	reader := bufio.NewReader(in)
+	if ui.huhMode() {
+		return ui.huhMenu(reader)
+	}
 	for {
 		fmt.Fprintln(out, "\n9Router CLI")
 		fmt.Fprintln(out, "1. Providers")
@@ -131,32 +134,63 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		fmt.Fprintln(ui.Out, "\nOAuth credentials")
 		pretty, _ := json.MarshalIndent(credentials, "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
-		fmt.Fprintln(ui.Out, "1. Login OAuth  l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var line string
+		var err error
+		if ui.huhMode() {
+			choice, choiceErr := ui.huhChoice("OAuth action", []string{"Login OAuth", "Login Codex", "Import Codex token", "Import JSON", "Delete credential", "Back"})
+			if choiceErr != nil {
+				return choiceErr
+			}
+			line = map[string]string{"Login OAuth": "1", "Login Codex": "l", "Import Codex token": "c", "Import JSON": "i", "Delete credential": "d", "Back": "b"}[choice]
+		} else {
+			fmt.Fprintln(ui.Out, "1. Login OAuth  l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
+			fmt.Fprint(ui.Out, "Select action: ")
+			line, err = reader.ReadString('\n')
+			if err != nil && len(line) == 0 {
+				return err
+			}
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "b", "0":
 			return nil
 		case "d":
-			fmt.Fprint(ui.Out, "Credential ID: ")
-			id, err := reader.ReadString('\n')
+			id := ""
+			if ui.huhMode() {
+				id, err = ui.huhValue("Credential ID", "", false)
+			} else {
+				fmt.Fprint(ui.Out, "Credential ID: ")
+				id, err = reader.ReadString('\n')
+			}
 			if err != nil {
 				return err
+			}
+			if ui.huhMode() {
+				ok, confirmErr := ui.huhConfirm("Delete this credential?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
 			}
 			if err := ui.request(http.MethodDelete, "/api/oauth/"+strings.TrimSpace(id), nil, nil); err != nil {
 				return err
 			}
 		case "c":
-			fmt.Fprint(ui.Out, "ChatGPT access token: ")
-			token, err := reader.ReadString('\n')
-			if err != nil {
-				return err
+			var token, name string
+			if ui.huhMode() {
+				token, err = ui.huhValue("ChatGPT access token", "", true)
+				if err == nil {
+					name, err = ui.huhValue("Connection name (optional)", "", false)
+				}
+			} else {
+				fmt.Fprint(ui.Out, "ChatGPT access token: ")
+				token, err = reader.ReadString('\n')
+				if err == nil {
+					fmt.Fprint(ui.Out, "Connection name (optional): ")
+					name, err = reader.ReadString('\n')
+				}
 			}
-			fmt.Fprint(ui.Out, "Connection name (optional): ")
-			name, err := reader.ReadString('\n')
 			if err != nil {
 				return err
 			}
@@ -202,6 +236,14 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 
 func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
 	providers := []string{"claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
+	if ui.huhMode() {
+		providers = append(providers, "Back")
+		choice, err := ui.huhChoice("OAuth provider", providers)
+		if err != nil || choice == "Back" {
+			return err
+		}
+		return ui.loginBrowserOAuth(reader, choice)
+	}
 	fmt.Fprintln(ui.Out, "\nOAuth providers")
 	for index, provider := range providers {
 		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, provider)
@@ -373,11 +415,21 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		for i, name := range keys {
 			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, name, statuses[name])
 		}
-		fmt.Fprintln(ui.Out, "q. Quick setup  m. Claude model  s. Show settings  a. Apply JSON  r. Reset  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var line string
+		var err error
+		if ui.huhMode() {
+			choice, choiceErr := ui.huhChoice("CLI Tools action", []string{"Quick setup", "Claude model", "Show settings", "Apply JSON", "Reset", "Back"})
+			if choiceErr != nil {
+				return choiceErr
+			}
+			line = map[string]string{"Quick setup": "q", "Claude model": "m", "Show settings": "s", "Apply JSON": "a", "Reset": "r", "Back": "b"}[choice]
+		} else {
+			fmt.Fprintln(ui.Out, "q. Quick setup  m. Claude model  s. Show settings  a. Apply JSON  r. Reset  b. Back")
+			fmt.Fprint(ui.Out, "Select action: ")
+			line, err = reader.ReadString('\n')
+			if err != nil && len(line) == 0 {
+				return err
+			}
 		}
 		action := strings.ToLower(strings.TrimSpace(line))
 		if action == "b" || action == "0" {
@@ -399,12 +451,19 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 			continue
 		}
-		fmt.Fprint(ui.Out, "Tool number: ")
-		line, err = reader.ReadString('\n')
+		var index int
+		if ui.huhMode() {
+			index, err = ui.huhNumber("Choose CLI tool", keys)
+		} else {
+			fmt.Fprint(ui.Out, "Tool number: ")
+			line, err = reader.ReadString('\n')
+			if err == nil {
+				index, err = strconv.Atoi(strings.TrimSpace(line))
+			}
+		}
 		if err != nil {
 			return err
 		}
-		index, err := strconv.Atoi(strings.TrimSpace(line))
 		if err != nil || index < 1 || index > len(keys) {
 			fmt.Fprintln(ui.Out, "Invalid tool number")
 			continue
@@ -421,6 +480,15 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			continue
 		}
 		if action == "r" {
+			if ui.huhMode() {
+				ok, confirmErr := ui.huhConfirm("Reset this tool settings?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
+			}
 			if err := ui.request(http.MethodDelete, path, nil, nil); err != nil {
 				return err
 			}
@@ -538,11 +606,21 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 		var tunnel map[string]any
 		_ = ui.request(http.MethodGet, "/api/tunnel/status", nil, &tunnel)
 		fmt.Fprintf(ui.Out, "\nSettings\nRTK: %v  Headroom: %v  Tunnel: %v\n", values["rtkEnabled"] != false, values["headroomEnabled"] == true, tunnel["enabled"] == true)
-		fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  6. Reset password  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var line string
+		var err error
+		if ui.huhMode() {
+			choice, choiceErr := ui.huhChoice("Settings action", []string{"Toggle RTK", "Toggle Headroom", "Enable tunnel", "Disable tunnel", "Reset auth mode", "Reset password", "Back"})
+			if choiceErr != nil {
+				return choiceErr
+			}
+			line = map[string]string{"Toggle RTK": "1", "Toggle Headroom": "2", "Enable tunnel": "3", "Disable tunnel": "4", "Reset auth mode": "5", "Reset password": "6", "Back": "b"}[choice]
+		} else {
+			fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  6. Reset password  b. Back")
+			fmt.Fprint(ui.Out, "Select action: ")
+			line, err = reader.ReadString('\n')
+			if err != nil && len(line) == 0 {
+				return err
+			}
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "b", "0":
@@ -589,13 +667,23 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 		for i, item := range payload.Combos {
 			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, item.Name, item.Models)
 		}
-		fmt.Fprintln(ui.Out, "a. Create  e. Edit  d. Delete  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var action string
+		var err error
+		if ui.huhMode() {
+			choice, choiceErr := ui.huhChoice("Combo action", []string{"Create", "Edit", "Delete", "Back"})
+			if choiceErr != nil {
+				return choiceErr
+			}
+			action = map[string]string{"Create": "a", "Edit": "e", "Delete": "d", "Back": "b"}[choice]
+		} else {
+			fmt.Fprintln(ui.Out, "a. Create  e. Edit  d. Delete  b. Back")
+			fmt.Fprint(ui.Out, "Select action: ")
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil && len(line) == 0 {
+				return readErr
+			}
+			action = strings.ToLower(strings.TrimSpace(line))
 		}
-		action := strings.ToLower(strings.TrimSpace(line))
 		if action == "b" || action == "0" {
 			return nil
 		}
@@ -609,46 +697,73 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			fmt.Fprintln(ui.Out, "Invalid selection")
 			continue
 		}
-		fmt.Fprint(ui.Out, "Combo number: ")
-		value, err := reader.ReadString('\n')
+		var index int
+		if ui.huhMode() {
+			labels := make([]string, 0, len(payload.Combos))
+			for _, item := range payload.Combos {
+				labels = append(labels, item.Name)
+			}
+			index, err = ui.huhNumber("Choose combo", labels)
+		} else {
+			fmt.Fprint(ui.Out, "Combo number: ")
+			value, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				return readErr
+			}
+			index, err = strconv.Atoi(strings.TrimSpace(value))
+		}
 		if err != nil {
 			return err
 		}
-		index, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil || index < 1 || index > len(payload.Combos) {
 			fmt.Fprintln(ui.Out, "Invalid combo number")
 			continue
 		}
 		item := payload.Combos[index-1]
 		if action == "d" {
+			if ui.huhMode() {
+				ok, confirmErr := ui.huhConfirm("Delete this combo?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
+			}
 			if err := ui.request(http.MethodDelete, "/api/combos/"+item.ID, nil, nil); err != nil {
 				return err
 			}
 			continue
 		}
-		fmt.Fprintf(ui.Out, "New name (Enter keeps %s): ", item.Name)
-		value, err = reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(value) != "" {
-			item.Name = strings.TrimSpace(value)
-		}
-		fmt.Fprint(ui.Out, "Models (comma-separated, Enter keeps current): ")
-		value, err = reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(value) != "" {
-			item.Models = nil
-			for _, model := range strings.Split(strings.TrimSpace(value), ",") {
-				if strings.TrimSpace(model) != "" {
-					item.Models = append(item.Models, strings.TrimSpace(model))
+		if ui.huhMode() {
+			if err := ui.promptCombo(&item, true); err != nil {
+				return err
+			}
+		} else {
+			fmt.Fprintf(ui.Out, "New name (Enter keeps %s): ", item.Name)
+			value, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				return readErr
+			}
+			if strings.TrimSpace(value) != "" {
+				item.Name = strings.TrimSpace(value)
+			}
+			fmt.Fprint(ui.Out, "Models (comma-separated, Enter keeps current): ")
+			value, readErr = reader.ReadString('\n')
+			if readErr != nil {
+				return readErr
+			}
+			if strings.TrimSpace(value) != "" {
+				item.Models = nil
+				for _, model := range strings.Split(strings.TrimSpace(value), ",") {
+					if strings.TrimSpace(model) != "" {
+						item.Models = append(item.Models, strings.TrimSpace(model))
+					}
 				}
 			}
-		}
-		if err := ui.request(http.MethodPut, "/api/combos/"+item.ID, item, nil); err != nil {
-			return err
+			if err := ui.request(http.MethodPut, "/api/combos/"+item.ID, item, nil); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -665,10 +780,21 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])
 		}
 		fmt.Fprintln(ui.Out, "a. Add API provider  e. Edit  d. Delete  t. Test  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var line string
+		var err error
+		if ui.huhMode() {
+			choice, err := ui.huhChoice("Provider action", []string{"Add provider", "Edit provider", "Delete provider", "Test provider", "Back"})
+			if err != nil {
+				return err
+			}
+			line = map[string]string{"Add provider": "a", "Edit provider": "e", "Delete provider": "d", "Test provider": "t", "Back": "b"}[choice]
+		} else {
+			fmt.Fprint(ui.Out, "Select action: ")
+			value, err := reader.ReadString('\n')
+			if err != nil && len(value) == 0 {
+				return err
+			}
+			line = value
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "b", "0":
@@ -682,14 +808,23 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				fmt.Fprintln(ui.Out, "No providers found.")
 				continue
 			}
-			fmt.Fprint(ui.Out, "Provider number: ")
-			number, err := reader.ReadString('\n')
-			if err != nil {
-				return err
+			var index int
+			if ui.huhMode() {
+				labels := make([]string, 0, len(items))
+				for _, item := range items {
+					labels = append(labels, item.ID+" ("+item.BaseURL+")")
+				}
+				index, err = ui.huhNumber("Choose provider", labels)
+			} else {
+				fmt.Fprint(ui.Out, "Provider number: ")
+				number, err := reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				index, err = strconv.Atoi(strings.TrimSpace(number))
 			}
-			index, err := strconv.Atoi(strings.TrimSpace(number))
 			if err != nil || index < 1 || index > len(items) {
-				fmt.Fprintln(ui.Out, "Invalid provider number")
+				fmt.Fprintln(ui.Out, "Invalid provider selection")
 				continue
 			}
 			item := items[index-1]
@@ -703,6 +838,9 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				var current provider
 				if err := ui.request(http.MethodGet, "/api/providers/"+item.ID, nil, &current); err != nil {
 					return err
+				}
+				if ui.huhMode() {
+					return ui.promptProvider(&current, true)
 				}
 				fmt.Fprintf(ui.Out, "Base URL (Enter keeps %s): ", current.BaseURL)
 				value, err := reader.ReadString('\n')
@@ -743,6 +881,16 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 }
 
 func (ui *UI) selectAuthMode(reader *bufio.Reader) (string, error) {
+	if ui.huhMode() {
+		choice, err := ui.huhChoice("Authentication", []string{"OAuth", "API key"})
+		if err != nil {
+			return "", err
+		}
+		if choice == "OAuth" {
+			return "oauth", nil
+		}
+		return "apikey", nil
+	}
 	fmt.Fprintln(ui.Out, "\nSelect authentication")
 	fmt.Fprintln(ui.Out, "1. OAuth")
 	fmt.Fprintln(ui.Out, "2. API key")
@@ -767,6 +915,28 @@ func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	if ui.huhMode() {
+		options := append([]string{}, ids...)
+		options = append(options, "Custom provider", "Back")
+		choice, err := ui.huhChoice("Provider", options)
+		if err != nil || choice == "Back" {
+			return err
+		}
+		if choice == "Custom provider" {
+			value, inputErr := ui.huhValue("Provider ID", "", false)
+			if inputErr != nil {
+				return inputErr
+			}
+			item.ID = strings.TrimSpace(value)
+			return nil
+		}
+		descriptor := providers.Registry[choice]
+		item.ID = descriptor.ID
+		item.Name = descriptor.ID
+		item.BaseURL = descriptor.BaseURL
+		item.APIType = descriptor.Format
+		return nil
+	}
 	fmt.Fprintln(ui.Out, "\nSelect provider (0. Custom provider)")
 	for index, id := range ids {
 		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, id)
@@ -810,11 +980,21 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		for i, key := range payload.Keys {
 			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], key.Key)
 		}
-		fmt.Fprintln(ui.Out, "a. Create  v. View full  c. Copy  d. Delete  t. Toggle  b. Back")
-		fmt.Fprint(ui.Out, "Select action: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
+		var line string
+		var err error
+		if ui.huhMode() {
+			choice, choiceErr := ui.huhChoice("API key action", []string{"Create", "View full", "Copy", "Delete", "Toggle", "Back"})
+			if choiceErr != nil {
+				return choiceErr
+			}
+			line = map[string]string{"Create": "a", "View full": "v", "Copy": "c", "Delete": "d", "Toggle": "t", "Back": "b"}[choice]
+		} else {
+			fmt.Fprintln(ui.Out, "a. Create  v. View full  c. Copy  d. Delete  t. Toggle  b. Back")
+			fmt.Fprint(ui.Out, "Select action: ")
+			line, err = reader.ReadString('\n')
+			if err != nil && len(line) == 0 {
+				return err
+			}
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "b", "0":
@@ -830,12 +1010,24 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				fmt.Fprintln(ui.Out, "No API keys found.")
 				continue
 			}
-			fmt.Fprint(ui.Out, "Key number: ")
-			number, err := reader.ReadString('\n')
+			var index int
+			if ui.huhMode() {
+				labels := make([]string, 0, len(payload.Keys))
+				for _, key := range payload.Keys {
+					labels = append(labels, key.Name)
+				}
+				index, err = ui.huhNumber("Choose API key", labels)
+			} else {
+				fmt.Fprint(ui.Out, "Key number: ")
+				number, readErr := reader.ReadString('\n')
+				if readErr != nil {
+					return readErr
+				}
+				index, err = strconv.Atoi(strings.TrimSpace(number))
+			}
 			if err != nil {
 				return err
 			}
-			index, err := strconv.Atoi(strings.TrimSpace(number))
 			if err != nil || index < 1 || index > len(payload.Keys) {
 				fmt.Fprintln(ui.Out, "Invalid key number")
 				continue
@@ -860,6 +1052,15 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				continue
 			}
 			method, path, body := http.MethodDelete, "/api/keys/"+key.ID, any(nil)
+			if strings.ToLower(strings.TrimSpace(line)) == "d" && ui.huhMode() {
+				ok, confirmErr := ui.huhConfirm("Delete this API key?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
+			}
 			if strings.ToLower(strings.TrimSpace(line)) == "t" {
 				method, body = http.MethodPut, map[string]bool{"isActive": !key.IsActive}
 			}
