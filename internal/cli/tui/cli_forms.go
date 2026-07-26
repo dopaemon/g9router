@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -10,11 +11,16 @@ import (
 
 func (ui *UI) runHuh(form *huh.Form) error {
 	EnableColors(ui.Out)
-	return form.WithInput(ui.In).WithOutput(ui.Out).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
+	accessible := os.Getenv("G9ROUTER_ACCESSIBLE") == "1"
+	if file, ok := ui.In.(*os.File); !ok || !IsTerminal(file) {
+		accessible = true
+	}
+	return form.WithAccessible(accessible).WithInput(ui.In).WithOutput(ui.Out).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
 }
 
 func (ui *UI) promptProvider(item *provider, edit bool) error {
 	apiType := item.APIType
+	finish := "Save"
 	if apiType == "" {
 		apiType = "openai"
 	}
@@ -28,9 +34,16 @@ func (ui *UI) promptProvider(item *provider, edit bool) error {
 			huh.NewOption("Anthropic", "anthropic"),
 			huh.NewOption("Gemini", "gemini"),
 		).Value(&apiType),
-	)).WithAccessible(false)
+		huh.NewSelect[string]().Title("Finish").Options(
+			huh.NewOption("Save", "Save"),
+			huh.NewOption("Back", "Back"),
+		).Value(&finish),
+	))
 	if err := ui.runHuh(form); err != nil {
 		return err
+	}
+	if finish == "Back" {
+		return huh.ErrUserAborted
 	}
 	item.APIType = apiType
 	item.Enabled = true
@@ -45,11 +58,19 @@ func (ui *UI) promptProvider(item *provider, edit bool) error {
 
 func (ui *UI) promptAPIKey() (apiKey, error) {
 	var name string
+	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Key name").Value(&name).Validate(huh.ValidateNotEmpty()),
-	)).WithAccessible(false)
+		huh.NewSelect[string]().Title("Finish").Options(
+			huh.NewOption("Save", "Save"),
+			huh.NewOption("Back", "Back"),
+		).Value(&finish),
+	))
 	if err := ui.runHuh(form); err != nil {
 		return apiKey{}, err
+	}
+	if finish == "Back" {
+		return apiKey{}, huh.ErrUserAborted
 	}
 	var created apiKey
 	err := ui.request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(name)}, &created)
@@ -64,12 +85,20 @@ func (ui *UI) promptCombo(item *combo, edit bool) error {
 		}
 	}
 	modelText := strings.Join(models, ", ")
+	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Combo name").Value(&item.Name).Validate(huh.ValidateNotEmpty()),
 		huh.NewInput().Title("Models").Description("Comma-separated model IDs").Value(&modelText).Validate(huh.ValidateNotEmpty()),
-	)).WithAccessible(false)
+		huh.NewSelect[string]().Title("Finish").Options(
+			huh.NewOption("Save", "Save"),
+			huh.NewOption("Back", "Back"),
+		).Value(&finish),
+	))
 	if err := ui.runHuh(form); err != nil {
 		return err
+	}
+	if finish == "Back" {
+		return huh.ErrUserAborted
 	}
 	item.Models = nil
 	for _, model := range strings.Split(modelText, ",") {

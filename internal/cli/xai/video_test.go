@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestParseArgsDefaultsAndOptions(t *testing.T) {
@@ -38,16 +36,4 @@ func imageInputString(value string) string {
 		return value
 	}
 	return ""
-}
-
-func TestTUIModelRendersFormAndValidatesPrompt(t *testing.T) {
-	model := newTUIModel()
-	view := model.View()
-	if !strings.Contains(view, "XAI VIDEO") || !strings.Contains(view, "Prompt:") {
-		t.Fatalf("view=%q", view)
-	}
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if updated.(tuiModel).busy {
-		t.Fatal("empty prompt started a job")
-	}
 }

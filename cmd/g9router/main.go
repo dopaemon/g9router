@@ -30,6 +30,7 @@ func main() {
 	flag.StringVar(host, "H", "", "host to bind")
 	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
 	flag.BoolVar(noBrowser, "n", false, "do not open the dashboard")
+	interactive := flag.Bool("interactive", false, "run the interactive Huh CLI")
 	flag.Bool("log", false, "show server logs")
 	trayMode := flag.Bool("tray", false, "run in system tray mode")
 	flag.Bool("skip-update", false, "skip update check")
@@ -69,8 +70,11 @@ func main() {
 		}
 		log.Fatal(<-errors)
 	}
-	if ready && tui.IsTerminal(os.Stdin) {
-		_ = tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout)
+	if ready && (tui.IsTerminal(os.Stdin) || *interactive) {
+		if err := tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout); err != nil {
+			log.Printf("interactive CLI: %v", err)
+			os.Exit(1)
+		}
 		return
 	}
 	if ready && !*noBrowser {

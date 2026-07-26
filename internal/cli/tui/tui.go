@@ -19,54 +19,17 @@ import (
 )
 
 type UI struct {
-	BaseURL string
-	In      io.Reader
-	Out     io.Writer
-	Client  *http.Client
+	BaseURL  string
+	In       io.Reader
+	Out      io.Writer
+	Client   *http.Client
+	forceHuh bool
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
-	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient}
+	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, forceHuh: true}
 	reader := bufio.NewReader(in)
-	if ui.huhMode() {
-		return ui.huhMenu(reader)
-	}
-	for {
-		fmt.Fprintln(out, "\n9Router CLI")
-		fmt.Fprintln(out, "1. Providers")
-		fmt.Fprintln(out, "2. API Keys")
-		fmt.Fprintln(out, "3. Combos")
-		fmt.Fprintln(out, "4. CLI Tools")
-		fmt.Fprintln(out, "5. Settings")
-		fmt.Fprintln(out, "6. OAuth")
-		fmt.Fprintln(out, "0. Exit")
-		fmt.Fprint(out, "Select option: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && len(line) == 0 {
-			return err
-		}
-		switch strings.TrimSpace(line) {
-		case "0", "q", "Q":
-			return nil
-		case "1":
-			err = ui.providers(reader)
-		case "2":
-			err = ui.apiKeys(reader)
-		case "3":
-			err = ui.combos(reader)
-		case "4":
-			err = ui.cliTools(reader)
-		case "5":
-			err = ui.settings(reader)
-		case "6":
-			err = ui.oauth(reader)
-		default:
-			fmt.Fprintln(out, "Invalid selection")
-		}
-		if err != nil {
-			fmt.Fprintln(out, "Error:", err)
-		}
-	}
+	return ui.huhMenu(reader)
 }
 
 func (ui *UI) showJSON(reader *bufio.Reader, path string) error {
@@ -85,7 +48,7 @@ func (ui *UI) showJSON(reader *bufio.Reader, path string) error {
 	}
 	var value any
 	if json.Unmarshal(data, &value) == nil {
-		pretty, _ := json.MarshalIndent(value, "", "  ")
+		pretty, _ := json.MarshalIndent(redactSecrets(value), "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
 	} else {
 		fmt.Fprintln(ui.Out, string(data))
@@ -125,6 +88,38 @@ type combo struct {
 	Kind   string `json:"kind,omitempty"`
 }
 
+func maskSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if len(value) <= 8 {
+		return "••••"
+	}
+	return value[:4] + "…" + value[len(value)-4:]
+}
+
+func redactSecrets(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, item := range value {
+			lower := strings.ToLower(key)
+			if strings.Contains(lower, "key") || strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") {
+				if text, ok := item.(string); ok {
+					value[key] = maskSecret(text)
+					continue
+				}
+			}
+			value[key] = redactSecrets(item)
+		}
+	case []any:
+		for index := range value {
+			value[index] = redactSecrets(value[index])
+		}
+	}
+	return value
+}
+
 func (ui *UI) oauth(reader *bufio.Reader) error {
 	for {
 		var credentials any
@@ -132,7 +127,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			return err
 		}
 		fmt.Fprintln(ui.Out, "\nOAuth credentials")
-		pretty, _ := json.MarshalIndent(credentials, "", "  ")
+		pretty, _ := json.MarshalIndent(redactSecrets(credentials), "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
 		var line string
 		var err error
@@ -198,7 +193,8 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			if err := ui.request(http.MethodPost, "/api/oauth/codex/import-token", map[string]string{"accessToken": strings.TrimSpace(token), "name": strings.TrimSpace(name)}, &result); err != nil {
 				return err
 			}
-			fmt.Fprintln(ui.Out, result)
+			pretty, _ := json.MarshalIndent(redactSecrets(result), "", "  ")
+			fmt.Fprintln(ui.Out, string(pretty))
 		case "l":
 			if err := ui.loginCodex(); err != nil {
 				return err
@@ -227,7 +223,8 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			if err := ui.request(http.MethodPost, strings.TrimSpace(path), payload, &result); err != nil {
 				return err
 			}
-			fmt.Fprintln(ui.Out, result)
+			pretty, _ := json.MarshalIndent(redactSecrets(result), "", "  ")
+			fmt.Fprintln(ui.Out, string(pretty))
 		default:
 			fmt.Fprintln(ui.Out, "Invalid selection")
 		}
@@ -638,14 +635,35 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 				return err
 			}
 		case "4":
+			ok, confirmErr := ui.huhConfirm("Disable the tunnel?", false)
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !ok {
+				continue
+			}
 			if err := ui.request(http.MethodPost, "/api/tunnel/disable", nil, nil); err != nil {
 				return err
 			}
 		case "5":
+			ok, confirmErr := ui.huhConfirm("Switch authentication to password mode?", false)
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !ok {
+				continue
+			}
 			if err := ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil); err != nil {
 				return err
 			}
 		case "6":
+			ok, confirmErr := ui.huhConfirm("Reset the admin password?", false)
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !ok {
+				continue
+			}
 			if err := ui.request(http.MethodPost, "/api/auth/reset-password", nil, nil); err != nil {
 				return err
 			}
@@ -779,7 +797,9 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 		for i, item := range items {
 			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])
 		}
-		fmt.Fprintln(ui.Out, "a. Add API provider  e. Edit  d. Delete  t. Test  b. Back")
+		if !ui.huhMode() {
+			fmt.Fprintln(ui.Out, "a. Add API provider  e. Edit  d. Delete  t. Test  b. Back")
+		}
 		var line string
 		var err error
 		if ui.huhMode() {
@@ -829,6 +849,13 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			}
 			item := items[index-1]
 			if strings.ToLower(strings.TrimSpace(line)) == "d" {
+				ok, confirmErr := ui.huhConfirm("Delete provider "+item.ID+"?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
 				if err := ui.request(http.MethodDelete, "/api/providers?id="+item.ID, nil, nil); err != nil {
 					return err
 				}
@@ -978,7 +1005,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		}
 		fmt.Fprintln(ui.Out, "\nAPI Keys")
 		for i, key := range payload.Keys {
-			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], key.Key)
+			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], maskSecret(key.Key))
 		}
 		var line string
 		var err error
@@ -1034,6 +1061,13 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 			}
 			key := payload.Keys[index-1]
 			if strings.ToLower(strings.TrimSpace(line)) == "v" {
+				ok, confirmErr := ui.huhConfirm("Reveal this API key in terminal output?", false)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				if !ok {
+					continue
+				}
 				var detail struct {
 					Key apiKey `json:"key"`
 				}
@@ -1120,10 +1154,13 @@ func (ui *UI) request(method, path string, body any, result any) error {
 		return err
 	}
 	if response.StatusCode >= 400 {
-		return fmt.Errorf("HTTP %s: %s", response.Status, strings.TrimSpace(string(data)))
+		return fmt.Errorf("HTTP %s", response.Status)
 	}
 	if result != nil && len(data) > 0 && json.Unmarshal(data, result) != nil {
 		return fmt.Errorf("invalid JSON response")
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		fmt.Fprintln(ui.Out, Success(strings.ToUpper(method)+" "+path))
 	}
 	return nil
 }

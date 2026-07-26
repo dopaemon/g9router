@@ -11,10 +11,10 @@ import (
 var consoleStyles = struct {
 	Info, Success, Error, Muted lipgloss.Style
 }{
-	Info:    lipgloss.NewStyle().Foreground(palette.Lavender),
-	Success: lipgloss.NewStyle().Bold(true).Foreground(palette.Green),
-	Error:   lipgloss.NewStyle().Bold(true).Foreground(palette.Rose),
-	Muted:   lipgloss.NewStyle().Foreground(palette.Muted),
+	Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("#67E8F9")),
+	Success: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#86EFAC")),
+	Error:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FDA4AF")),
+	Muted:   lipgloss.NewStyle().Foreground(lipgloss.Color("#CBD5E1")),
 }
 
 func Info(message string) string    { return consoleStyles.Info.Render("• " + message) }

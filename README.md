@@ -9,6 +9,17 @@ G9ROUTER_UPSTREAM=https://api.openai.com/v1 G9ROUTER_API_KEY=sk-... go run ./cmd
 ```
 
 Defaults: `:20128`, upstream `https://api.openai.com/v1`.
+
+Run the Huh-based interactive CLI in a terminal, or explicitly for piped and
+assistive-terminal input:
+
+```bash
+go run ./cmd/g9router --interactive
+G9ROUTER_ACCESSIBLE=1 go run ./cmd/g9router --interactive
+```
+
+The CLI confirms destructive actions, reports mutation results, keeps API
+errors inside the current menu, and masks stored secrets by default.
 Routes include `/healthz`, `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/*`, `/v1/search`, `/v1/web/fetch`, `/api/providers`, `/api/oauth`, and `/dashboard`.
 
 OAuth credentials are managed through `/api/oauth` (`GET`, `POST`, `PUT?id=...`) and persisted in the SQLite database; secrets are omitted from API responses.

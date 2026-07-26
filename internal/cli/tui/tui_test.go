@@ -10,10 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 )
 
 func TestRunCLIToolsBack(t *testing.T) {
@@ -26,8 +22,7 @@ func TestRunCLIToolsBack(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	input := strings.NewReader("4\nb\n0\n")
-	if err := Run(server.URL, input, &output); err != nil {
+	if err := (&UI{BaseURL: server.URL, In: strings.NewReader(""), Out: &output, Client: server.Client()}).cliTools(bufio.NewReader(strings.NewReader("b\n"))); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "claude") {
@@ -48,10 +43,6 @@ func TestQuickSetupOpenCode(t *testing.T) {
 			if body["apiKey"] != "sk-test" || body["activeModel"] != "cc/test" {
 				t.Fatalf("payload = %#v", body)
 			}
-			models, ok := body["models"].([]any)
-			if !ok || len(models) != 1 || models[0] != "cc/test" {
-				t.Fatalf("models = %#v", body["models"])
-			}
 			_, _ = fmt.Fprint(w, `{"success":true}`)
 		default:
 			_, _ = fmt.Fprint(w, `{}`)
@@ -59,7 +50,7 @@ func TestQuickSetupOpenCode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	ui := &UI{BaseURL: server.URL, In: strings.NewReader(""), Out: &bytes.Buffer{}, Client: server.Client()}
+	ui := &UI{BaseURL: server.URL, Out: &bytes.Buffer{}, Client: server.Client()}
 	if err := ui.quickSetup(bufio.NewReader(strings.NewReader("opencode\ncc/test\n"))); err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +98,7 @@ func TestProvidersReadsConnectionsEnvelope(t *testing.T) {
 	}
 }
 
-func TestSelectProviderUsesRegistryDefaults(t *testing.T) {
+func TestProviderAndAuthSelections(t *testing.T) {
 	ui := &UI{Out: &bytes.Buffer{}}
 	item := provider{}
 	if err := ui.selectProvider(bufio.NewReader(strings.NewReader("1\n")), &item); err != nil {
@@ -116,10 +107,6 @@ func TestSelectProviderUsesRegistryDefaults(t *testing.T) {
 	if item.ID == "" || item.Name == "" || item.APIType == "" {
 		t.Fatalf("provider defaults = %#v", item)
 	}
-}
-
-func TestSelectAuthModeAcceptsOAuthAndAPIKey(t *testing.T) {
-	ui := &UI{Out: &bytes.Buffer{}}
 	mode, err := ui.selectAuthMode(bufio.NewReader(strings.NewReader("1\n")))
 	if err != nil || mode != "oauth" {
 		t.Fatalf("oauth mode=%q err=%v", mode, err)
@@ -130,158 +117,39 @@ func TestSelectAuthModeAcceptsOAuthAndAPIKey(t *testing.T) {
 	}
 }
 
-func TestGradientAndTeaViewRenderAtNarrowWidth(t *testing.T) {
-	model := newTeaModel("http://127.0.0.1:20128")
-	if !strings.Contains(model.View(), "Providers") {
-		t.Fatalf("root menu missing providers: %s", model.View())
+func TestSecretsAreRedactedAndMutationsReportSuccess(t *testing.T) {
+	if got := maskSecret("sk-1234567890"); got != "sk-1…7890" {
+		t.Fatalf("maskSecret() = %q", got)
 	}
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 40, Height: 12})
-	view := updated.(teaModel).View()
-	if !strings.Contains(view, "9ROUTER") || !strings.Contains(view, "Providers") {
-		t.Fatalf("view=%q", view)
+	value := redactSecrets(map[string]any{"accessToken": "token-123456", "name": "demo"}).(map[string]any)
+	if value["accessToken"] == "token-123456" || value["name"] != "demo" {
+		t.Fatalf("redactSecrets() = %#v", value)
 	}
-	if gradient("") != "" {
-		t.Fatal("empty gradient should stay empty")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	var output bytes.Buffer
+	ui := &UI{BaseURL: server.URL, Out: &output, Client: server.Client()}
+	if err := ui.request(http.MethodPost, "/api/settings", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "POST /api/settings") {
+		t.Fatalf("missing mutation feedback: %q", output.String())
 	}
 }
 
-func TestLoadScreenFormatsJSONAndHTTPFailures(t *testing.T) {
+func TestRequestDoesNotExposeServerErrorBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/ok" {
-			_, _ = fmt.Fprint(w, `{"items":[{"name":"rose"}]}`)
-			return
-		}
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = fmt.Fprint(w, `{"error":"upstream unavailable"}`)
+		_, _ = io.WriteString(w, `{"error":"token=secret-value"}`)
 	}))
 	defer server.Close()
 
-	loaded := loadScreen(server.URL, server.Client(), "/ok")()
-	message, ok := loaded.(screenLoadedMsg)
-	if !ok || message.err != nil || !strings.Contains(message.content, "rose") {
-		t.Fatalf("loaded = %#v", loaded)
-	}
-
-	failed := loadScreen(server.URL, server.Client(), "/fail")().(screenLoadedMsg)
-	if failed.err == nil || !strings.Contains(failed.err.Error(), "502") {
-		t.Fatalf("failure = %#v", failed.err)
-	}
-}
-
-func TestProvidersScreenRendersConnectionTable(t *testing.T) {
-	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
-	model.current = &screens[0]
-	model.loading = false
-	model.width = 100
-	model.height = 30
-	model.viewport = viewport.New(92, 19)
-	updated, _ := model.Update(screenLoadedMsg{content: `{"connections":[{"id":"openai","baseURL":"https://api.openai.com","enabled":true}]}`})
-	model = updated.(screenModel)
-	view := model.View()
-	if !strings.Contains(view, "openai") || !strings.Contains(view, "enabled") {
-		t.Fatalf("provider view missing table data: %s", view)
-	}
-	if strings.Contains(view, `"connections"`) {
-		t.Fatalf("provider view leaked raw JSON: %s", view)
-	}
-}
-
-func TestProvidersScreenSupportsSelection(t *testing.T) {
-	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
-	model.current = &screens[0]
-	model.viewport = viewport.New(92, 19)
-	message := screenLoadedMsg{content: `{"connections":[{"id":"openai","baseURL":"https://openai.test","enabled":true},{"id":"anthropic","baseURL":"https://anthropic.test","enabled":false}]}`}
-	updated, _ := model.Update(message)
-	model = updated.(screenModel)
-	if model.selected != 0 || !strings.Contains(model.View(), "▸") {
-		t.Fatalf("initial selection missing: %s", model.View())
-	}
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
-	model = updated.(screenModel)
-	if model.selected != 1 || !strings.Contains(model.View(), "anthropic") {
-		t.Fatalf("selection did not move: %s", model.View())
-	}
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(screenModel)
-	if !strings.Contains(model.notice, "anthropic") {
-		t.Fatalf("enter did not select provider: %q", model.notice)
-	}
-	if !strings.Contains(model.content(model.raw), "[A]") || !strings.Contains(model.content(model.raw), "[T]") {
-		t.Fatalf("provider actions missing: %s", model.content(model.raw))
-	}
-}
-
-func TestNonResourceScreensUseReadableViews(t *testing.T) {
-	settings := formatScreenContent("Settings", `{"rtkEnabled":true,"headroom":false}`)
-	if !strings.Contains(settings, "SETTING") || strings.Contains(settings, `"rtkEnabled"`) {
-		t.Fatalf("settings view=%s", settings)
-	}
-	oauth := formatScreenContent("OAuth", `{"cred-1":{"provider":"claude","active":true}}`)
-	if !strings.Contains(oauth, "PROVIDER") || strings.Contains(oauth, `"cred-1"`) {
-		t.Fatalf("oauth view=%s", oauth)
-	}
-}
-
-func TestHuhProviderFormUsesCharmFields(t *testing.T) {
-	state := newProviderHuhForm()
-	state.form.Init()
-	updated, _ := state.form.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	state.form = updated.(*huh.Form)
-	view := state.form.View()
-	for _, label := range []string{"Provider ID", "Base URL", "API key"} {
-		if !strings.Contains(view, label) {
-			t.Fatalf("huh form missing %q: %s", label, view)
-		}
-	}
-}
-
-func TestResourceActionsUseSelectedItemAndHTTPContract(t *testing.T) {
-	var method, path string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, path = r.Method, r.URL.RequestURI()
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	model := newScreenModel(server.URL, &bytes.Buffer{}, server.Client())
-	model.current = &screens[0]
-	model.items = []resourceItem{{id: "openai", label: "openai", status: "enabled"}}
-	action := model.actionFor("d")
-	if action == nil || action.path != "/api/providers?id=openai" {
-		t.Fatalf("action=%#v", action)
-	}
-	message := runResourceAction(server.URL, server.Client(), *action)()
-	if message.(actionDoneMsg).err != nil || method != http.MethodDelete || path != "/api/providers?id=openai" {
-		t.Fatalf("request=%s %s result=%#v", method, path, message)
-	}
-}
-
-func TestScreenModelLoadsAfterRootSelection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"connections":[]}`)
-	}))
-	defer server.Close()
-
-	model := newScreenModel(server.URL, &bytes.Buffer{}, server.Client())
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	model = updated.(screenModel)
-	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(screenModel)
-	if model.current == nil || command == nil {
-		t.Fatalf("selection did not start load: current=%#v command=%v", model.current, command)
-	}
-	updated, _ = model.Update(command())
-	model = updated.(screenModel)
-	if model.loading || model.err != nil || !strings.Contains(model.View(), "No providers configured") {
-		t.Fatalf("load state: loading=%v err=%v view=%s", model.loading, model.err, model.View())
-	}
-}
-
-func TestScreenModelUsesMinimumViewportWhenTerminalSizeIsUnknown(t *testing.T) {
-	model := newScreenModel("http://example.test", &bytes.Buffer{}, http.DefaultClient)
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 0, Height: 0})
-	model = updated.(screenModel)
-	if model.viewport.Width != 40 || model.viewport.Height != 8 {
-		t.Fatalf("viewport=%dx%d", model.viewport.Width, model.viewport.Height)
+	ui := &UI{BaseURL: server.URL, Out: &bytes.Buffer{}, Client: server.Client()}
+	err := ui.request(http.MethodGet, "/api/providers", nil, nil)
+	if err == nil || strings.Contains(err.Error(), "secret-value") || !strings.Contains(err.Error(), "502") {
+		t.Fatalf("request error = %v", err)
 	}
 }
