@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
-	"time"
 
 	"g9router/internal/auth"
 	"g9router/internal/cli/tray"
@@ -55,10 +54,14 @@ func main() {
 	}
 	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY")})
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("cannot listen on %s: %v", addr, err)
+	}
 	fmt.Fprintln(os.Stderr, tui.Info("g9router listening on "+addr))
 	errors := make(chan error, 1)
-	go func() { errors <- http.ListenAndServe(addr, appHandler) }()
-	ready := waitReady(addr, 15*time.Second)
+	go func() { errors <- http.Serve(listener, appHandler) }()
+	ready := true
 	if ready && *trayMode {
 		executable, _ := os.Executable()
 		if err := tray.Run(portNumber(addr), executable, func() { os.Exit(0) }); err != nil {
@@ -74,19 +77,6 @@ func main() {
 		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
 	log.Fatal(<-errors)
-}
-
-func waitReady(addr string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		connection, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
-		if err == nil {
-			_ = connection.Close()
-			return true
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	return false
 }
 
 func openBrowser(target string) {
