@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -38,7 +39,7 @@ func (s *Store) load() error {
 	return json.Unmarshal(raw, &s.items)
 }
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepathDir(s.path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(s.items, "", "  ")
@@ -46,19 +47,6 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	return os.WriteFile(s.path, raw, 0600)
-}
-func filepathDir(path string) string {
-	index := len(path) - 1
-	for index >= 0 && path[index] != '/' {
-		index--
-	}
-	if index < 0 {
-		return "."
-	}
-	if index == 0 {
-		return "/"
-	}
-	return path[:index]
 }
 func (s *Store) List() []Key {
 	s.mu.Lock()

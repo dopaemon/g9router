@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 )
@@ -33,7 +34,7 @@ func (s *Store) load() error {
 	return json.Unmarshal(raw, &s.items)
 }
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepathDir(s.path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(s.items, "", "  ")
@@ -41,17 +42,6 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	return os.WriteFile(s.path, raw, 0600)
-}
-func filepathDir(path string) string {
-	for index := len(path) - 1; index >= 0; index-- {
-		if path[index] == '/' {
-			if index == 0 {
-				return "/"
-			}
-			return path[:index]
-		}
-	}
-	return "."
 }
 func (s *Store) List() []Combo {
 	s.mu.Lock()
