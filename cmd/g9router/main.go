@@ -21,6 +21,7 @@ import (
 )
 
 func main() {
+	tui.EnableColors(os.Stdout)
 	if len(os.Args) >= 3 && os.Args[1] == "xai" && os.Args[2] == "video" {
 		os.Exit(xai.Run(context.Background(), os.Args[3:], os.Stdout, os.Stderr))
 	}

@@ -1,6 +1,12 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"io"
+	"os"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+)
 
 var consoleStyles = struct {
 	Info, Success, Error, Muted lipgloss.Style
@@ -15,3 +21,10 @@ func Info(message string) string    { return consoleStyles.Info.Render("• " + 
 func Success(message string) string { return consoleStyles.Success.Render("✓ " + message) }
 func Error(message string) string   { return consoleStyles.Error.Render("✗ " + message) }
 func Muted(message string) string   { return consoleStyles.Muted.Render(message) }
+
+func EnableColors(output io.Writer) {
+	file, ok := output.(*os.File)
+	if ok && IsTerminal(file) {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
+}

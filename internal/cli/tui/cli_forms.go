@@ -9,6 +9,7 @@ import (
 )
 
 func (ui *UI) runHuh(form *huh.Form) error {
+	EnableColors(ui.Out)
 	return form.WithInput(ui.In).WithOutput(ui.Out).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
 }
 
