@@ -94,6 +94,21 @@ func (s *Store) Update(id string, active bool) (Key, bool, error) {
 	}
 	return Key{}, false, nil
 }
+
+func (s *Store) Rename(id, name string) (Key, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for index := range s.items {
+		if s.items[index].ID == id {
+			s.items[index].Name = name
+			if err := s.saveLocked(); err != nil {
+				return Key{}, false, err
+			}
+			return s.items[index], true, nil
+		}
+	}
+	return Key{}, false, nil
+}
 func (s *Store) Delete(id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

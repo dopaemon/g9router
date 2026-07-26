@@ -2,20 +2,26 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 
+	"g9router/internal/i18n"
 	"github.com/charmbracelet/huh"
 )
 
 func (ui *UI) runHuh(form *huh.Form) error {
-	EnableColors(ui.Out)
+	return ui.runHuhIO(form, ui.In, ui.Out)
+}
+
+func (ui *UI) runHuhIO(form *huh.Form, input io.Reader, output io.Writer) error {
+	EnableColors(output)
 	accessible := os.Getenv("G9ROUTER_ACCESSIBLE") == "1"
-	if file, ok := ui.In.(*os.File); !ok || !IsTerminal(file) {
+	if file, ok := input.(*os.File); !ok || !IsTerminal(file) {
 		accessible = true
 	}
-	return form.WithAccessible(accessible).WithInput(ui.In).WithOutput(ui.Out).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
+	return form.WithAccessible(accessible).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
 }
 
 func (ui *UI) promptProvider(item *provider, edit bool) error {
@@ -57,24 +63,51 @@ func (ui *UI) promptProvider(item *provider, edit bool) error {
 }
 
 func (ui *UI) promptAPIKey() (apiKey, error) {
+	return promptAPIKeyIO(ui.In, ui.Out, ui.runHuh, ui.request, ui.Locale)
+}
+
+func promptAPIKeyIO(input io.Reader, output io.Writer, run func(*huh.Form) error, request func(string, string, any, any) error, locale string) (apiKey, error) {
 	var name string
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Key name").Value(&name).Validate(huh.ValidateNotEmpty()),
-		huh.NewSelect[string]().Title("Finish").Options(
-			huh.NewOption("Save", "Save"),
-			huh.NewOption("Back", "Back"),
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(huh.ValidateNotEmpty()),
+		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
+			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
+			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
 		).Value(&finish),
 	))
-	if err := ui.runHuh(form); err != nil {
+	if err := run(form); err != nil {
 		return apiKey{}, err
 	}
 	if finish == "Back" {
 		return apiKey{}, huh.ErrUserAborted
 	}
 	var created apiKey
-	err := ui.request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(name)}, &created)
+	err := request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(name)}, &created)
 	return created, err
+}
+
+func (ui *UI) promptAPIKeyRename(key *apiKey) error {
+	return ui.promptAPIKeyRenameIO(key, ui.In, ui.Out, ui.runHuh, ui.request, ui.Locale)
+}
+
+func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Writer, run func(*huh.Form) error, request func(string, string, any, any) error, locale string) error {
+	name := key.Name
+	finish := "Save"
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(huh.ValidateNotEmpty()),
+		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
+			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
+			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
+		).Value(&finish),
+	))
+	if err := run(form); err != nil {
+		return err
+	}
+	if finish == "Back" {
+		return huh.ErrUserAborted
+	}
+	return request(http.MethodPut, "/api/keys/"+key.ID, map[string]string{"name": strings.TrimSpace(name)}, nil)
 }
 
 func (ui *UI) promptCombo(item *combo, edit bool) error {

@@ -56,3 +56,17 @@ func TestMiddlewareAcceptsSessionCookie(t *testing.T) {
 		t.Fatal(response.Code)
 	}
 }
+
+func TestMiddlewareAcceptsLocalCLI(t *testing.T) {
+	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "required")
+	request := httptest.NewRequest(http.MethodGet, "/api/keys", nil)
+	request.RemoteAddr = "127.0.0.1:12345"
+	request.Header.Set("X-G9Router-Local-CLI", "1")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", response.Code)
+	}
+}

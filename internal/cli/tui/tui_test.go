@@ -117,7 +117,7 @@ func TestProviderAndAuthSelections(t *testing.T) {
 	}
 }
 
-func TestSecretsAreRedactedAndMutationsReportSuccess(t *testing.T) {
+func TestSecretsAreRedactedAndMutationsStayQuiet(t *testing.T) {
 	if got := maskSecret("sk-1234567890"); got != "sk-1…7890" {
 		t.Fatalf("maskSecret() = %q", got)
 	}
@@ -135,8 +135,8 @@ func TestSecretsAreRedactedAndMutationsReportSuccess(t *testing.T) {
 	if err := ui.request(http.MethodPost, "/api/settings", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "POST /api/settings") {
-		t.Fatalf("missing mutation feedback: %q", output.String())
+	if output.Len() != 0 {
+		t.Fatalf("unexpected mutation output: %q", output.String())
 	}
 }
 
@@ -151,5 +151,54 @@ func TestRequestDoesNotExposeServerErrorBody(t *testing.T) {
 	err := ui.request(http.MethodGet, "/api/providers", nil, nil)
 	if err == nil || strings.Contains(err.Error(), "secret-value") || !strings.Contains(err.Error(), "502") {
 		t.Fatalf("request error = %v", err)
+	}
+}
+
+func TestPromptAPIKeyRename(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/keys/key-1" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["name"] != "renamed" {
+			t.Fatalf("payload = %#v", body)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, In: strings.NewReader("renamed\n1\n"), Out: &bytes.Buffer{}, Client: server.Client()}
+	if err := ui.promptAPIKeyRename(&apiKey{ID: "key-1", Name: "old"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEndpointLiveToggleTunnel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/tunnel/enable" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	model := endpointLiveModel{ui: &UI{BaseURL: server.URL, Out: &bytes.Buffer{}, Client: server.Client()}}
+	if notice, err := model.toggleTunnelIO(strings.NewReader(""), &bytes.Buffer{}); err != nil || notice != "Tunnel updated" {
+		t.Fatalf("toggle = %q, %v", notice, err)
+	}
+}
+
+func TestAPIEndpoint(t *testing.T) {
+	for input, want := range map[string]string{
+		"http://127.0.0.1:20128":  "http://127.0.0.1:20128/v1",
+		"https://example.test/v1": "https://example.test/v1",
+		"not installed":           "not installed",
+	} {
+		if got := apiEndpoint(input); got != want {
+			t.Fatalf("apiEndpoint(%q) = %q, want %q", input, got, want)
+		}
 	}
 }

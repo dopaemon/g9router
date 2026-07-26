@@ -3048,13 +3048,21 @@ func (s *Server) keyResourceAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"key": item})
 	case http.MethodPut:
 		var input struct {
-			IsActive *bool `json:"isActive"`
+			Name     string `json:"name"`
+			IsActive *bool  `json:"isActive"`
 		}
-		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.IsActive == nil {
-			writeJSON(w, 400, map[string]string{"error": "isActive is required"})
+		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || (strings.TrimSpace(input.Name) == "" && input.IsActive == nil) {
+			writeJSON(w, 400, map[string]string{"error": "name or isActive is required"})
 			return
 		}
-		item, ok, err := s.keys.Update(id, *input.IsActive)
+		var item keyStore.Key
+		var ok bool
+		var err error
+		if input.IsActive != nil {
+			item, ok, err = s.keys.Update(id, *input.IsActive)
+		} else {
+			item, ok, err = s.keys.Rename(id, strings.TrimSpace(input.Name))
+		}
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
@@ -5051,7 +5059,6 @@ func logging(next http.Handler) http.Handler {
 		started := time.Now()
 		next.ServeHTTP(w, r)
 		line := fmt.Sprintf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
-		log.Print(line)
 		addConsoleLog(line)
 	})
 }

@@ -6,11 +6,7 @@ import (
 )
 
 var supportedLocales = map[string]bool{
-	"en": true, "vi": true, "zh-CN": true, "zh-TW": true, "ja": true, "pt-BR": true, "pt-PT": true,
-	"ko": true, "es": true, "de": true, "fr": true, "he": true, "ar": true, "ru": true, "pl": true,
-	"cs": true, "nl": true, "tr": true, "uk": true, "tl": true, "id": true, "th": true, "km": true,
-	"hi": true, "bn": true, "ur": true, "ro": true, "sv": true, "it": true, "el": true, "hu": true,
-	"fi": true, "da": true, "no": true, "fa": true,
+	"en": true, "vi": true,
 }
 
 func (s *Server) localeAPI(w http.ResponseWriter, r *http.Request) {

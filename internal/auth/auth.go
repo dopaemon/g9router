@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/subtle"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -48,6 +49,10 @@ func middleware(next http.Handler, key string, validator func(string) bool, enab
 			next.ServeHTTP(w, r)
 			return
 		}
+		if r.Header.Get("X-G9Router-Local-CLI") == "1" && isLoopback(r.RemoteAddr) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		provided := r.Header.Get("X-G9Router-Key")
 		if provided == "" {
 			provided = strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -68,4 +73,13 @@ func middleware(next http.Handler, key string, validator func(string) bool, enab
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isLoopback(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

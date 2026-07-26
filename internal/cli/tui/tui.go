@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"g9router/internal/i18n"
 	"g9router/internal/providers"
 )
 
@@ -23,14 +24,24 @@ type UI struct {
 	In       io.Reader
 	Out      io.Writer
 	Client   *http.Client
+	Locale   string
 	forceHuh bool
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
-	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, forceHuh: true}
+	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, Locale: i18n.Normalize(os.Getenv("G9ROUTER_LOCALE")), forceHuh: true}
 	reader := bufio.NewReader(in)
 	return ui.huhMenu(reader)
 }
+
+func (ui *UI) t(key string) string { return i18n.T(ui.Locale, key) }
+
+const cliBanner = ` ██████╗  █████╗ ██████╗  ██████╗ ██╗   ██╗████████╗███████╗██████╗
+██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██║   ██║╚══██╔══╝██╔════╝██╔══██╗
+██║  ███╗╚██████║██████╔╝██║   ██║██║   ██║   ██║   █████╗  ██████╔╝
+██║   ██║ ╚═══██║██╔══██╗██║   ██║██║   ██║   ██║   ██╔══╝  ██╔══██╗
+╚██████╔╝ █████╔╝██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║
+ ╚═════╝  ╚════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝`
 
 func (ui *UI) showJSON(reader *bufio.Reader, path string) error {
 	request, err := http.NewRequest(http.MethodGet, ui.BaseURL+path, nil)
@@ -1027,11 +1038,11 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		case "b", "0":
 			return nil
 		case "a":
-			created, err := ui.promptAPIKey()
+			_, err := ui.promptAPIKey()
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(ui.Out, "Created key: %s\nSave it now; it is not shown again.\n", created.Key)
+			fmt.Fprintln(ui.Out, "API key created. Use View full to show it.")
 		case "c", "d", "t", "v":
 			if len(payload.Keys) == 0 {
 				fmt.Fprintln(ui.Out, "No API keys found.")
@@ -1144,6 +1155,7 @@ func (ui *UI) request(method, path string, body any, result any) error {
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
+	request.Header.Set("X-G9Router-Local-CLI", "1")
 	response, err := ui.Client.Do(request)
 	if err != nil {
 		return err
@@ -1158,9 +1170,6 @@ func (ui *UI) request(method, path string, body any, result any) error {
 	}
 	if result != nil && len(data) > 0 && json.Unmarshal(data, result) != nil {
 		return fmt.Errorf("invalid JSON response")
-	}
-	if method != http.MethodGet && method != http.MethodHead {
-		fmt.Fprintln(ui.Out, Success(strings.ToUpper(method)+" "+path))
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"g9router/internal/i18n"
 	"github.com/charmbracelet/huh"
 )
 
@@ -99,7 +100,15 @@ func isInteractiveWriter(writer io.Writer) bool {
 
 func (ui *UI) huhMenu(reader *bufio.Reader) error {
 	for {
-		choice, err := ui.huhChoice("9Router CLI", []string{"Providers", "API Keys", "Combos", "CLI Tools", "Settings", "OAuth", "Exit"})
+		endpoint := ui.t("menu.endpoint")
+		providers := ui.t("menu.providers")
+		combos := ui.t("menu.combos")
+		cliTools := ui.t("menu.cliTools")
+		settings := ui.t("menu.settings")
+		oauth := ui.t("menu.oauth")
+		language := ui.t("menu.language")
+		exit := ui.t("menu.exit")
+		choice, err := ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
 		if err != nil {
 			return err
 		}
@@ -117,20 +126,37 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			}
 		}
 		switch choice {
-		case "Providers":
-			run("Providers", func() error { return ui.providers(reader) })
-		case "API Keys":
-			run("API Keys", func() error { return ui.apiKeys(reader) })
-		case "Combos":
-			run("Combos", func() error { return ui.combos(reader) })
-		case "CLI Tools":
-			run("CLI Tools", func() error { return ui.cliTools(reader) })
-		case "Settings":
-			run("Settings", func() error { return ui.settings(reader) })
-		case "OAuth":
-			run("OAuth", func() error { return ui.oauth(reader) })
-		case "Exit":
+		case providers:
+			run(providers, func() error { return ui.providers(reader) })
+		case endpoint:
+			run(endpoint, func() error { return ui.liveEndpoint() })
+		case combos:
+			run(combos, func() error { return ui.combos(reader) })
+		case cliTools:
+			run(cliTools, func() error { return ui.cliTools(reader) })
+		case settings:
+			run(settings, func() error { return ui.settings(reader) })
+		case oauth:
+			run(oauth, func() error { return ui.oauth(reader) })
+		case language:
+			if err := ui.selectLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+				return err
+			}
+		case exit:
 			return nil
 		}
 	}
+}
+
+func (ui *UI) selectLanguage() error {
+	choice, err := ui.huhChoice(ui.t("language.title"), []string{ui.t("language.english"), ui.t("language.vietnamese")})
+	if err != nil {
+		return err
+	}
+	if choice == ui.t("language.vietnamese") {
+		ui.Locale = i18n.Vietnamese
+	} else {
+		ui.Locale = i18n.English
+	}
+	return nil
 }
