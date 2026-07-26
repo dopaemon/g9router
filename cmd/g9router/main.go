@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +15,8 @@ import (
 	"g9router/internal/cli/tui"
 	"g9router/internal/cli/xai"
 	"g9router/internal/server"
+	"github.com/charmbracelet/fang"
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -24,31 +24,46 @@ func main() {
 	if len(os.Args) >= 3 && os.Args[1] == "xai" && os.Args[2] == "video" {
 		os.Exit(xai.Run(context.Background(), os.Args[3:], os.Stdout, os.Stderr))
 	}
-	port := flag.Int("port", 0, "port to run the server")
-	flag.IntVar(port, "p", 0, "port to run the server")
-	host := flag.String("host", "", "host to bind")
-	flag.StringVar(host, "H", "", "host to bind")
-	noBrowser := flag.Bool("no-browser", false, "do not open the dashboard")
-	flag.BoolVar(noBrowser, "n", false, "do not open the dashboard")
-	interactive := flag.Bool("interactive", false, "run the interactive Huh CLI")
-	flag.Bool("log", false, "show server logs")
-	trayMode := flag.Bool("tray", false, "run in system tray mode")
-	flag.Bool("skip-update", false, "skip update check")
-	version := flag.Bool("version", false, "show version")
-	flag.Parse()
-	if *version {
-		fmt.Fprintln(os.Stdout, tui.Success("9Router v0.5.40"))
-		return
+	var options runOptions
+	command := &cobra.Command{
+		Use:   "g9router",
+		Short: "Go-compatible AI gateway",
+		Args:  cobra.NoArgs,
+		RunE:  func(*cobra.Command, []string) error { return run(options) },
 	}
+	flags := command.Flags()
+	flags.IntVarP(&options.port, "port", "p", 0, "port to run the server")
+	flags.StringVarP(&options.host, "host", "H", "", "host to bind")
+	flags.BoolVarP(&options.noBrowser, "no-browser", "n", false, "do not open the dashboard")
+	flags.BoolVar(&options.interactive, "interactive", false, "run the interactive Huh CLI")
+	flags.BoolVar(&options.log, "log", false, "show server logs")
+	flags.BoolVar(&options.tray, "tray", false, "run in system tray mode")
+	flags.BoolVar(&options.skipUpdate, "skip-update", false, "skip update check")
+	if err := fang.Execute(context.Background(), command, fang.WithVersion("9Router v0.5.40")); err != nil {
+		fmt.Fprintln(os.Stderr, tui.Error(err.Error()))
+		os.Exit(1)
+	}
+}
+
+type runOptions struct {
+	port                   int
+	host                   string
+	noBrowser, interactive bool
+	log, tray, skipUpdate  bool
+}
+
+func run(options runOptions) error {
+	port := options.port
 	addr := os.Getenv("G9ROUTER_ADDR")
-	if *host != "" || *port != 0 {
-		if *host == "" {
-			*host = "0.0.0.0"
+	if options.host != "" || port != 0 {
+		host := options.host
+		if host == "" {
+			host = "0.0.0.0"
 		}
-		if *port == 0 {
-			*port = 20128
+		if port == 0 {
+			port = 20128
 		}
-		addr = *host + ":" + strconv.Itoa(*port)
+		addr = host + ":" + strconv.Itoa(port)
 	}
 	if addr == "" {
 		addr = ":20128"
@@ -57,30 +72,29 @@ func main() {
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("cannot listen on %s: %v", addr, err)
+		return fmt.Errorf("cannot listen on %s: %w", addr, err)
 	}
 	fmt.Fprintln(os.Stderr, tui.Info("g9router listening on "+addr))
 	errors := make(chan error, 1)
 	go func() { errors <- http.Serve(listener, appHandler) }()
 	ready := true
-	if ready && *trayMode {
+	if ready && options.tray {
 		executable, _ := os.Executable()
 		if err := tray.Run(portNumber(addr), executable, func() { os.Exit(0) }); err != nil {
-			log.Printf("tray unavailable: %v", err)
+			fmt.Fprintln(os.Stderr, tui.Error("tray unavailable: "+err.Error()))
 		}
-		log.Fatal(<-errors)
+		return <-errors
 	}
-	if ready && (tui.IsTerminal(os.Stdin) || *interactive) {
+	if ready && (tui.IsTerminal(os.Stdin) || options.interactive) {
 		if err := tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout); err != nil {
-			log.Printf("interactive CLI: %v", err)
-			os.Exit(1)
+			return fmt.Errorf("interactive CLI: %w", err)
 		}
-		return
+		return nil
 	}
-	if ready && !*noBrowser {
+	if ready && !options.noBrowser {
 		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
-	log.Fatal(<-errors)
+	return <-errors
 }
 
 func openBrowser(target string) {
