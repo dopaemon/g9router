@@ -600,24 +600,7 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			return nil
 		}
 		if action == "a" {
-			var item combo
-			fmt.Fprint(ui.Out, "Name: ")
-			value, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			item.Name = strings.TrimSpace(value)
-			fmt.Fprint(ui.Out, "Models (comma-separated): ")
-			value, err = reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			for _, model := range strings.Split(strings.TrimSpace(value), ",") {
-				if strings.TrimSpace(model) != "" {
-					item.Models = append(item.Models, strings.TrimSpace(model))
-				}
-			}
-			if err := ui.request(http.MethodPost, "/api/combos", item, nil); err != nil {
+			if err := ui.promptCombo(&combo{}, false); err != nil {
 				return err
 			}
 			continue
@@ -691,38 +674,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 		case "b", "0":
 			return nil
 		case "a":
-			item := provider{Enabled: true, APIType: "openai"}
-			if err := ui.selectProvider(reader, &item); err != nil {
-				return err
-			}
-			mode, err := ui.selectAuthMode(reader)
-			if err != nil {
-				return err
-			}
-			if mode == "oauth" {
-				if item.ID != "codex" {
-					return fmt.Errorf("OAuth login is not available in CLI for %s", item.ID)
-				}
-				if err := ui.loginCodex(); err != nil {
-					return err
-				}
-				continue
-			}
-			for _, field := range []struct {
-				name   string
-				target *string
-			}{{"Name", &item.Name}, {"Base URL", &item.BaseURL}, {"API key", &item.APIKey}} {
-				if field.name != "API key" && *field.target != "" {
-					continue
-				}
-				fmt.Fprintf(ui.Out, "%s: ", field.name)
-				value, err := reader.ReadString('\n')
-				if err != nil {
-					return err
-				}
-				*field.target = strings.TrimSpace(value)
-			}
-			if err := ui.request(http.MethodPost, "/api/providers", item, nil); err != nil {
+			if err := ui.promptProvider(&provider{Enabled: true, APIType: "openai"}, false); err != nil {
 				return err
 			}
 		case "d", "e", "t":
@@ -868,13 +820,8 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		case "b", "0":
 			return nil
 		case "a":
-			fmt.Fprint(ui.Out, "Key name: ")
-			name, err := reader.ReadString('\n')
+			created, err := ui.promptAPIKey()
 			if err != nil {
-				return err
-			}
-			var created apiKey
-			if err := ui.request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(name)}, &created); err != nil {
 				return err
 			}
 			fmt.Fprintf(ui.Out, "Created key: %s\nSave it now; it is not shown again.\n", created.Key)
