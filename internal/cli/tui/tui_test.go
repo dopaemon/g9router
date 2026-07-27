@@ -485,3 +485,13 @@ func TestLogsPauseRefresh(t *testing.T) {
 		t.Fatal("logs should resume")
 	}
 }
+
+func TestLogsMouseUsesVisibleViewport(t *testing.T) {
+	model := &logsModel{tab: 1, cursor: 11, httpLog: make([]string, 12), itemsRegion: tuiRegion{top: 10, left: 1, width: 20, height: 10}}
+	if got := model.logIndexAtY(10); got != 2 {
+		t.Fatalf("first visible log = %d, want 2", got)
+	}
+	if got := model.logIndexAtY(19); got != 11 {
+		t.Fatalf("last visible log = %d, want 11", got)
+	}
+}

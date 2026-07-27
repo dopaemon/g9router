@@ -8,20 +8,23 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type logsRefreshMsg struct{}
 
 type logsModel struct {
-	ui      *UI
-	tab     int
-	cursor  int
-	apiLogs []apiLogEntry
-	httpLog []string
-	apiErr  error
-	httpErr error
-	detail  string
-	paused  bool
+	ui          *UI
+	tab         int
+	cursor      int
+	apiLogs     []apiLogEntry
+	httpLog     []string
+	apiErr      error
+	httpErr     error
+	detail      string
+	paused      bool
+	tabRegions  []tuiRegion
+	itemsRegion tuiRegion
 }
 
 type apiLogEntry struct {
@@ -43,6 +46,23 @@ func (model *logsModel) Init() tea.Cmd { return logsRefresh() }
 
 func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case tea.MouseMsg:
+		if model.detail != "" {
+			return model, nil
+		}
+		for index, region := range model.tabRegions {
+			if region.contains(message.X, message.Y) {
+				model.tab = index
+				model.cursor = 0
+				return model, nil
+			}
+		}
+		if model.itemsRegion.contains(message.X, message.Y) {
+			model.cursor = model.logIndexAtY(message.Y)
+			if (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft && model.rowCount() > 0 {
+				model.detail = model.detailForCursor()
+			}
+		}
 	case tea.KeyMsg:
 		if model.detail != "" {
 			switch message.String() {
@@ -86,7 +106,23 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return model, nil
 }
 
+func (model *logsModel) logIndexAtY(y int) int {
+	if model.rowCount() == 0 {
+		return 0
+	}
+	start := model.cursor - 9
+	if start < 0 {
+		start = 0
+	}
+	if start+10 > model.rowCount() {
+		start = max(0, model.rowCount()-10)
+	}
+	return moveIndex(start+y-model.itemsRegion.top, model.rowCount(), 0)
+}
+
 func (model *logsModel) View() string {
+	model.tabRegions = nil
+	model.itemsRegion = tuiRegion{}
 	if model.detail != "" {
 		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("logs.detail")) + "\n\n" + model.ui.innerStyle().Render(model.detail) + "\n\n" + mutedStyle.Render(model.ui.t("logs.detailControls")))
 	}
@@ -98,6 +134,17 @@ func (model *logsModel) View() string {
 			tabs[index] = mutedStyle.Render(tabs[index])
 		}
 	}
+	tabsTop := 2 + 1 + 2
+	left := 1 + 2
+	for index, tab := range tabs {
+		width := lipgloss.Width(tab)
+		model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: tabsTop, width: width, height: 1})
+		left += width
+		if index+1 < len(tabs) {
+			left += 2
+		}
+	}
+	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: 10}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	if model.paused {
 		content += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
