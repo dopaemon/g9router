@@ -156,7 +156,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 				return ui.cliTools(reader)
 			})
 		case settings:
-			run(settings, func() error { return ui.settings(reader) })
+			run(settings, func() error {
+				if ui.huhMode() {
+					return ui.liveSettings()
+				}
+				return ui.settings(reader)
+			})
 		case oauth:
 			run(oauth, func() error { return ui.oauth(reader) })
 		case language:
