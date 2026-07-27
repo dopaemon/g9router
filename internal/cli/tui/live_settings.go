@@ -91,6 +91,9 @@ func (model *settingsModel) View() string {
 		return model.ui.errorView(model.ui.t("menu.settings"), model.err)
 	}
 	cardWidth := model.ui.columnWidth(2)
+	if model.ui.compact() {
+		cardWidth = model.ui.innerWidth()
+	}
 	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +
 		settingsActionItem(0, model.ui.t("settings.toggleRTK"), settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
 		settingsActionItem(1, model.ui.t("settings.toggleHeadroom"), settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
@@ -106,12 +109,16 @@ func (model *settingsModel) View() string {
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard) + "\n\n" + controls)
+	cards := lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard)
+	if model.ui.compact() {
+		cards = lipgloss.JoinVertical(lipgloss.Left, runtimeCard, securityCard)
+	}
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + cards + "\n\n" + controls)
 }
 
 func settingsActionItem(index int, label string, enabled, selected bool) string {
 	status := ""
-	if label == "Toggle RTK" || label == "Toggle Headroom" || label == "Enable Tunnel" || label == "Disable Tunnel" {
+	if index < 4 {
 		status = " [" + map[bool]string{true: "ON", false: "OFF"}[enabled] + "]"
 	}
 	text := strconv.Itoa(index+1) + "  " + label + status

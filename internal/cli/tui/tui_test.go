@@ -305,6 +305,12 @@ func TestErrorSummaryLocalizesHTTPFailures(t *testing.T) {
 	}
 }
 
+func TestSettingsStatusSurvivesLocalizedLabels(t *testing.T) {
+	if got := settingsActionItem(0, "Bật/tắt RTK", true, false); !strings.Contains(got, "ON") {
+		t.Fatalf("localized settings status = %q", got)
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})
