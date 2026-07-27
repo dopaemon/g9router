@@ -95,13 +95,13 @@ func (model *settingsModel) View() string {
 		cardWidth = model.ui.innerWidth()
 	}
 	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +
-		settingsActionItem(0, model.ui.t("settings.toggleRTK"), settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
-		settingsActionItem(1, model.ui.t("settings.toggleHeadroom"), settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
-		settingsActionItem(2, model.ui.t("settings.enableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
-		settingsActionItem(3, model.ui.t("settings.disableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
+		settingsActionItem(model.ui, 0, model.ui.t("settings.toggleRTK"), settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
+		settingsActionItem(model.ui, 1, model.ui.t("settings.toggleHeadroom"), settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
+		settingsActionItem(model.ui, 2, model.ui.t("settings.enableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
+		settingsActionItem(model.ui, 3, model.ui.t("settings.disableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
 	securityCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.security")) + "\n" +
-		settingsActionItem(4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
-		settingsActionItem(5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
+		settingsActionItem(model.ui, 4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
+		settingsActionItem(model.ui, 5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
@@ -116,10 +116,10 @@ func (model *settingsModel) View() string {
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + cards + "\n\n" + controls)
 }
 
-func settingsActionItem(index int, label string, enabled, selected bool) string {
+func settingsActionItem(ui *UI, index int, label string, enabled, selected bool) string {
 	status := ""
 	if index < 4 {
-		status = " [" + map[bool]string{true: "ON", false: "OFF"}[enabled] + "]"
+		status = " [" + ui.t(map[bool]string{true: "common.on", false: "common.off"}[enabled]) + "]"
 	}
 	text := strconv.Itoa(index+1) + "  " + label + status
 	if selected {

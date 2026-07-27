@@ -307,8 +307,11 @@ func TestErrorSummaryLocalizesHTTPFailures(t *testing.T) {
 }
 
 func TestSettingsStatusSurvivesLocalizedLabels(t *testing.T) {
-	if got := settingsActionItem(0, "Bật/tắt RTK", true, false); !strings.Contains(got, "ON") {
+	if got := settingsActionItem(&UI{Locale: "en"}, 0, "Bật/tắt RTK", true, false); !strings.Contains(got, "ON") {
 		t.Fatalf("localized settings status = %q", got)
+	}
+	if got := settingsActionItem(&UI{Locale: "vi"}, 0, "Bật/tắt RTK", true, false); !strings.Contains(got, "BẬT") {
+		t.Fatalf("Vietnamese settings status = %q", got)
 	}
 }
 
