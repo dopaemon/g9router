@@ -165,6 +165,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		case oauth:
 			run(oauth, func() error { return ui.oauth(reader) })
 		case language:
+			if ui.huhMode() {
+				if err := ui.liveLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+					return err
+				}
+				continue
+			}
 			if err := ui.selectLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
