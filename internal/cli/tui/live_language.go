@@ -24,6 +24,14 @@ func (ui *UI) liveLanguage() error {
 func (model *languageModel) Init() tea.Cmd { return nil }
 
 func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft && mouse.Y >= 12 && mouse.Y <= 17 {
+		if mouse.X < 40 {
+			model.cursor = 0
+		} else {
+			model.cursor = 1
+		}
+		return model, model.selectLanguage()
+	}
 	if key, ok := message.(tea.KeyMsg); ok {
 		if index, err := strconv.Atoi(key.String()); err == nil && index >= 1 && index <= 2 {
 			model.cursor = index - 1

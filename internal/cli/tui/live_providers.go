@@ -62,6 +62,17 @@ func (model *providerLiveModel) Init() tea.Cmd { return providerRefresh() }
 
 func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case tea.MouseMsg:
+		if tab, ok := providerMouseTab(message.X, message.Y); ok {
+			model.tab, model.cursor = tab, 0
+			return model, nil
+		}
+		if index := model.providerMouseIndex(message.Y); index >= 0 && index < model.itemCount() {
+			model.cursor = index
+			if (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft {
+				return model, model.runAction()
+			}
+		}
 	case tea.KeyMsg:
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= model.itemCount() {
 			model.cursor = index - 1
@@ -107,6 +118,31 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, providerRefresh()
 	}
 	return model, nil
+}
+
+func providerMouseTab(x, y int) (providerTab, bool) {
+	if y < 13 || y > 15 {
+		return 0, false
+	}
+	switch {
+	case x < 9:
+		return customProviderTab, true
+	case x < 19:
+		return oauthProviderTab, true
+	case x < 30:
+		return freeProviderTab, true
+	case x < 40:
+		return apiKeyProviderTab, true
+	default:
+		return 0, false
+	}
+}
+
+func (model *providerLiveModel) providerMouseIndex(y int) int {
+	if y < 18 {
+		return -1
+	}
+	return (y - 18) / 1
 }
 
 func (model *providerLiveModel) View() string {
