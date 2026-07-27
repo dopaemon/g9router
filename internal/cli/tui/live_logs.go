@@ -121,7 +121,7 @@ func (model *logsModel) currentError() error {
 
 func (model *logsModel) currentContent() string {
 	if err := model.currentError(); err != nil {
-		message := errorStyle.Render(model.ui.t("common.error") + ": " + err.Error())
+		message := errorStyle.Render(model.ui.t("common.error") + ": " + model.ui.errorSummary(err))
 		if model.rowCount() > 0 {
 			message += "\n" + mutedStyle.Render(model.ui.t("logs.stale"))
 		}
