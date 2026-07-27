@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -49,6 +48,7 @@ import (
 	"g9router/internal/tunnel"
 	"g9router/internal/usage"
 	"g9router/internal/vertex"
+	"github.com/charmbracelet/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -102,7 +102,7 @@ func New(options Options) *Server {
 }
 
 func (s *Server) Run() error {
-	log.Printf("g9router listening on %s, upstream %s", s.options.Addr, s.options.Upstream)
+	log.Infof("g9router listening on %s, upstream %s", s.options.Addr, s.options.Upstream)
 	return http.ListenAndServe(s.options.Addr, s.Handler())
 }
 
