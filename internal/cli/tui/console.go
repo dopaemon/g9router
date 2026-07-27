@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 )
@@ -23,8 +24,14 @@ func Error(message string) string   { return consoleStyles.Error.Render("✗ " +
 func Muted(message string) string   { return consoleStyles.Muted.Render(message) }
 
 func EnableColors(output io.Writer) {
-	file, ok := output.(*os.File)
-	if ok && IsTerminal(file) {
+	switch colorprofile.Detect(output, os.Environ()).String() {
+	case "TrueColor":
 		lipgloss.SetColorProfile(termenv.TrueColor)
+	case "ANSI256":
+		lipgloss.SetColorProfile(termenv.ANSI256)
+	case "ANSI":
+		lipgloss.SetColorProfile(termenv.ANSI)
+	default:
+		lipgloss.SetColorProfile(termenv.Ascii)
 	}
 }

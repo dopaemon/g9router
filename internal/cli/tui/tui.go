@@ -30,6 +30,7 @@ type UI struct {
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, Locale: i18n.Normalize(os.Getenv("G9ROUTER_LOCALE")), forceHuh: true}
+	EnableColors(out)
 	reader := bufio.NewReader(in)
 	return ui.huhMenu(reader)
 }
