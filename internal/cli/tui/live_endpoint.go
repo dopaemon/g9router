@@ -27,6 +27,7 @@ type endpointLiveModel struct {
 	keys      []apiKey
 	notice    string
 	err       error
+	cursor    int
 }
 
 func (ui *UI) liveEndpoint() error {
@@ -44,9 +45,31 @@ func (model *endpointLiveModel) Init() tea.Cmd {
 func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if index, ok := endpointActionIndex(message.String()); ok {
+			model.cursor = index
+			return model, model.runEndpointAction(index)
+		}
 		switch message.String() {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
+		case "up", "k":
+			if model.cursor >= 2 {
+				model.cursor -= 2
+			}
+		case "down", "j":
+			if model.cursor+2 < 8 {
+				model.cursor += 2
+			}
+		case "left", "h":
+			if model.cursor%2 == 1 {
+				model.cursor--
+			}
+		case "right", "l":
+			if model.cursor%2 == 0 {
+				model.cursor++
+			}
+		case "enter", " ":
+			return model, model.runEndpointAction(model.cursor)
 		case "t":
 			return model, model.action(model.toggleTunnelIO)
 		case "s":
@@ -112,14 +135,51 @@ func endpointLine(label, value string) string {
 }
 
 func controlGrid(model *endpointLiveModel) string {
-	left := []string{"t " + model.ui.t("keys.tunnelToggle"), "c " + model.ui.t("keys.create"), "a " + model.ui.t("keys.toggle"), "v " + model.ui.t("keys.show")}
-	right := []string{"s " + model.ui.t("keys.tailscaleToggle"), "r " + model.ui.t("keys.rename"), "d " + model.ui.t("keys.delete"), "q " + model.ui.t("keys.back")}
+	items := []string{"t " + model.ui.t("keys.tunnelToggle"), "s " + model.ui.t("keys.tailscaleToggle"), "c " + model.ui.t("keys.create"), "r " + model.ui.t("keys.rename"), "a " + model.ui.t("keys.toggle"), "d " + model.ui.t("keys.delete"), "v " + model.ui.t("keys.show"), "q " + model.ui.t("keys.back")}
 	column := lipgloss.NewStyle().Width(30)
-	rows := make([]string, len(left))
-	for index := range left {
-		rows[index] = lipgloss.JoinHorizontal(lipgloss.Top, column.Render(controlsStyle.Render(left[index])), column.Render(controlsStyle.Render(right[index])))
+	rows := make([]string, 0, 4)
+	for index := 0; index < len(items); index += 2 {
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(controlItem(items[index], index == model.cursor)), column.Render(controlItem(items[index+1], index+1 == model.cursor))))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func controlItem(label string, selected bool) string {
+	style := controlsStyle
+	if selected {
+		style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
+	}
+	return style.Render(label)
+}
+
+func endpointActionIndex(value string) (int, bool) {
+	if len(value) != 1 || value[0] < '1' || value[0] > '8' {
+		return 0, false
+	}
+	return int(value[0] - '1'), true
+}
+
+func (model *endpointLiveModel) runEndpointAction(index int) tea.Cmd {
+	switch index {
+	case 0:
+		return model.action(model.toggleTunnelIO)
+	case 1:
+		return model.action(model.toggleTailscale)
+	case 2:
+		return model.action(model.createKey)
+	case 3:
+		return model.action(model.renameKey)
+	case 4:
+		return model.action(model.toggleKey)
+	case 5:
+		return model.action(model.deleteKey)
+	case 6:
+		return model.action(model.showKey)
+	case 7:
+		return tea.Quit
+	default:
+		return nil
+	}
 }
 
 func (model *endpointLiveModel) refresh() {
