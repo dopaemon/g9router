@@ -29,15 +29,9 @@ func (model sizedModel) View() string { return model.model.View() }
 func (ui *UI) cardWidth() int {
 	width := ui.width - 4
 	if width <= 0 {
-		width = 76
+		return 76
 	}
-	if width > 78 {
-		width = 78
-	}
-	if width < 20 {
-		width = 20
-	}
-	return width
+	return max(20, min(width, 78))
 }
 
 func (ui *UI) innerWidth() int {
@@ -49,9 +43,14 @@ func (ui *UI) innerWidth() int {
 }
 
 func (ui *UI) columnWidth(columns int) int {
+	if columns < 1 {
+		return ui.innerWidth()
+	}
 	width := (ui.innerWidth() - columns + 1) / columns
-	return width
+	return max(1, width)
 }
+
+func (ui *UI) compact() bool { return ui.innerWidth() < 56 }
 
 func (ui *UI) outerStyle() lipgloss.Style {
 	return outerCardStyle.Width(ui.cardWidth())
@@ -59,10 +58,10 @@ func (ui *UI) outerStyle() lipgloss.Style {
 
 func (ui *UI) innerStyle(width ...int) lipgloss.Style {
 	cardWidth := ui.innerWidth()
-	if len(width) > 0 && width[0] < cardWidth {
-		cardWidth = width[0]
+	if len(width) > 0 {
+		cardWidth = min(width[0], cardWidth)
 	}
-	return innerCardStyle.Width(cardWidth)
+	return innerCardStyle.Width(max(1, cardWidth))
 }
 
 func (ui *UI) controlStyle() lipgloss.Style {

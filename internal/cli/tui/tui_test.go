@@ -213,6 +213,12 @@ func TestResponsiveCardWidths(t *testing.T) {
 	if got := ui.columnWidth(2) * 2; got > ui.innerWidth() {
 		t.Fatalf("columns = %d, exceeds inner width %d", got, ui.innerWidth())
 	}
+	if !ui.compact() {
+		t.Fatal("narrow terminal should use compact layout")
+	}
+	if got := (&UI{width: 120}).innerStyle(100).GetWidth(); got > (&UI{width: 120}).innerWidth() {
+		t.Fatalf("inner style width = %d, exceeds inner width", got)
+	}
 }
 
 func TestTUIFormMultiSelect(t *testing.T) {
