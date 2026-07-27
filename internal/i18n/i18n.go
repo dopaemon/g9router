@@ -115,6 +115,7 @@ func init() {
 		"logs.apiAgent":               {"API & Agent Requests", "Request API & Agent"},
 		"logs.http":                   {"HTTP Server", "HTTP Server"},
 		"logs.empty":                  {"No logs yet.", "Chưa có log."},
+		"logs.stale":                  {"Showing last successful refresh.", "Đang hiển thị lần làm mới thành công gần nhất."},
 		"logs.controls":               {"↑↓/jk scroll  Tab switch  r refresh  q back", "↑↓/jk cuộn  Tab đổi tab  r làm mới  q quay lại"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]

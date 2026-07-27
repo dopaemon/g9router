@@ -17,7 +17,8 @@ type logsModel struct {
 	cursor  int
 	apiLogs []apiLogEntry
 	httpLog []string
-	err     error
+	apiErr  error
+	httpErr error
 }
 
 type apiLogEntry struct {
@@ -76,12 +77,27 @@ func (model *logsModel) View() string {
 			tabs[index] = mutedStyle.Render(tabs[index])
 		}
 	}
-	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.rows())
+	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + mutedStyle.Render(model.ui.t("logs.controls")))
-	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
-	}
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
+}
+
+func (model *logsModel) currentError() error {
+	if model.tab == 1 {
+		return model.httpErr
+	}
+	return model.apiErr
+}
+
+func (model *logsModel) currentContent() string {
+	if err := model.currentError(); err != nil {
+		message := errorStyle.Render(model.ui.t("common.error") + ": " + err.Error())
+		if model.rowCount() > 0 {
+			message += "\n" + mutedStyle.Render(model.ui.t("logs.stale"))
+		}
+		return message
+	}
+	return model.rows()
 }
 
 func (model *logsModel) rows() string {
@@ -145,18 +161,18 @@ func (model *logsModel) rowCount() int {
 
 func (model *logsModel) refresh() {
 	var apiLogs []apiLogEntry
-	if err := model.ui.request(http.MethodGet, "/api/usage/logs", nil, &apiLogs); err != nil {
-		model.err = err
-		return
-	}
+	apiErr := model.ui.request(http.MethodGet, "/api/usage/logs", nil, &apiLogs)
 	var payload struct {
 		Logs []string `json:"logs"`
 	}
-	if err := model.ui.request(http.MethodGet, "/api/translator/console-logs", nil, &payload); err != nil {
-		model.err = err
-		return
+	httpErr := model.ui.request(http.MethodGet, "/api/translator/console-logs", nil, &payload)
+	if apiErr == nil {
+		model.apiLogs = apiLogs
 	}
-	model.apiLogs, model.httpLog, model.err = apiLogs, payload.Logs, nil
+	if httpErr == nil {
+		model.httpLog = payload.Logs
+	}
+	model.apiErr, model.httpErr = apiErr, httpErr
 	if model.cursor >= model.rowCount() {
 		model.cursor = model.rowCount() - 1
 		if model.cursor < 0 {
