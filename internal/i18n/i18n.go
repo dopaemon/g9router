@@ -131,6 +131,16 @@ func init() {
 		"stats.estimatedCost":         {"Estimated cost", "Chi phí ước tính"},
 		"stats.noUsage":               {"No usage recorded yet.", "Chưa có dữ liệu sử dụng."},
 		"stats.noRequests":            {"No requests yet.", "Chưa có request."},
+		"controls.moveSwitch":         {"↑↓/jk move  Tab switch card", "↑↓/jk di chuyển  Tab đổi card"},
+		"controls.selectEdit":         {"Enter select  e edit", "Enter chọn  e sửa"},
+		"controls.deleteBack":         {"d delete  q back", "d xóa  q quay lại"},
+		"controls.comboMoveSelect":    {"↑↓/jk move  Enter select", "↑↓/jk di chuyển  Enter chọn"},
+		"controls.comboCreateAdd":     {"c create  a add model", "c tạo  a thêm model"},
+		"controls.comboEdit":          {"e edit", "e sửa"},
+		"controls.toolsMoveSwitch":    {"↑↓/jk move  ←→/hl switch", "↑↓/jk di chuyển  ←→/hl đổi"},
+		"controls.toolsShowResetBack": {"Enter/s show  r reset  q back", "Enter/s xem  r đặt lại  q quay lại"},
+		"controls.languageSwitch":     {"←→/hl switch", "←→/hl đổi"},
+		"controls.languageSelectBack": {"Enter select  q back", "Enter chọn  q quay lại"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}
