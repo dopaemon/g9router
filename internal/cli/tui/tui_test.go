@@ -495,3 +495,10 @@ func TestLogsMouseUsesVisibleViewport(t *testing.T) {
 		t.Fatalf("last visible log = %d, want 11", got)
 	}
 }
+
+func TestAPIKeyDetailUsesLocale(t *testing.T) {
+	ui := &UI{Locale: "vi"}
+	if got := fmt.Sprintf(ui.t("keys.value"), "sk-test"); got != "API key: sk-test" {
+		t.Fatalf("API key detail = %q", got)
+	}
+}

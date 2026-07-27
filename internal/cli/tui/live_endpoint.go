@@ -299,7 +299,7 @@ func (model *endpointLiveModel) showKey(input io.Reader, output io.Writer) (stri
 	if err := model.ui.request(http.MethodGet, "/api/keys/"+key.ID, nil, &detail); err != nil {
 		return "", err
 	}
-	return "API key: " + detail.Key.Key, nil
+	return fmt.Sprintf(model.ui.t("keys.value"), detail.Key.Key), nil
 }
 
 func (model *endpointLiveModel) toggleKey(input io.Reader, output io.Writer) (string, error) {
