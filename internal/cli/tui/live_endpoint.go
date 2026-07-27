@@ -110,9 +110,9 @@ func (model *endpointLiveModel) View() string {
 		return model.ui.errorView(model.ui.t("endpoint.title"), model.err)
 	}
 	endpointCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
-		endpointLine(model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
-		endpointLine(model.ui.t("endpoint.tunnel"), statusTextLocale(model.status.Tunnel.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(model.status.Tunnel.PublicURL))) + "\n" +
-		endpointLine(model.ui.t("endpoint.tailscale"), statusTextLocale(model.status.Tailscale.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(tailscaleState(model.status.Tailscale.TunnelURL, model.tailscale.Installed)))))
+		endpointLine(model.ui, model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
+		endpointLine(model.ui, model.ui.t("endpoint.tunnel"), statusTextLocale(model.status.Tunnel.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(model.status.Tunnel.PublicURL))) + "\n" +
+		endpointLine(model.ui, model.ui.t("endpoint.tailscale"), statusTextLocale(model.status.Tailscale.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(tailscaleState(model.status.Tailscale.TunnelURL, model.tailscale.Installed)))))
 	keys := ""
 	if len(model.keys) == 0 {
 		keys = model.ui.t("keys.none")
@@ -133,13 +133,23 @@ func (model *endpointLiveModel) View() string {
 	return view
 }
 
-func endpointLine(label, value string) string {
+func endpointLine(ui *UI, label, value string) string {
+	if ui.compact() {
+		return label + ": " + truncateText(value, ui.innerWidth()-len(label)-2)
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, endpointLabelStyle.Render(label), value)
 }
 
 func controlGrid(model *endpointLiveModel) string {
 	items := []string{"t " + model.ui.t("keys.tunnelToggle"), "s " + model.ui.t("keys.tailscaleToggle"), "c " + model.ui.t("keys.create"), "r " + model.ui.t("keys.rename"), "a " + model.ui.t("keys.toggle"), "d " + model.ui.t("keys.delete"), "v " + model.ui.t("keys.show"), "q " + model.ui.t("keys.back")}
 	column := model.ui.controlStyle()
+	if model.ui.compact() {
+		rows := make([]string, 0, len(items))
+		for index, item := range items {
+			rows = append(rows, controlItem(item, index == model.cursor))
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	}
 	rows := make([]string, 0, 4)
 	for index := 0; index < len(items); index += 2 {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(controlItem(items[index], index == model.cursor)), column.Render(controlItem(items[index+1], index+1 == model.cursor))))

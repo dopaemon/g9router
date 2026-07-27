@@ -14,6 +14,7 @@ import (
 
 	"g9router/internal/i18n"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestRunCLIToolsBack(t *testing.T) {
@@ -316,6 +317,13 @@ func TestCLIToolsCompactNavigationMovesOneRow(t *testing.T) {
 	model.Update(tea.KeyMsg{Type: tea.KeyDown})
 	if model.cursor != 3 {
 		t.Fatalf("compact cursor = %d, want 3", model.cursor)
+	}
+}
+
+func TestEndpointLineFitsCompactWidth(t *testing.T) {
+	ui := &UI{width: 42}
+	if got := lipgloss.Width(endpointLine(ui, "Local", "https://example.test/v1/with/a/long/path")); got > ui.innerWidth() {
+		t.Fatalf("endpoint line width = %d, limit = %d", got, ui.innerWidth())
 	}
 }
 
