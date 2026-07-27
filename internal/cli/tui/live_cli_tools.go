@@ -60,8 +60,7 @@ func (ui *UI) liveCLITools() error {
 	EnableColors(ui.Out)
 	model := cliToolsModel{ui: ui}
 	model.refresh()
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *cliToolsModel) Init() tea.Cmd { return cliToolsRefresh() }

@@ -31,8 +31,7 @@ func (ui *UI) liveSettings() error {
 	EnableColors(ui.Out)
 	model := settingsModel{ui: ui}
 	model.refresh()
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *settingsModel) Init() tea.Cmd { return settingsRefresh() }

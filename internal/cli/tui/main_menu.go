@@ -20,8 +20,13 @@ func (ui *UI) mainMenuChoice(items []string) (string, error) {
 		return "", nil
 	}
 	model := &mainMenuModel{ui: ui, items: items}
-	_, err := tea.NewProgram(model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
+	err := ui.runTea(model)
 	return model.selected, err
+}
+
+func (ui *UI) runTea(model tea.Model) error {
+	_, err := tea.NewProgram(model, tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen()).Run()
+	return err
 }
 
 func (model *mainMenuModel) Init() tea.Cmd { return nil }

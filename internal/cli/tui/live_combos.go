@@ -69,8 +69,7 @@ func (ui *UI) liveCombos() error {
 	EnableColors(ui.Out)
 	model := comboLiveModel{ui: ui}
 	model.refresh()
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *comboLiveModel) Init() tea.Cmd { return comboRefresh() }

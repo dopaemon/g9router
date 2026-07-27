@@ -55,8 +55,7 @@ func (ui *UI) liveProviders() error {
 	EnableColors(ui.Out)
 	model := providerLiveModel{ui: ui}
 	model.refresh()
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *providerLiveModel) Init() tea.Cmd { return providerRefresh() }

@@ -18,8 +18,7 @@ func (ui *UI) liveLanguage() error {
 	if ui.Locale == i18n.Vietnamese {
 		model.cursor = 1
 	}
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *languageModel) Init() tea.Cmd { return nil }

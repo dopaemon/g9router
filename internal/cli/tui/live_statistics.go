@@ -56,8 +56,7 @@ func (ui *UI) liveStatistics() error {
 	EnableColors(ui.Out)
 	model := statisticsModel{ui: ui, focusCurrent: true}
 	model.refresh()
-	_, err := tea.NewProgram(&model, tea.WithInput(ui.In), tea.WithOutput(ui.Out)).Run()
-	return err
+	return ui.runTea(&model)
 }
 
 func (model *statisticsModel) Init() tea.Cmd { return statisticsRefresh() }
