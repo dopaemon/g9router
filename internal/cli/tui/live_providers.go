@@ -37,18 +37,18 @@ type oauthProvider struct {
 }
 
 type providerLiveModel struct {
-	ui      *UI
-	tab     providerTab
-	cursor  int
-	custom  []provider
-	oauth   []oauthProvider
-	free    []provider
-	apiKeys []provider
-	notice  string
-	err     error
+	ui               *UI
+	tab              providerTab
+	cursor           int
+	custom           []provider
+	oauth            []oauthProvider
+	oauthConnections []provider
+	free             []provider
+	apiKeys          []provider
+	notice           string
+	err              error
 }
 
-var oauthProviderNames = []string{"claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
 var freeProviderNames = []string{"mimo-free"}
 
 func (ui *UI) liveProviders() error {
@@ -151,8 +151,13 @@ func (model *providerLiveModel) cardContent() string {
 		}
 	case oauthProviderTab:
 		title = "OAuth Providers"
-		for _, name := range oauthProviderNames {
-			rows = append(rows, name+" ["+model.oauthStatus(name)+"]")
+		rows = []string{"Add OAuth provider"}
+		for _, item := range model.oauthConnections {
+			name := item.Name
+			if name == "" {
+				name = item.ID
+			}
+			rows = append(rows, name+" ("+item.ID+") ["+statusText(item.Enabled)+"]")
 		}
 	case freeProviderTab:
 		title = "Free Tier Providers"
@@ -189,7 +194,7 @@ func (model *providerLiveModel) itemCount() int {
 	case customProviderTab:
 		return 2 + len(model.custom)
 	case oauthProviderTab:
-		return len(oauthProviderNames)
+		return 1 + len(model.oauthConnections)
 	case freeProviderTab:
 		return len(freeProviderNames)
 	default:
@@ -200,6 +205,9 @@ func (model *providerLiveModel) itemCount() int {
 func (model *providerLiveModel) runAction() tea.Cmd {
 	if model.tab == customProviderTab && model.cursor < 2 {
 		return model.action(model.add)
+	}
+	if model.tab == oauthProviderTab && model.cursor == 0 {
+		return model.action(model.addOAuth)
 	}
 	return model.action(model.edit)
 }
@@ -231,6 +239,17 @@ func (model *providerLiveModel) add(input io.Reader, output io.Writer) (string, 
 	return "Provider added", nil
 }
 
+func (model *providerLiveModel) addOAuth(input io.Reader, output io.Writer) (string, error) {
+	if model.tab != oauthProviderTab || model.cursor != 0 {
+		return "", nil
+	}
+	oldIn, oldOut := model.ui.In, model.ui.Out
+	model.ui.In, model.ui.Out = input, output
+	err := model.ui.loginOAuthProvider(bufio.NewReader(input))
+	model.ui.In, model.ui.Out = oldIn, oldOut
+	return "OAuth provider added", err
+}
+
 func (model *providerLiveModel) edit(input io.Reader, output io.Writer) (string, error) {
 	if model.tab == customProviderTab {
 		index := model.cursor - 2
@@ -246,10 +265,12 @@ func (model *providerLiveModel) edit(input io.Reader, output io.Writer) (string,
 		return model.editProvider(model.apiKeys[model.cursor], input, output)
 	}
 	if model.tab == oauthProviderTab {
-		if model.cursor >= len(oauthProviderNames) {
+		index := model.cursor - 1
+		if index < 0 || index >= len(model.oauthConnections) {
 			return "", nil
 		}
-		return "OAuth login: " + oauthProviderNames[model.cursor], model.loginOAuth(input, output, oauthProviderNames[model.cursor])
+		item := model.oauthConnections[index]
+		return "Provider updated", model.ui.request(http.MethodPut, "/api/providers/"+url.PathEscape(item.ID), map[string]bool{"enabled": !item.Enabled}, nil)
 	}
 	return "", nil
 }
@@ -276,9 +297,12 @@ func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (strin
 	if model.tab == apiKeyProviderTab && model.cursor < len(model.apiKeys) {
 		return "Provider deleted", model.deleteProvider(model.apiKeys[model.cursor].ID, input, output)
 	}
-	if model.tab == oauthProviderTab && model.cursor < len(oauthProviderNames) {
-		name := oauthProviderNames[model.cursor]
-		return "Credential deleted", model.deleteOAuth(name, input, output)
+	if model.tab == oauthProviderTab {
+		index := model.cursor - 1
+		if index < 0 || index >= len(model.oauthConnections) {
+			return "", nil
+		}
+		return "OAuth provider deleted", model.deleteOAuthProvider(model.oauthConnections[index], input, output)
 	}
 	return "", nil
 }
@@ -293,18 +317,20 @@ func (model *providerLiveModel) deleteProvider(id string, input io.Reader, outpu
 	return model.ui.request(http.MethodDelete, "/api/providers?id="+url.QueryEscape(id), nil, nil)
 }
 
-func (model *providerLiveModel) deleteOAuth(name string, input io.Reader, output io.Writer) error {
-	credential := model.oauthCredential(name)
-	if credential == nil {
-		return nil
-	}
-	ok, err := confirmHuh(input, output, "Delete OAuth credential?", func(form *huh.Form) error {
+func (model *providerLiveModel) deleteOAuthProvider(item provider, input io.Reader, output io.Writer) error {
+	ok, err := confirmHuh(input, output, "Delete OAuth provider?", func(form *huh.Form) error {
 		return model.ui.runHuhIO(form, input, output)
 	})
 	if err != nil || !ok {
 		return err
 	}
-	return model.ui.request(http.MethodDelete, "/api/oauth/"+url.PathEscape(credential.ID), nil, nil)
+	if err := model.ui.request(http.MethodDelete, "/api/providers?id="+url.QueryEscape(item.ID), nil, nil); err != nil {
+		return err
+	}
+	if credential := model.oauthCredential(item); credential != nil {
+		return model.ui.request(http.MethodDelete, "/api/oauth/"+url.PathEscape(credential.ID), nil, nil)
+	}
+	return nil
 }
 
 func (model *providerLiveModel) loginOAuth(input io.Reader, output io.Writer, name string) error {
@@ -326,9 +352,10 @@ func (model *providerLiveModel) refresh() {
 		model.err = err
 		return
 	}
-	model.custom, model.apiKeys = nil, nil
+	model.custom, model.oauthConnections, model.apiKeys = nil, nil, nil
 	for _, item := range response.Connections {
 		if item.OAuthID != "" {
+			model.oauthConnections = append(model.oauthConnections, item)
 			continue
 		}
 		if item.APIType == "openai" || item.APIType == "anthropic" {
@@ -352,16 +379,9 @@ func (model *providerLiveModel) refresh() {
 	}
 }
 
-func (model *providerLiveModel) oauthStatus(name string) string {
-	if model.oauthCredential(name) != nil {
-		return "ON"
-	}
-	return "OFF"
-}
-
-func (model *providerLiveModel) oauthCredential(name string) *oauthProvider {
+func (model *providerLiveModel) oauthCredential(item provider) *oauthProvider {
 	for index := range model.oauth {
-		if model.oauth[index].Provider == name || model.oauth[index].ID == name+"-oauth" {
+		if model.oauth[index].ID == item.OAuthID || model.oauth[index].Provider == item.ID {
 			return &model.oauth[index]
 		}
 	}
