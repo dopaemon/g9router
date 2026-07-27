@@ -5059,7 +5059,19 @@ func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		next.ServeHTTP(w, r)
+		if !shouldLogRequest(r.URL.Path) {
+			return
+		}
 		line := fmt.Sprintf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
 		addConsoleLog(line)
 	})
+}
+
+func shouldLogRequest(path string) bool {
+	switch path {
+	case "/api/usage/logs", "/api/translator/console-logs", "/api/translator/console-logs/stream":
+		return false
+	default:
+		return true
+	}
 }

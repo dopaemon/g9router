@@ -19,3 +19,14 @@ func TestConsoleLogsAPI(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestLoggingSkipsLogViewerRequests(t *testing.T) {
+	for _, path := range []string{"/api/usage/logs", "/api/translator/console-logs", "/api/translator/console-logs/stream"} {
+		if shouldLogRequest(path) {
+			t.Fatalf("log viewer request recorded: %s", path)
+		}
+	}
+	if !shouldLogRequest("/api/providers") {
+		t.Fatal("provider request was filtered")
+	}
+}
