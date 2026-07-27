@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,22 +32,23 @@ func (ui *UI) promptProvider(item *provider, edit bool) error {
 func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, output io.Writer) error {
 	apiType := item.APIType
 	finish := "Save"
+	locale := ui.Locale
 	if apiType == "" {
 		apiType = "openai"
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Provider ID").Value(&item.ID).Validate(func(value string) error { return validateRequired("Provider ID", value) }),
-		huh.NewInput().Title("Display name").Value(&item.Name),
-		huh.NewInput().Title("Base URL").Value(&item.BaseURL).Validate(func(value string) error { return validateRequired("Base URL", value) }),
-		huh.NewInput().Title("API key").EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(func(value string) error { return validateRequired("API key", value) }),
-		huh.NewSelect[string]().Title("API type").Options(
-			huh.NewOption("OpenAI-compatible", "openai"),
-			huh.NewOption("Anthropic", "anthropic"),
-			huh.NewOption("Gemini", "gemini"),
+		huh.NewInput().Title(i18n.T(locale, "form.providerID")).Value(&item.ID).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.providerID"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.displayName")).Value(&item.Name),
+		huh.NewInput().Title(i18n.T(locale, "form.baseURL")).Value(&item.BaseURL).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.baseURL"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.apiKey")).EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiKey"), value) }),
+		huh.NewSelect[string]().Title(i18n.T(locale, "form.apiType")).Options(
+			huh.NewOption(i18n.T(locale, "form.openAICompatible"), "openai"),
+			huh.NewOption(i18n.T(locale, "form.anthropic"), "anthropic"),
+			huh.NewOption(i18n.T(locale, "form.gemini"), "gemini"),
 		).Value(&apiType),
-		huh.NewSelect[string]().Title("Finish").Options(
-			huh.NewOption("Save", "Save"),
-			huh.NewOption("Back", "Back"),
+		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
+			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
+			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
 		).Value(&finish),
 	))
 	if err := ui.runHuhIO(form, input, output); err != nil {
@@ -135,16 +137,16 @@ func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.W
 	}
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Combo name").Value(&item.Name).Validate(func(value string) error { return validateRequired("Combo name", value) }),
-		huh.NewMultiSelect[string]().Title("Models list").Options(options...).Value(&models).Validate(func(value []string) error {
+		huh.NewInput().Title(i18n.T(ui.Locale, "screen.comboName")).Value(&item.Name).Validate(func(value string) error { return validateRequired(i18n.T(ui.Locale, "screen.comboName"), value) }),
+		huh.NewMultiSelect[string]().Title(i18n.T(ui.Locale, "screen.modelsList")).Options(options...).Value(&models).Validate(func(value []string) error {
 			if len(value) == 0 {
-				return fmt.Errorf("select at least one model")
+				return errors.New(i18n.T(ui.Locale, "form.selectModels"))
 			}
 			return nil
 		}),
-		huh.NewSelect[string]().Title("Finish").Options(
-			huh.NewOption("Save", "Save"),
-			huh.NewOption("Back", "Back"),
+		huh.NewSelect[string]().Title(i18n.T(ui.Locale, "form.finish")).Options(
+			huh.NewOption(i18n.T(ui.Locale, "common.save"), "Save"),
+			huh.NewOption(i18n.T(ui.Locale, "common.back"), "Back"),
 		).Value(&finish),
 	))
 	if err := ui.runHuhIO(form, input, output); err != nil {

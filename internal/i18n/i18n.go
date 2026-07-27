@@ -189,6 +189,10 @@ func init() {
 		"logs.model":                  {"Model", "Model"},
 		"logs.inputTokens":            {"Input tokens", "Token input"},
 		"logs.outputTokens":           {"Output tokens", "Token output"},
+		"form.openAICompatible":       {"OpenAI-compatible", "Tương thích OpenAI"},
+		"form.anthropic":              {"Anthropic", "Anthropic"},
+		"form.gemini":                 {"Gemini", "Gemini"},
+		"form.selectModels":           {"select at least one model", "chọn ít nhất một model"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}
