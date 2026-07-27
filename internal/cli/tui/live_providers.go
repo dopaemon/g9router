@@ -174,19 +174,29 @@ func (model *providerLiveModel) View() string {
 	}
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
-	left := 1 + 2
-	for index, tab := range tabLine {
-		width := lipgloss.Width(tab)
-		model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: model.tabsTop, width: width, height: 1})
-		left += width
-		if index+1 < len(tabLine) {
-			left += 2
+	tabView := lipgloss.JoinHorizontal(lipgloss.Top, tabLine...)
+	if model.ui.compact() {
+		tabView = lipgloss.JoinVertical(lipgloss.Left, tabLine...)
+	}
+	if model.ui.compact() {
+		for index := range tabLine {
+			model.tabRegions = append(model.tabRegions, tuiRegion{left: 1 + 2, top: model.tabsTop + index, width: model.ui.innerWidth(), height: 1})
+		}
+	} else {
+		left := 1 + 2
+		for index, tab := range tabLine {
+			width := lipgloss.Width(tab)
+			model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: model.tabsTop, width: width, height: 1})
+			left += width
+			if index+1 < len(tabLine) {
+				left += 2
+			}
 		}
 	}
-	model.itemsTop = model.tabsTop + 1 + 2 + 2 + 1
+	model.itemsTop = model.tabsTop + lipgloss.Height(tabView) + 2 + 2 + 1
 	model.itemsLeft = 1 + 2 + 1 + 2
 	model.itemsWidth = model.ui.innerWidth()
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, tabLine...) + "\n\n" + content + "\n\n" + controlCard)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + tabView + "\n\n" + content + "\n\n" + controlCard)
 }
 
 func (model *providerLiveModel) cardContent() string {

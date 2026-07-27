@@ -421,3 +421,14 @@ func TestLogDetailLabelsUseLocale(t *testing.T) {
 		t.Fatalf("localized detail = %q", detail)
 	}
 }
+
+func TestProviderCompactTabsStack(t *testing.T) {
+	model := &providerLiveModel{ui: &UI{width: 42, Locale: "en"}}
+	view := model.View()
+	if lipgloss.Height(view) == 0 || len(model.tabRegions) != 4 {
+		t.Fatalf("provider compact view regions = %d", len(model.tabRegions))
+	}
+	if model.tabRegions[1].top != model.tabRegions[0].top+1 || model.itemsTop <= model.tabsTop+4 {
+		t.Fatalf("provider compact geometry: tabs=%+v itemsTop=%d tabsTop=%d", model.tabRegions, model.itemsTop, model.tabsTop)
+	}
+}
