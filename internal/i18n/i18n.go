@@ -119,6 +119,18 @@ func init() {
 		"logs.controls":               {"↑↓/jk scroll  Tab switch  r refresh  q back", "↑↓/jk cuộn  Tab đổi tab  r làm mới  q quay lại"},
 		"logs.detail":                 {"Log Detail", "Chi tiết log"},
 		"logs.detailControls":         {"Enter/Esc/q back", "Enter/Esc/q quay lại"},
+		"controls.period":             {"←→/hl period", "←→/hl khoảng thời gian"},
+		"controls.tokenCursor":        {"↑↓/jk token cursor", "↑↓/jk cursor token"},
+		"controls.refresh":            {"r refresh", "r làm mới"},
+		"controls.back":               {"q back", "q quay lại"},
+		"stats.requests":              {"Requests", "Request"},
+		"stats.promptTokens":          {"Prompt tokens", "Token prompt"},
+		"stats.completionTokens":      {"Completion tokens", "Token completion"},
+		"stats.cachedTokens":          {"Cached tokens", "Token cache"},
+		"stats.totalTokens":           {"Total tokens", "Tổng token"},
+		"stats.estimatedCost":         {"Estimated cost", "Chi phí ước tính"},
+		"stats.noUsage":               {"No usage recorded yet.", "Chưa có dữ liệu sử dụng."},
+		"stats.noRequests":            {"No requests yet.", "Chưa có request."},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}

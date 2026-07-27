@@ -121,27 +121,34 @@ func (model *statisticsModel) View() string {
 		periods[index] = style.Render(model.ui.t(periodLabel(period)))
 	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls"))+"\n"+lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render("←→/hl period")),
-		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk token cursor"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.period"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.tokenCursor")))),
 		lipgloss.JoinHorizontal(lipgloss.Top,
-			model.ui.controlStyle().Render(mutedStyle.Render("r refresh")),
-			model.ui.controlStyle().Render(mutedStyle.Render("q back")),
+			model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.refresh"))),
+			model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.back"))),
 		))
 	breakdowns := lipgloss.JoinHorizontal(lipgloss.Top, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
 	activity := lipgloss.JoinHorizontal(lipgloss.Top, model.chartCard(), model.recentCard())
+	if model.ui.compact() {
+		breakdowns = lipgloss.JoinVertical(lipgloss.Left, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
+		activity = lipgloss.JoinVertical(lipgloss.Left, model.chartCard(), model.recentCard())
+	}
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, periods...) + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
 }
 
 func (model *statisticsModel) overviewCard() string {
 	rows := []string{
-		model.statisticsLine("Requests", formatInt(model.stats.TotalRequests), "Prompt tokens", formatInt(model.stats.TotalPromptTokens)),
-		model.statisticsLine("Completion tokens", formatInt(model.stats.TotalCompletionTokens), "Cached tokens", formatInt(model.stats.TotalCachedTokens)),
-		model.statisticsLine("Total tokens", formatInt(model.stats.TotalPromptTokens+model.stats.TotalCompletionTokens), "Estimated cost", fmt.Sprintf("$%.4f", model.stats.TotalCost)),
+		model.statisticsLine(model.ui.t("stats.requests"), formatInt(model.stats.TotalRequests), model.ui.t("stats.promptTokens"), formatInt(model.stats.TotalPromptTokens)),
+		model.statisticsLine(model.ui.t("stats.completionTokens"), formatInt(model.stats.TotalCompletionTokens), model.ui.t("stats.cachedTokens"), formatInt(model.stats.TotalCachedTokens)),
+		model.statisticsLine(model.ui.t("stats.totalTokens"), formatInt(model.stats.TotalPromptTokens+model.stats.TotalCompletionTokens), model.ui.t("stats.estimatedCost"), fmt.Sprintf("$%.4f", model.stats.TotalCost)),
 	}
 	return model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("screen.overview")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *statisticsModel) statisticsLine(leftLabel, leftValue, rightLabel, rightValue string) string {
+	if model.ui.compact() {
+		return leftLabel + ": " + leftValue + "\n" + rightLabel + ": " + rightValue
+	}
 	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
 	return lipgloss.JoinHorizontal(lipgloss.Top, column.Render(leftLabel+": "+leftValue), column.Render(rightLabel+": "+rightValue))
 }
@@ -157,9 +164,13 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 		rows = append(rows, truncateText(key, 24)+": "+formatInt(int64(values[key])))
 	}
 	if len(rows) == 0 {
-		rows = append(rows, "No usage recorded yet.")
+		rows = append(rows, model.ui.t("stats.noUsage"))
 	}
-	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(title) + "\n" + strings.Join(rows, "\n"))
+	width := model.ui.columnWidth(2)
+	if model.ui.compact() {
+		width = model.ui.innerWidth()
+	}
+	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(title) + "\n" + strings.Join(rows, "\n"))
 }
 
 func truncateText(value string, limit int) string {
@@ -202,7 +213,11 @@ func (model *statisticsModel) chartCard() string {
 		}
 		rows[index] = line
 	}
-	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(model.ui.t("screen.tokenUsage")) + "\n" + strings.Join(rows, "\n"))
+	width := model.ui.columnWidth(2)
+	if model.ui.compact() {
+		width = model.ui.innerWidth()
+	}
+	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(model.ui.t("screen.tokenUsage")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *statisticsModel) recentCard() string {
@@ -215,9 +230,13 @@ func (model *statisticsModel) recentCard() string {
 		rows = append(rows, fmt.Sprintf("%-5s %-10s %-7s %s/%s", status, truncateText(request.Model, 10), truncateText(request.Provider, 7), formatInt(request.PromptTokens), formatInt(request.CompletionTokens)))
 	}
 	if len(rows) == 0 {
-		rows = append(rows, "No requests yet.")
+		rows = append(rows, model.ui.t("stats.noRequests"))
 	}
-	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(model.ui.t("screen.recentRequests")) + "\n" + strings.Join(rows, "\n"))
+	width := model.ui.columnWidth(2)
+	if model.ui.compact() {
+		width = model.ui.innerWidth()
+	}
+	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(model.ui.t("screen.recentRequests")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *statisticsModel) refresh() {

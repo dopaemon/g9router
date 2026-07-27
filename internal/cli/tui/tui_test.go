@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"g9router/internal/i18n"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -265,6 +266,16 @@ func TestLanguageMouseRegionsUseRenderedCards(t *testing.T) {
 	}
 	if model.cardRegions[0].contains(24, 6) {
 		t.Fatal("outside language card should not be clickable")
+	}
+}
+
+func TestStatisticsTranslationsExist(t *testing.T) {
+	for _, locale := range []string{"en", "vi"} {
+		for _, key := range []string{"controls.period", "controls.tokenCursor", "stats.noUsage", "stats.noRequests"} {
+			if got := i18n.T(locale, key); got == key || got == "" {
+				t.Fatalf("missing %s translation for %s", key, locale)
+			}
+		}
 	}
 }
 
