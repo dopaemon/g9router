@@ -194,13 +194,13 @@ func (model *providerLiveModel) cardContent() string {
 	switch model.tab {
 	case customProviderTab:
 		title = model.ui.t("screen.customProviders")
-		rows = []string{"Add Anthropic Compatible", "Add OpenAI Compatible"}
+		rows = []string{model.ui.t("provider.addAnthropic"), model.ui.t("provider.addOpenAI")}
 		for _, item := range model.custom {
 			rows = append(rows, item.Name+" ("+item.ID+")")
 		}
 	case oauthProviderTab:
 		title = model.ui.t("screen.oauthProviders")
-		rows = []string{"Add OAuth provider"}
+		rows = []string{model.ui.t("provider.addOAuth")}
 		for _, item := range model.oauthConnections {
 			name := item.Name
 			if name == "" {
@@ -285,7 +285,7 @@ func (model *providerLiveModel) add(input io.Reader, output io.Writer) (string, 
 	if err := model.ui.promptProviderTUI(item, false, input, output); err != nil {
 		return "", err
 	}
-	return "Provider added", nil
+	return model.ui.t("notice.providerAdded"), nil
 }
 
 func (model *providerLiveModel) addOAuth(input io.Reader, output io.Writer) (string, error) {
@@ -296,7 +296,7 @@ func (model *providerLiveModel) addOAuth(input io.Reader, output io.Writer) (str
 	model.ui.In, model.ui.Out = input, output
 	err := model.ui.loginOAuthProvider(bufio.NewReader(input))
 	model.ui.In, model.ui.Out = oldIn, oldOut
-	return "OAuth provider added", err
+	return model.ui.t("notice.oauthAdded"), err
 }
 
 func (model *providerLiveModel) edit(input io.Reader, output io.Writer) (string, error) {
@@ -319,7 +319,7 @@ func (model *providerLiveModel) edit(input io.Reader, output io.Writer) (string,
 			return "", nil
 		}
 		item := model.oauthConnections[index]
-		return "Provider updated", model.ui.request(http.MethodPut, "/api/providers/"+url.PathEscape(item.ID), map[string]bool{"enabled": !item.Enabled}, nil)
+		return model.ui.t("notice.providerUpdated"), model.ui.request(http.MethodPut, "/api/providers/"+url.PathEscape(item.ID), map[string]bool{"enabled": !item.Enabled}, nil)
 	}
 	return "", nil
 }
@@ -331,7 +331,7 @@ func (model *providerLiveModel) editProvider(item provider, input io.Reader, out
 	if err := model.ui.request(http.MethodGet, "/api/providers/"+url.PathEscape(item.ID), nil, &current); err != nil {
 		return "", err
 	}
-	return "Provider updated", model.ui.promptProviderTUI(&current.Connection, true, input, output)
+	return model.ui.t("notice.providerUpdated"), model.ui.promptProviderTUI(&current.Connection, true, input, output)
 }
 
 func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (string, error) {
@@ -341,17 +341,17 @@ func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (strin
 			return "", nil
 		}
 		item := model.custom[index]
-		return "Provider deleted", model.deleteProvider(item.ID, input, output)
+		return model.ui.t("notice.providerDeleted"), model.deleteProvider(item.ID, input, output)
 	}
 	if model.tab == apiKeyProviderTab && model.cursor < len(model.apiKeys) {
-		return "Provider deleted", model.deleteProvider(model.apiKeys[model.cursor].ID, input, output)
+		return model.ui.t("notice.providerDeleted"), model.deleteProvider(model.apiKeys[model.cursor].ID, input, output)
 	}
 	if model.tab == oauthProviderTab {
 		index := model.cursor - 1
 		if index < 0 || index >= len(model.oauthConnections) {
 			return "", nil
 		}
-		return "OAuth provider deleted", model.deleteOAuthProvider(model.oauthConnections[index], input, output)
+		return model.ui.t("notice.oauthDeleted"), model.deleteOAuthProvider(model.oauthConnections[index], input, output)
 	}
 	return "", nil
 }

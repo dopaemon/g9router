@@ -214,7 +214,7 @@ func (model *comboLiveModel) create(input io.Reader, output io.Writer) (string, 
 		return "", err
 	}
 	model.draft = combo{}
-	return "Combo created", nil
+	return model.ui.t("notice.comboCreated"), nil
 }
 
 func (model *comboLiveModel) comboName(input io.Reader, output io.Writer) (string, error) {
@@ -237,7 +237,7 @@ func (model *comboLiveModel) addModel(input io.Reader, output io.Writer) (string
 		return "", err
 	}
 	model.draft.Models = append(model.draft.Models, selected)
-	return "Model added", nil
+	return model.ui.t("notice.modelAdded"), nil
 }
 
 func (model *comboLiveModel) edit(input io.Reader, output io.Writer) (string, error) {
@@ -249,7 +249,7 @@ func (model *comboLiveModel) edit(input io.Reader, output io.Writer) (string, er
 	if err := model.ui.promptComboTUI(&item, true, input, output); err != nil {
 		return "", err
 	}
-	return "Combo updated", nil
+	return model.ui.t("notice.comboUpdated"), nil
 }
 
 func (model *comboLiveModel) delete(input io.Reader, output io.Writer) (string, error) {
@@ -262,7 +262,7 @@ func (model *comboLiveModel) delete(input io.Reader, output io.Writer) (string, 
 	if err != nil || !ok {
 		return "", err
 	}
-	return "Combo deleted", model.ui.request(http.MethodDelete, "/api/combos/"+url.PathEscape(item.ID), nil, nil)
+	return model.ui.t("notice.comboDeleted"), model.ui.request(http.MethodDelete, "/api/combos/"+url.PathEscape(item.ID), nil, nil)
 }
 
 func (model *comboLiveModel) refresh() {

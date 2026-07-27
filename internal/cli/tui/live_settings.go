@@ -92,13 +92,13 @@ func (model *settingsModel) View() string {
 	}
 	cardWidth := model.ui.columnWidth(2)
 	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +
-		settingsActionItem(0, "Toggle RTK", settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
-		settingsActionItem(1, "Toggle Headroom", settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
-		settingsActionItem(2, "Enable Tunnel", settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
-		settingsActionItem(3, "Disable Tunnel", settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
+		settingsActionItem(0, model.ui.t("settings.toggleRTK"), settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
+		settingsActionItem(1, model.ui.t("settings.toggleHeadroom"), settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
+		settingsActionItem(2, model.ui.t("settings.enableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
+		settingsActionItem(3, model.ui.t("settings.disableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
 	securityCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.security")) + "\n" +
-		settingsActionItem(4, "Reset auth mode", false, model.cursor == 4) + "\n" +
-		settingsActionItem(5, "Reset password", false, model.cursor == 5) + "\n\n" + mutedStyle.Render("Password: "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
+		settingsActionItem(4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
+		settingsActionItem(5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
@@ -138,29 +138,29 @@ func (model *settingsModel) action(run func(io.Reader, io.Writer) (string, error
 func (model *settingsModel) runAction(input io.Reader, output io.Writer) (string, error) {
 	switch model.cursor {
 	case 0:
-		return "RTK updated", model.ui.request(http.MethodPut, "/api/settings", map[string]bool{"rtkEnabled": !settingsEnabled(model.values, "rtkEnabled")}, nil)
+		return model.ui.t("notice.rtkUpdated"), model.ui.request(http.MethodPut, "/api/settings", map[string]bool{"rtkEnabled": !settingsEnabled(model.values, "rtkEnabled")}, nil)
 	case 1:
-		return "Headroom updated", model.ui.request(http.MethodPut, "/api/settings", map[string]bool{"headroomEnabled": !settingsEnabled(model.values, "headroomEnabled")}, nil)
+		return model.ui.t("notice.headroomUpdated"), model.ui.request(http.MethodPut, "/api/settings", map[string]bool{"headroomEnabled": !settingsEnabled(model.values, "headroomEnabled")}, nil)
 	case 2:
-		return "Tunnel enabled", model.ui.request(http.MethodPost, "/api/tunnel/enable", nil, nil)
+		return model.ui.t("notice.tunnelEnabled"), model.ui.request(http.MethodPost, "/api/tunnel/enable", nil, nil)
 	case 3:
-		ok, err := model.ui.tuiConfirm("Disable the tunnel?", input, output)
+		ok, err := model.ui.tuiConfirm(model.ui.t("confirm.disableTunnel"), input, output)
 		if err != nil || !ok {
 			return "", err
 		}
-		return "Tunnel disabled", model.ui.request(http.MethodPost, "/api/tunnel/disable", nil, nil)
+		return model.ui.t("notice.tunnelDisabled"), model.ui.request(http.MethodPost, "/api/tunnel/disable", nil, nil)
 	case 4:
-		ok, err := model.ui.tuiConfirm("Switch authentication to password mode?", input, output)
+		ok, err := model.ui.tuiConfirm(model.ui.t("confirm.resetAuth"), input, output)
 		if err != nil || !ok {
 			return "", err
 		}
-		return "Auth mode reset", model.ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil)
+		return model.ui.t("notice.authReset"), model.ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil)
 	case 5:
-		ok, err := model.ui.tuiConfirm("Reset the admin password?", input, output)
+		ok, err := model.ui.tuiConfirm(model.ui.t("confirm.resetPassword"), input, output)
 		if err != nil || !ok {
 			return "", err
 		}
-		return "Password reset", model.ui.request(http.MethodPost, "/api/auth/reset-password", nil, nil)
+		return model.ui.t("notice.passwordReset"), model.ui.request(http.MethodPost, "/api/auth/reset-password", nil, nil)
 	}
 	return "", nil
 }
