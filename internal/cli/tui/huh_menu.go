@@ -103,14 +103,15 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		endpoint := ui.t("menu.endpoint")
 		providers := ui.t("menu.providers")
 		combos := ui.t("menu.combos")
+		statistics := ui.t("menu.statistics")
 		cliTools := ui.t("menu.cliTools")
 		settings := ui.t("menu.settings")
 		oauth := ui.t("menu.oauth")
 		language := ui.t("menu.language")
 		exit := ui.t("menu.exit")
-		choice, err := ui.mainMenuChoice([]string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
+		choice, err := ui.mainMenuChoice([]string{endpoint, providers, combos, statistics, cliTools, settings, oauth, language, exit})
 		if !isInteractiveWriter(ui.Out) {
-			choice, err = ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
+			choice, err = ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, statistics, cliTools, settings, oauth, language, exit})
 		}
 		if err != nil {
 			return err
@@ -145,6 +146,8 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 				}
 				return ui.combos(reader)
 			})
+		case statistics:
+			run(statistics, func() error { return ui.liveStatistics() })
 		case cliTools:
 			run(cliTools, func() error { return ui.cliTools(reader) })
 		case settings:
