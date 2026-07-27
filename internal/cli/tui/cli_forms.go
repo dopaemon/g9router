@@ -35,10 +35,10 @@ func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, outpu
 		apiType = "openai"
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Provider ID").Value(&item.ID).Validate(huh.ValidateNotEmpty()),
+		huh.NewInput().Title("Provider ID").Value(&item.ID).Validate(func(value string) error { return validateRequired("Provider ID", value) }),
 		huh.NewInput().Title("Display name").Value(&item.Name),
-		huh.NewInput().Title("Base URL").Value(&item.BaseURL).Validate(huh.ValidateNotEmpty()),
-		huh.NewInput().Title("API key").EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(huh.ValidateNotEmpty()),
+		huh.NewInput().Title("Base URL").Value(&item.BaseURL).Validate(func(value string) error { return validateRequired("Base URL", value) }),
+		huh.NewInput().Title("API key").EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(func(value string) error { return validateRequired("API key", value) }),
 		huh.NewSelect[string]().Title("API type").Options(
 			huh.NewOption("OpenAI-compatible", "openai"),
 			huh.NewOption("Anthropic", "anthropic"),
@@ -56,6 +56,9 @@ func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, outpu
 		return huh.ErrUserAborted
 	}
 	item.APIType = apiType
+	if err := validateProviderValues(item.ID, item.BaseURL, item.APIKey); err != nil {
+		return err
+	}
 	item.Enabled = true
 	method := http.MethodPost
 	path := "/api/providers"
@@ -74,7 +77,7 @@ func promptAPIKeyIO(input io.Reader, output io.Writer, run func(*huh.Form) error
 	var name string
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(huh.ValidateNotEmpty()),
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiName"), value) }),
 		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
 			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
 			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
@@ -85,6 +88,9 @@ func promptAPIKeyIO(input io.Reader, output io.Writer, run func(*huh.Form) error
 	}
 	if finish == "Back" {
 		return apiKey{}, huh.ErrUserAborted
+	}
+	if err := validateRequired(i18n.T(locale, "form.apiName"), name); err != nil {
+		return apiKey{}, err
 	}
 	var created apiKey
 	err := request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(name)}, &created)
@@ -99,7 +105,7 @@ func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Write
 	name := key.Name
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(huh.ValidateNotEmpty()),
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiName"), value) }),
 		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
 			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
 			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
@@ -110,6 +116,9 @@ func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Write
 	}
 	if finish == "Back" {
 		return huh.ErrUserAborted
+	}
+	if err := validateRequired(i18n.T(locale, "form.apiName"), name); err != nil {
+		return err
 	}
 	return request(http.MethodPut, "/api/keys/"+key.ID, map[string]string{"name": strings.TrimSpace(name)}, nil)
 }
@@ -126,7 +135,7 @@ func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.W
 	}
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Combo name").Value(&item.Name).Validate(huh.ValidateNotEmpty()),
+		huh.NewInput().Title("Combo name").Value(&item.Name).Validate(func(value string) error { return validateRequired("Combo name", value) }),
 		huh.NewMultiSelect[string]().Title("Models list").Options(options...).Value(&models).Validate(func(value []string) error {
 			if len(value) == 0 {
 				return fmt.Errorf("select at least one model")
@@ -147,6 +156,9 @@ func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.W
 	item.Models = make([]any, len(models))
 	for index, model := range models {
 		item.Models[index] = model
+	}
+	if err := validateComboValues(item.Name, models); err != nil {
+		return err
 	}
 	method := http.MethodPost
 	path := "/api/combos"

@@ -29,8 +29,8 @@ func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, outp
 		return huh.ErrUserAborted
 	}
 	item.ID, item.Name, item.BaseURL, item.APIKey, item.APIType = strings.TrimSpace(result.values[0]), strings.TrimSpace(result.values[1]), strings.TrimSpace(result.values[2]), result.values[3], result.values[4]
-	if item.ID == "" || item.BaseURL == "" || item.APIKey == "" {
-		return errors.New("provider ID, base URL, and API key are required")
+	if err := validateProviderValues(item.ID, item.BaseURL, item.APIKey); err != nil {
+		return err
 	}
 	item.Enabled = true
 	method, path := http.MethodPost, "/api/providers"
@@ -92,8 +92,8 @@ func (ui *UI) promptComboTUI(item *combo, edit bool, input io.Reader, output io.
 	for index, model := range result.selected[1] {
 		item.Models[index] = model
 	}
-	if item.Name == "" || len(item.Models) == 0 {
-		return errors.New("combo name and at least one model are required")
+	if err := validateComboValues(item.Name, comboModels(*item)); err != nil {
+		return err
 	}
 	method, path := http.MethodPost, "/api/combos"
 	if edit {

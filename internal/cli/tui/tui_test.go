@@ -279,6 +279,21 @@ func TestStatisticsTranslationsExist(t *testing.T) {
 	}
 }
 
+func TestSharedFormValidation(t *testing.T) {
+	if err := validateProviderValues("", "http://example.test", "key"); err == nil {
+		t.Fatal("empty provider ID should fail")
+	}
+	if err := validateProviderValues("id", "http://example.test", "key"); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateComboValues("combo", nil); err == nil {
+		t.Fatal("empty combo models should fail")
+	}
+	if err := validateComboValues("combo", []string{"model"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})
