@@ -4,7 +4,7 @@ test:
 	go test ./...
 
 build:
-	go build ./cmd/g9router
+	go build -v ./cmd/g9router
 
 run:
 	go run ./cmd/g9router
