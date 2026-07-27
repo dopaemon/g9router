@@ -189,6 +189,7 @@ func init() {
 		"logs.model":                  {"Model", "Model"},
 		"logs.inputTokens":            {"Input tokens", "Token input"},
 		"logs.outputTokens":           {"Output tokens", "Token output"},
+		"logs.paused":                 {"Auto-refresh paused", "Đã tạm dừng tự động làm mới"},
 		"form.openAICompatible":       {"OpenAI-compatible", "Tương thích OpenAI"},
 		"form.anthropic":              {"Anthropic", "Anthropic"},
 		"form.gemini":                 {"Gemini", "Gemini"},

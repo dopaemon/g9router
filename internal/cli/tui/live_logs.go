@@ -21,6 +21,7 @@ type logsModel struct {
 	apiErr  error
 	httpErr error
 	detail  string
+	paused  bool
 }
 
 type apiLogEntry struct {
@@ -73,9 +74,13 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return model, nil
 			}
 			model.refresh()
+		case "p":
+			model.paused = !model.paused
 		}
 	case logsRefreshMsg:
-		model.refresh()
+		if !model.paused {
+			model.refresh()
+		}
 		return model, logsRefresh()
 	}
 	return model, nil
@@ -94,6 +99,9 @@ func (model *logsModel) View() string {
 		}
 	}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
+	if model.paused {
+		content += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
+	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + mutedStyle.Render(model.ui.t("logs.controls")))
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
 }

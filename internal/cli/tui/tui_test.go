@@ -473,3 +473,15 @@ func TestLiveScreensRenderAtNarrowWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestLogsPauseRefresh(t *testing.T) {
+	model := &logsModel{ui: &UI{Locale: "en"}}
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if !model.paused {
+		t.Fatal("logs should pause")
+	}
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if model.paused {
+		t.Fatal("logs should resume")
+	}
+}
