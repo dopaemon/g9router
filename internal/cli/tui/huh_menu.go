@@ -139,7 +139,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		case endpoint:
 			run(endpoint, func() error { return ui.liveEndpoint() })
 		case combos:
-			run(combos, func() error { return ui.combos(reader) })
+			run(combos, func() error {
+				if ui.huhMode() {
+					return ui.liveCombos()
+				}
+				return ui.combos(reader)
+			})
 		case cliTools:
 			run(cliTools, func() error { return ui.cliTools(reader) })
 		case settings:

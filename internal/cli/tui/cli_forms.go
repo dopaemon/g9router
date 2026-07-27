@@ -115,33 +115,38 @@ func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Write
 }
 
 func (ui *UI) promptCombo(item *combo, edit bool) error {
-	models := make([]string, 0, len(item.Models))
-	for _, model := range item.Models {
-		if value, ok := model.(string); ok {
-			models = append(models, value)
-		}
+	return ui.promptComboIO(item, edit, ui.In, ui.Out)
+}
+
+func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.Writer) error {
+	models := comboModels(*item)
+	options, err := ui.comboModelOptions()
+	if err != nil {
+		return err
 	}
-	modelText := strings.Join(models, ", ")
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Combo name").Value(&item.Name).Validate(huh.ValidateNotEmpty()),
-		huh.NewInput().Title("Models").Description("Comma-separated model IDs").Value(&modelText).Validate(huh.ValidateNotEmpty()),
+		huh.NewMultiSelect[string]().Title("Models list").Options(options...).Value(&models).Validate(func(value []string) error {
+			if len(value) == 0 {
+				return fmt.Errorf("select at least one model")
+			}
+			return nil
+		}),
 		huh.NewSelect[string]().Title("Finish").Options(
 			huh.NewOption("Save", "Save"),
 			huh.NewOption("Back", "Back"),
 		).Value(&finish),
 	))
-	if err := ui.runHuh(form); err != nil {
+	if err := ui.runHuhIO(form, input, output); err != nil {
 		return err
 	}
 	if finish == "Back" {
 		return huh.ErrUserAborted
 	}
-	item.Models = nil
-	for _, model := range strings.Split(modelText, ",") {
-		if value := strings.TrimSpace(model); value != "" {
-			item.Models = append(item.Models, value)
-		}
+	item.Models = make([]any, len(models))
+	for index, model := range models {
+		item.Models[index] = model
 	}
 	method := http.MethodPost
 	path := "/api/combos"
