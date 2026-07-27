@@ -103,7 +103,7 @@ func (model *logsModel) detailForCursor() string {
 		return redactLogText(model.httpLog[model.cursor])
 	}
 	entry := model.apiLogs[model.cursor]
-	return redactLogText(fmt.Sprintf("Timestamp: %s\nStatus: %s\nProvider: %s\nModel: %s\nInput tokens: %d\nOutput tokens: %d", entry.Timestamp, entry.Status, entry.Provider, entry.Model, entry.Input, entry.Output))
+	return redactLogText(fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %d\n%s: %d", model.ui.t("logs.timestamp"), entry.Timestamp, model.ui.t("logs.status"), entry.Status, model.ui.t("logs.provider"), entry.Provider, model.ui.t("logs.model"), entry.Model, model.ui.t("logs.inputTokens"), entry.Input, model.ui.t("logs.outputTokens"), entry.Output))
 }
 
 var logSecretPattern = regexp.MustCompile(`(?i)(bearer\s+|token=|secret=|password=|api[_-]?key=)([^\s,]+)`)

@@ -414,3 +414,10 @@ func TestLogsRefreshPreservesHealthySource(t *testing.T) {
 		t.Fatalf("http logs = %#v", model.httpLog)
 	}
 }
+
+func TestLogDetailLabelsUseLocale(t *testing.T) {
+	model := &logsModel{ui: &UI{Locale: "vi"}, cursor: 0, apiLogs: []apiLogEntry{{Timestamp: "now"}}}
+	if detail := model.detailForCursor(); !strings.Contains(detail, "Thời gian:") || strings.Contains(detail, "Timestamp:") {
+		t.Fatalf("localized detail = %q", detail)
+	}
+}

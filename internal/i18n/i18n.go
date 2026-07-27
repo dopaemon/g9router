@@ -183,6 +183,12 @@ func init() {
 		"confirm.resetTool":           {"Reset %s settings?", "Đặt lại cấu hình %s?"},
 		"notice.settingsReset":        {"Settings reset", "Đã đặt lại cấu hình"},
 		"screen.combo":                {"Combo: %s", "Combo: %s"},
+		"logs.timestamp":              {"Timestamp", "Thời gian"},
+		"logs.status":                 {"Status", "Trạng thái"},
+		"logs.provider":               {"Provider", "Provider"},
+		"logs.model":                  {"Model", "Model"},
+		"logs.inputTokens":            {"Input tokens", "Token input"},
+		"logs.outputTokens":           {"Output tokens", "Token output"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}
