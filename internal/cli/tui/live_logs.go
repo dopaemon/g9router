@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type logsModel struct {
 	httpLog []string
 	apiErr  error
 	httpErr error
+	detail  string
 }
 
 type apiLogEntry struct {
@@ -41,6 +43,13 @@ func (model *logsModel) Init() tea.Cmd { return logsRefresh() }
 func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.detail != "" {
+			switch message.String() {
+			case "q", "esc", "enter":
+				model.detail = ""
+			}
+			return model, nil
+		}
 		switch message.String() {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
@@ -59,6 +68,10 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				model.cursor++
 			}
 		case "r", "enter", " ":
+			if message.String() == "enter" && model.rowCount() > 0 {
+				model.detail = model.detailForCursor()
+				return model, nil
+			}
 			model.refresh()
 		}
 	case logsRefreshMsg:
@@ -69,6 +82,9 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *logsModel) View() string {
+	if model.detail != "" {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("logs.detail")) + "\n\n" + model.ui.innerStyle().Render(model.detail) + "\n\n" + mutedStyle.Render(model.ui.t("logs.detailControls")))
+	}
 	tabs := []string{model.ui.t("logs.apiAgent"), model.ui.t("logs.http")}
 	for index := range tabs {
 		if index == model.tab {
@@ -80,6 +96,20 @@ func (model *logsModel) View() string {
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + mutedStyle.Render(model.ui.t("logs.controls")))
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
+}
+
+func (model *logsModel) detailForCursor() string {
+	if model.tab == 1 {
+		return redactLogText(model.httpLog[model.cursor])
+	}
+	entry := model.apiLogs[model.cursor]
+	return redactLogText(fmt.Sprintf("Timestamp: %s\nStatus: %s\nProvider: %s\nModel: %s\nInput tokens: %d\nOutput tokens: %d", entry.Timestamp, entry.Status, entry.Provider, entry.Model, entry.Input, entry.Output))
+}
+
+var logSecretPattern = regexp.MustCompile(`(?i)(bearer\s+|token=|secret=|password=|api[_-]?key=)([^\s,]+)`)
+
+func redactLogText(value string) string {
+	return logSecretPattern.ReplaceAllString(value, "$1••••")
 }
 
 func (model *logsModel) currentError() error {

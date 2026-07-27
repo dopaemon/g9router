@@ -265,3 +265,10 @@ func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 		t.Fatalf("log row width = %d, limit = %d", got, model.ui.innerWidth()-2)
 	}
 }
+
+func TestRedactLogText(t *testing.T) {
+	got := redactLogText("Authorization: Bearer secret-token password=hidden")
+	if strings.Contains(got, "secret-token") || strings.Contains(got, "hidden") {
+		t.Fatalf("redacted log = %q", got)
+	}
+}
