@@ -6,7 +6,6 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/colorprofile v0.4.2
 	github.com/charmbracelet/fang v1.0.0
-	github.com/charmbracelet/harmonica v0.2.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0

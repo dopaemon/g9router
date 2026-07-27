@@ -25,6 +25,8 @@ type UI struct {
 	Out      io.Writer
 	Client   *http.Client
 	Locale   string
+	width    int
+	height   int
 	forceHuh bool
 }
 

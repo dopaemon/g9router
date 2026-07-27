@@ -64,6 +64,11 @@ func (model *statisticsModel) Init() tea.Cmd { return statisticsRefresh() }
 func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, statisticsRefresh()
+		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= len(statisticsPeriods) {
 			model.period = index - 1
 			model.focusCurrent = true
@@ -105,40 +110,39 @@ func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *statisticsModel) View() string {
 	if model.err != nil {
-		return outerCardStyle.Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + model.err.Error() + "\n\n" + mutedStyle.Render("Press q or Esc to go back."))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
 	periods := make([]string, len(statisticsPeriods))
 	for index, period := range statisticsPeriods {
 		style := mutedStyle.Padding(0, 1)
 		if index == model.period {
-			style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
+			style = focusStyle
 		}
-		periods[index] = style.Render(periodLabel(period))
+		periods[index] = style.Render(model.ui.t(periodLabel(period)))
 	}
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls")+"\n"+lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("←→/hl period")),
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/jk token cursor"))),
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls"))+"\n"+lipgloss.JoinHorizontal(lipgloss.Top,
+		model.ui.controlStyle().Render(mutedStyle.Render("←→/hl period")),
+		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk token cursor"))),
 		lipgloss.JoinHorizontal(lipgloss.Top,
-			lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("r refresh")),
-			lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("q back")),
+			model.ui.controlStyle().Render(mutedStyle.Render("r refresh")),
+			model.ui.controlStyle().Render(mutedStyle.Render("q back")),
 		))
-	breakdowns := lipgloss.JoinHorizontal(lipgloss.Top, model.breakdownCard("By Provider", model.stats.ByProvider), model.breakdownCard("By Model", model.stats.ByModel))
+	breakdowns := lipgloss.JoinHorizontal(lipgloss.Top, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
 	activity := lipgloss.JoinHorizontal(lipgloss.Top, model.chartCard(), model.recentCard())
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, periods...) + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, periods...) + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
 }
 
 func (model *statisticsModel) overviewCard() string {
 	rows := []string{
-		statisticsLine("Requests", formatInt(model.stats.TotalRequests), "Prompt tokens", formatInt(model.stats.TotalPromptTokens)),
-		statisticsLine("Completion tokens", formatInt(model.stats.TotalCompletionTokens), "Cached tokens", formatInt(model.stats.TotalCachedTokens)),
-		statisticsLine("Total tokens", formatInt(model.stats.TotalPromptTokens+model.stats.TotalCompletionTokens), "Estimated cost", fmt.Sprintf("$%.4f", model.stats.TotalCost)),
+		model.statisticsLine("Requests", formatInt(model.stats.TotalRequests), "Prompt tokens", formatInt(model.stats.TotalPromptTokens)),
+		model.statisticsLine("Completion tokens", formatInt(model.stats.TotalCompletionTokens), "Cached tokens", formatInt(model.stats.TotalCachedTokens)),
+		model.statisticsLine("Total tokens", formatInt(model.stats.TotalPromptTokens+model.stats.TotalCompletionTokens), "Estimated cost", fmt.Sprintf("$%.4f", model.stats.TotalCost)),
 	}
-	return innerCardStyle.Render(cardTitleStyle.Render("Overview") + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("screen.overview")) + "\n" + strings.Join(rows, "\n"))
 }
 
-func statisticsLine(leftLabel, leftValue, rightLabel, rightValue string) string {
-	column := lipgloss.NewStyle().Width(30)
+func (model *statisticsModel) statisticsLine(leftLabel, leftValue, rightLabel, rightValue string) string {
+	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
 	return lipgloss.JoinHorizontal(lipgloss.Top, column.Render(leftLabel+": "+leftValue), column.Render(rightLabel+": "+rightValue))
 }
 
@@ -155,7 +159,7 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 	if len(rows) == 0 {
 		rows = append(rows, "No usage recorded yet.")
 	}
-	return innerCardStyle.Width(31).Render(cardTitleStyle.Render(title) + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(title) + "\n" + strings.Join(rows, "\n"))
 }
 
 func truncateText(value string, limit int) string {
@@ -194,11 +198,11 @@ func (model *statisticsModel) chartCard() string {
 		width := int(point.Tokens * 10 / max)
 		line := fmt.Sprintf("✦ %-8s %-10s %s", point.Label, strings.Repeat("█", width), formatInt(point.Tokens))
 		if chartIndex == model.chartCursor {
-			line = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Render(line)
+			line = focusStyle.Render(line)
 		}
 		rows[index] = line
 	}
-	return innerCardStyle.Width(31).Render(cardTitleStyle.Render("Token Usage") + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(model.ui.t("screen.tokenUsage")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *statisticsModel) recentCard() string {
@@ -213,7 +217,7 @@ func (model *statisticsModel) recentCard() string {
 	if len(rows) == 0 {
 		rows = append(rows, "No requests yet.")
 	}
-	return innerCardStyle.Width(31).Render(cardTitleStyle.Render("Recent Requests") + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle(model.ui.columnWidth(2)).Render(cardTitleStyle.Render(model.ui.t("screen.recentRequests")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *statisticsModel) refresh() {
@@ -250,7 +254,7 @@ func (model *statisticsModel) refresh() {
 }
 
 func periodLabel(period string) string {
-	return map[string]string{"today": "Today", "24h": "24h", "7d": "7d", "30d": "30d", "60d": "60d"}[period]
+	return map[string]string{"today": "period.today", "24h": "period.24h", "7d": "period.7d", "30d": "period.30d", "60d": "period.60d"}[period]
 }
 
 func formatInt(value int64) string {

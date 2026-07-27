@@ -202,3 +202,13 @@ func TestAPIEndpoint(t *testing.T) {
 		}
 	}
 }
+
+func TestResponsiveCardWidths(t *testing.T) {
+	ui := &UI{width: 42}
+	if got := ui.cardWidth(); got > 38 {
+		t.Fatalf("card width = %d, exceeds terminal content", got)
+	}
+	if got := ui.columnWidth(2) * 2; got > ui.innerWidth() {
+		t.Fatalf("columns = %d, exceeds inner width %d", got, ui.innerWidth())
+	}
+}

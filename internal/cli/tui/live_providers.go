@@ -47,6 +47,8 @@ type providerLiveModel struct {
 	apiKeys          []provider
 	notice           string
 	err              error
+	tabsTop          int
+	itemsTop         int
 }
 
 var freeProviderNames = []string{"mimo-free"}
@@ -63,7 +65,7 @@ func (model *providerLiveModel) Init() tea.Cmd { return providerRefresh() }
 func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.MouseMsg:
-		if tab, ok := providerMouseTab(message.X, message.Y); ok {
+		if tab, ok := model.providerMouseTab(message.X, message.Y); ok {
 			model.tab, model.cursor = tab, 0
 			return model, nil
 		}
@@ -74,6 +76,11 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, providerRefresh()
+		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= model.itemCount() {
 			model.cursor = index - 1
 			return model, model.runAction()
@@ -120,46 +127,40 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return model, nil
 }
 
-func providerMouseTab(x, y int) (providerTab, bool) {
-	if y < 13 || y > 15 {
+func (model *providerLiveModel) providerMouseTab(x, y int) (providerTab, bool) {
+	if y < model.tabsTop || y >= model.tabsTop+1 {
 		return 0, false
 	}
-	switch {
-	case x < 9:
-		return customProviderTab, true
-	case x < 19:
-		return oauthProviderTab, true
-	case x < 30:
-		return freeProviderTab, true
-	case x < 40:
-		return apiKeyProviderTab, true
-	default:
-		return 0, false
+	width := model.ui.columnWidth(4)
+	index := x / width
+	if index >= 0 && index < 4 {
+		return providerTab(index), true
 	}
+	return 0, false
 }
 
 func (model *providerLiveModel) providerMouseIndex(y int) int {
-	if y < 18 {
+	if y < model.itemsTop {
 		return -1
 	}
-	return (y - 18) / 1
+	return y - model.itemsTop
 }
 
 func (model *providerLiveModel) View() string {
 	if model.err != nil {
-		return outerCardStyle.Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + model.err.Error() + "\n\n" + mutedStyle.Render("Press q or Esc to go back."))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
-	tabs := []string{"Custom", "OAuth", "Free Tier", "API Key"}
+	tabs := []string{model.ui.t("tab.custom"), model.ui.t("tab.oauth"), model.ui.t("tab.free"), model.ui.t("tab.apiKey")}
 	tabLine := make([]string, len(tabs))
 	for index, tab := range tabs {
 		style := mutedStyle.Padding(0, 1)
 		if providerTab(index) == model.tab {
-			style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
+			style = focusStyle
 		}
 		tabLine[index] = style.Render(tab)
 	}
 	content := model.cardContent()
-	column := lipgloss.NewStyle().Width(30)
+	column := model.ui.controlStyle()
 	controlRows := []string{
 		lipgloss.JoinHorizontal(lipgloss.Top, column.Render(mutedStyle.Render("↑↓/jk move")), column.Render(mutedStyle.Render("Tab switch card"))),
 		lipgloss.JoinHorizontal(lipgloss.Top, column.Render(mutedStyle.Render("Enter select")), column.Render(mutedStyle.Render("e edit"))),
@@ -167,11 +168,12 @@ func (model *providerLiveModel) View() string {
 	}
 	controls := strings.Join(controlRows, "\n")
 	if model.notice != "" {
-		controls += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
+		controls += "\n" + successStyle.Render(model.notice)
 	}
-	controlCard := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + controls)
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, tabLine...) + "\n\n" + content + "\n\n" + controlCard)
+	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
+	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
+	model.itemsTop = model.tabsTop + 1 + 2 + 2 + lipgloss.Height(cardTitleStyle.Render("Custom")) + 1
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, tabLine...) + "\n\n" + content + "\n\n" + controlCard)
 }
 
 func (model *providerLiveModel) cardContent() string {
@@ -179,13 +181,13 @@ func (model *providerLiveModel) cardContent() string {
 	var rows []string
 	switch model.tab {
 	case customProviderTab:
-		title = "Custom Providers (OpenAI/Anthropic Compatible)"
+		title = model.ui.t("screen.customProviders")
 		rows = []string{"Add Anthropic Compatible", "Add OpenAI Compatible"}
 		for _, item := range model.custom {
 			rows = append(rows, item.Name+" ("+item.ID+")")
 		}
 	case oauthProviderTab:
-		title = "OAuth Providers"
+		title = model.ui.t("screen.oauthProviders")
 		rows = []string{"Add OAuth provider"}
 		for _, item := range model.oauthConnections {
 			name := item.Name
@@ -195,31 +197,31 @@ func (model *providerLiveModel) cardContent() string {
 			rows = append(rows, name+" ("+item.ID+") ["+statusText(item.Enabled)+"]")
 		}
 	case freeProviderTab:
-		title = "Free Tier Providers"
+		title = model.ui.t("screen.freeProviders")
 		for _, name := range freeProviderNames {
 			item := model.find(model.free, name)
 			rows = append(rows, name+" ["+statusText(item != nil && item.Enabled)+"]")
 		}
 	case apiKeyProviderTab:
-		title = "API Key Providers"
+		title = model.ui.t("screen.apiKeyProviders")
 		for _, item := range model.apiKeys {
 			rows = append(rows, item.Name+" ("+item.ID+") ["+statusText(item.Enabled)+"]")
 		}
 	}
 	if len(rows) == 0 {
-		rows = []string{"No providers found."}
+		rows = []string{model.ui.t("screen.noProviders")}
 	}
 	items := make([]string, len(rows))
 	for index, row := range rows {
 		items[index] = providerMenuItem(index, row, index == model.cursor)
 	}
-	return innerCardStyle.Render(cardTitleStyle.Render(title) + "\n" + strings.Join(items, "\n"))
+	return model.ui.innerStyle().Render(cardTitleStyle.Render(title) + "\n" + strings.Join(items, "\n"))
 }
 
 func providerMenuItem(index int, label string, selected bool) string {
 	text := string(rune('1'+index)) + "  " + label
 	if selected {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(text)
+		return focusStyle.Render(text)
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("#CBD5E1")).Padding(0, 1).Render(text)
 }

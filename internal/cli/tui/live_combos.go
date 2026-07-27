@@ -77,6 +77,11 @@ func (model *comboLiveModel) Init() tea.Cmd { return comboRefresh() }
 func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, comboRefresh()
+		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= model.itemCount() {
 			model.cursor = index - 1
 			return model, model.runAction()
@@ -126,54 +131,53 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *comboLiveModel) View() string {
 	if model.err != nil {
-		return outerCardStyle.Render(cardTitleStyle.Render("Combos") + "\n\n" + model.err.Error() + "\n\n" + mutedStyle.Render("Press q or Esc to go back."))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
 	cards := []string{model.createCard()}
 	for index, item := range model.combos {
 		cards = append(cards, model.comboCard(index, item))
 	}
 	controls := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/jk move")), lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("c create  a add model")), lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("r remove model"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("e edit  d delete")), lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("q back"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move")), model.ui.controlStyle().Render(mutedStyle.Render("Enter select"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("c create  a add model")), model.ui.controlStyle().Render(mutedStyle.Render("r remove model"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("e edit  d delete")), model.ui.controlStyle().Render(mutedStyle.Render("q back"))),
 	)
-	controlCard := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + controls)
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)
 	if model.notice != "" {
-		content += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
+		content += "\n" + successStyle.Render(model.notice)
 	}
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render("Combos") + "\n\n" + content + "\n\n" + controlCard)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + content + "\n\n" + controlCard)
 }
 
 func (model *comboLiveModel) createCard() string {
 	models := strings.Join(comboModels(model.draft), ", ")
 	rows := []string{
-		comboActionItem(0, "Create Combo", model.cursor == 0),
-		"Combo Name: " + valueOrDash(model.draft.Name),
-		"Models list: " + valueOrDash(models),
-		comboActionItem(1, "Add Model", model.cursor == 1),
-		comboActionItem(2, "Remove Model", model.cursor == 2),
+		comboActionItem(0, model.ui.t("screen.createCombo"), model.cursor == 0),
+		model.ui.t("screen.comboName") + ": " + valueOrDash(model.draft.Name),
+		model.ui.t("screen.modelsList") + ": " + valueOrDash(models),
+		comboActionItem(1, model.ui.t("screen.addModel"), model.cursor == 1),
+		comboActionItem(2, model.ui.t("screen.removeModel"), model.cursor == 2),
 	}
-	return innerCardStyle.Render(cardTitleStyle.Render("Create Combo") + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("screen.createCombo")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *comboLiveModel) comboCard(cardIndex int, item combo) string {
 	editCursor := 3 + cardIndex*2
 	deleteCursor := editCursor + 1
 	rows := []string{
-		"Combo Name: " + item.Name,
-		"Models list: " + valueOrDash(strings.Join(comboModels(item), ", ")),
-		comboActionItem(editCursor, "Edit", model.cursor == editCursor),
-		comboActionItem(deleteCursor, "Delete", model.cursor == deleteCursor),
+		model.ui.t("screen.comboName") + ": " + item.Name,
+		model.ui.t("screen.modelsList") + ": " + valueOrDash(strings.Join(comboModels(item), ", ")),
+		comboActionItem(editCursor, model.ui.t("screen.edit"), model.cursor == editCursor),
+		comboActionItem(deleteCursor, model.ui.t("screen.delete"), model.cursor == deleteCursor),
 	}
-	return innerCardStyle.Render(cardTitleStyle.Render("Combo: "+item.Name) + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle().Render(cardTitleStyle.Render("Combo: "+item.Name) + "\n" + strings.Join(rows, "\n"))
 }
 
 func comboActionItem(index int, label string, selected bool) string {
 	text := strconv.Itoa(index+1) + "  " + label
 	if selected {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(text)
+		return focusStyle.Render(text)
 	}
 	return controlsStyle.Render(text)
 }

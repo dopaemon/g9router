@@ -9,9 +9,12 @@ import (
 )
 
 type languageModel struct {
-	ui     *UI
-	cursor int
+	ui            *UI
+	cursor        int
+	cardsTopValue int
 }
+
+func (model *languageModel) cardsTop() int { return model.cardsTopValue }
 
 func (ui *UI) liveLanguage() error {
 	model := languageModel{ui: ui}
@@ -24,8 +27,8 @@ func (ui *UI) liveLanguage() error {
 func (model *languageModel) Init() tea.Cmd { return nil }
 
 func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
-	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft && mouse.Y >= 12 && mouse.Y <= 17 {
-		if mouse.X < 40 {
+	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft && mouse.Y >= model.cardsTop() && mouse.Y < model.cardsTop()+6 {
+		if mouse.X < model.ui.columnWidth(2) {
 			model.cursor = 0
 		} else {
 			model.cursor = 1
@@ -61,22 +64,22 @@ func (model *languageModel) selectLanguage() tea.Cmd {
 }
 
 func (model *languageModel) View() string {
-	english := languageCard(0, "English", model.cursor == 0)
-	vietnamese := languageCard(1, "Tiếng Việt", model.cursor == 1)
-	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("←→/hl switch")),
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select  q back")),
+	english := languageCard(model.ui.columnWidth(2), 0, model.ui.t("language.english"), model.cursor == 0)
+	vietnamese := languageCard(model.ui.columnWidth(2), 1, model.ui.t("language.vietnamese"), model.cursor == 1)
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
+		model.ui.controlStyle().Render(mutedStyle.Render("←→/hl switch")),
+		model.ui.controlStyle().Render(mutedStyle.Render("Enter select  q back")),
 	))
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese) + "\n\n" + controls)
+	model.cardsTopValue = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("language.title"))) + 2 + 2
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese) + "\n\n" + controls)
 }
 
-func languageCard(index int, label string, selected bool) string {
+func languageCard(width, index int, label string, selected bool) string {
 	text := strconv.Itoa(index+1) + "  " + label
 	if selected {
-		text = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(text)
+		text = focusStyle.Render(text)
 	} else {
 		text = controlsStyle.Render(text)
 	}
-	return innerCardStyle.Width(31).Render(text)
+	return innerCardStyle.Width(width).Render(text)
 }

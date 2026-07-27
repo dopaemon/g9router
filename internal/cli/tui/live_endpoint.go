@@ -44,6 +44,11 @@ func (model *endpointLiveModel) Init() tea.Cmd {
 func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, endpointRefresh()
+		}
 		if index, ok := endpointActionIndex(message.String()); ok {
 			model.cursor = index
 			return model, model.runEndpointAction(index)
@@ -102,9 +107,9 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *endpointLiveModel) View() string {
 	if model.err != nil {
-		return gradientText(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#FB7185")).Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + model.ui.t("common.back") + ".\n"
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
-	endpointCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
+	endpointCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
 		endpointLine(model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
 		endpointLine(model.ui.t("endpoint.tunnel"), statusTextLocale(model.status.Tunnel.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(model.status.Tunnel.PublicURL))) + "\n" +
 		endpointLine(model.ui.t("endpoint.tailscale"), statusTextLocale(model.status.Tailscale.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(tailscaleState(model.status.Tailscale.TunnelURL, model.tailscale.Installed)))))
@@ -118,12 +123,11 @@ func (model *endpointLiveModel) View() string {
 		}
 		keys += formatLiveKey(index+1, key, model.ui.Locale)
 	}
-	keysCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("keys.card")) + "\n" + keys + "\n\n" + mutedStyle.Render(model.ui.t("keys.selectShow")))
-	controlsCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controlGrid(model))
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	view := outerCardStyle.Render(banner + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
+	keysCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.card")) + "\n" + keys + "\n\n" + mutedStyle.Render(model.ui.t("keys.selectShow")))
+	controlsCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controlGrid(model))
+	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
 	if model.notice != "" {
-		view += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice) + "\n"
+		view += "\n" + successStyle.Render(model.notice) + "\n"
 	}
 	view += "\n" + mutedStyle.Render(model.ui.t("keys.autoRefresh")) + "\n"
 	return view
@@ -135,7 +139,7 @@ func endpointLine(label, value string) string {
 
 func controlGrid(model *endpointLiveModel) string {
 	items := []string{"t " + model.ui.t("keys.tunnelToggle"), "s " + model.ui.t("keys.tailscaleToggle"), "c " + model.ui.t("keys.create"), "r " + model.ui.t("keys.rename"), "a " + model.ui.t("keys.toggle"), "d " + model.ui.t("keys.delete"), "v " + model.ui.t("keys.show"), "q " + model.ui.t("keys.back")}
-	column := lipgloss.NewStyle().Width(30)
+	column := model.ui.controlStyle()
 	rows := make([]string, 0, 4)
 	for index := 0; index < len(items); index += 2 {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(controlItem(items[index], index == model.cursor)), column.Render(controlItem(items[index+1], index+1 == model.cursor))))
@@ -146,7 +150,7 @@ func controlGrid(model *endpointLiveModel) string {
 func controlItem(label string, selected bool) string {
 	style := controlsStyle
 	if selected {
-		style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
+		style = focusStyle
 	}
 	return style.Render(label)
 }
@@ -348,12 +352,15 @@ func formatLiveKey(index int, key apiKey, locale string) string {
 	return strconv.Itoa(index) + ". " + key.Name + " [" + statusTextLocale(key.IsActive, locale) + "] " + maskSecret(key.Key)
 }
 
-var outerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7C3AED")).Padding(1, 2).Width(78).Align(lipgloss.Center)
-var innerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A855F7")).Padding(1, 2).Width(66)
+var outerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7C3AED")).Padding(1, 2).Align(lipgloss.Center)
+var innerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A855F7")).Padding(1, 2)
 var cardTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F0ABFC"))
 var endpointLabelStyle = lipgloss.NewStyle().Width(12).Foreground(lipgloss.Color("#CBD5E1"))
 var controlsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#67E8F9"))
 var mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#94A3B8"))
+var focusStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
+var errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FB7185"))
+var successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
 
 func statusText(enabled bool) string {
 	return statusTextLocale(enabled, "en")

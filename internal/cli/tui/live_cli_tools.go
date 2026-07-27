@@ -68,6 +68,11 @@ func (model *cliToolsModel) Init() tea.Cmd { return cliToolsRefresh() }
 func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, cliToolsRefresh()
+		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= len(cliToolOrder) {
 			model.cursor = index - 1
 			return model, model.action(model.show)
@@ -114,10 +119,10 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *cliToolsModel) View() string {
 	if model.err != nil {
-		return outerCardStyle.Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + model.err.Error() + "\n\n" + mutedStyle.Render("Press q or Esc to go back."))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
 	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
-	column := lipgloss.NewStyle().Width(38)
+	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
 	rowCount := (len(cliToolOrder) + 1) / 2
 	startRow := model.cursor / 2
 	if startRow > 2 {
@@ -138,15 +143,14 @@ func (model *cliToolsModel) View() string {
 		}
 		cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 	}
-	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter/s show  r reset  q back")),
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
+		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
+		model.ui.controlStyle().Render(mutedStyle.Render("Enter/s show  r reset  q back")),
 	))
 	if model.notice != "" {
-		controls += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
+		controls += "\n" + successStyle.Render(model.notice)
 	}
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
 }
 
 func cliToolCard(index int, id string, status cliToolStatus, selected bool) string {
@@ -161,11 +165,11 @@ func cliToolCard(index int, id string, status cliToolStatus, selected bool) stri
 	}
 	title := fmt.Sprintf("%d  %s", index+1, label)
 	if selected {
-		title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(title)
+		title = focusStyle.Render(title)
 	} else {
 		title = cardTitleStyle.Render(title)
 	}
-	return innerCardStyle.Width(31).Padding(0, 1).Render(title + "\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color)).Render(state))
+	return innerCardStyle.Padding(0, 1).Render(title + "\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color)).Render(state))
 }
 
 func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {

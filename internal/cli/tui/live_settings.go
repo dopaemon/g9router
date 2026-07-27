@@ -39,6 +39,11 @@ func (model *settingsModel) Init() tea.Cmd { return settingsRefresh() }
 func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.err != nil && message.String() == "r" {
+			model.err = nil
+			model.refresh()
+			return model, settingsRefresh()
+		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= 6 {
 			model.cursor = index - 1
 			return model, model.action(model.runAction)
@@ -83,25 +88,25 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *settingsModel) View() string {
 	if model.err != nil {
-		return outerCardStyle.Render(cardTitleStyle.Render("Settings") + "\n\n" + model.err.Error() + "\n\n" + mutedStyle.Render("Press q or Esc to go back."))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
-	runtimeCard := innerCardStyle.Width(31).Render(cardTitleStyle.Render("Runtime") + "\n" +
+	cardWidth := model.ui.columnWidth(2)
+	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +
 		settingsActionItem(0, "Toggle RTK", settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
 		settingsActionItem(1, "Toggle Headroom", settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
 		settingsActionItem(2, "Enable Tunnel", settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
 		settingsActionItem(3, "Disable Tunnel", settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
-	securityCard := innerCardStyle.Width(31).Render(cardTitleStyle.Render("Security") + "\n" +
+	securityCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.security")) + "\n" +
 		settingsActionItem(4, "Reset auth mode", false, model.cursor == 4) + "\n" +
-		settingsActionItem(5, "Reset password", false, model.cursor == 5) + "\n\n" + mutedStyle.Render("Password: "+map[bool]string{true: "configured", false: "not configured"}[settingsEnabled(model.values, "hasPassword")]))
-	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select  q back")),
+		settingsActionItem(5, "Reset password", false, model.cursor == 5) + "\n\n" + mutedStyle.Render("Password: "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
+		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
+		model.ui.controlStyle().Render(mutedStyle.Render("Enter select  q back")),
 	))
 	if model.notice != "" {
-		controls += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
+		controls += "\n" + successStyle.Render(model.notice)
 	}
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render("Settings") + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard) + "\n\n" + controls)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard) + "\n\n" + controls)
 }
 
 func settingsActionItem(index int, label string, enabled, selected bool) string {
@@ -111,7 +116,7 @@ func settingsActionItem(index int, label string, enabled, selected bool) string 
 	}
 	text := strconv.Itoa(index+1) + "  " + label + status
 	if selected {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(text)
+		return focusStyle.Render(text)
 	}
 	return controlsStyle.Render(text)
 }

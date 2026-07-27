@@ -2,13 +2,10 @@ package tui
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -17,12 +14,8 @@ type mainMenuModel struct {
 	items    []string
 	cursor   int
 	selected string
-	bannerX  float64
-	bannerV  float64
-	spring   harmonica.Spring
+	menuTop  int
 }
-
-type mainMenuTickMsg struct{}
 
 const (
 	bannerArea = 72
@@ -32,17 +25,17 @@ func (ui *UI) mainMenuChoice(items []string) (string, error) {
 	if !isInteractiveWriter(ui.Out) {
 		return "", nil
 	}
-	model := &mainMenuModel{ui: ui, items: items, spring: harmonica.NewSpring(harmonica.FPS(60), 3, 1)}
+	model := &mainMenuModel{ui: ui, items: items}
 	err := ui.runTea(model)
 	return model.selected, err
 }
 
 func (ui *UI) runTea(model tea.Model) error {
-	_, err := tea.NewProgram(model, tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
+	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	return err
 }
 
-func (model *mainMenuModel) Init() tea.Cmd { return mainMenuTick() }
+func (model *mainMenuModel) Init() tea.Cmd { return nil }
 
 func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if mouse, ok := message.(tea.MouseMsg); ok {
@@ -53,20 +46,6 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return model, tea.Quit
 			}
 		}
-	}
-	if _, ok := message.(mainMenuTickMsg); ok {
-		model.bannerX, model.bannerV = model.spring.Update(model.bannerX, model.bannerV, 3)
-		if model.bannerX < 0 {
-			model.bannerX, model.bannerV = 0, 0
-		}
-		if model.bannerX > 3 {
-			model.bannerX, model.bannerV = 3, 0
-		}
-		if math.Abs(model.bannerX-3) < 0.05 && math.Abs(model.bannerV) < 0.05 {
-			model.bannerX, model.bannerV = 3, 0
-			return model, nil
-		}
-		return model, mainMenuTick()
 	}
 	if key, ok := message.(tea.KeyMsg); ok {
 		if index, err := strconv.Atoi(key.String()); err == nil && index >= 1 && index <= len(model.items) {
@@ -103,10 +82,10 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *mainMenuModel) mouseItem(x, y int) int {
-	if y < 15 {
+	if y < model.menuTop {
 		return -1
 	}
-	index := y - 15
+	index := y - model.menuTop
 	if index < 0 || index >= len(model.items) {
 		return -1
 	}
@@ -114,19 +93,22 @@ func (model *mainMenuModel) mouseItem(x, y int) int {
 }
 
 func (model *mainMenuModel) View() string {
+	menuWidth := model.ui.innerWidth()
 	rows := make([]string, 0, len(model.items))
-	column := lipgloss.NewStyle().Width(60)
+	column := lipgloss.NewStyle().Width(menuWidth)
 	rowCount := len(model.items)
 	for row := 0; row < rowCount; row++ {
 		rows = append(rows, column.Render(model.menuItem(row)))
 	}
-	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Left).Render(slidingBanner(int(math.Round(model.bannerX))))
-	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select  1–8 direct  q exit")
-	menuCard := innerCardStyle.Render(menu)
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
+	bannerWidth := min(menuWidth, bannerArea)
+	banner := lipgloss.NewStyle().Width(bannerWidth).Align(lipgloss.Left).Render(slidingBanner(0, bannerWidth))
+	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(model.ui.t("common.menuControls"))
+	model.menuTop = 2 + lipgloss.Height(banner) + 2 + 1 + 2 + 2
+	menuCard := model.ui.innerStyle().Render(menu)
+	return model.ui.outerStyle().Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
 }
 
-func slidingBanner(offset int) string {
+func slidingBanner(offset, width int) string {
 	if offset < 0 {
 		offset = 0
 	}
@@ -136,24 +118,27 @@ func slidingBanner(offset int) string {
 	rows := strings.Split(cliBanner, "\n")
 	for index, row := range rows {
 		line := []rune(strings.Repeat(" ", offset) + row)
-		if len(line) > bannerArea {
-			line = line[:bannerArea]
+		if len(line) > width {
+			line = line[:width]
 		}
 		rows[index] = gradientText(string(line))
 	}
 	return strings.Join(rows, "\n")
 }
 
-func mainMenuTick() tea.Cmd {
-	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return mainMenuTickMsg{} })
-}
-
 func (model *mainMenuModel) menuItem(index int) string {
 	label := fmt.Sprintf("%d  %s", index+1, model.items[index])
 	if index == model.cursor {
-		label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(label)
+		label = focusStyle.Render(label)
 	} else {
 		label = cardTitleStyle.Render(label)
 	}
-	return lipgloss.NewStyle().Width(60).Padding(0, 1).Render(label)
+	return lipgloss.NewStyle().Width(model.ui.innerWidth()).Padding(0, 1).Render(label)
+}
+
+func min(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
