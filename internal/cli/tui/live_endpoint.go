@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type endpointRefreshMsg struct{}
@@ -135,7 +136,7 @@ func (model *endpointLiveModel) View() string {
 
 func endpointLine(ui *UI, label, value string) string {
 	if ui.compact() {
-		return label + ": " + truncateText(value, ui.innerWidth()-len(label)-2)
+		return label + ": " + ansi.Truncate(value, max(1, ui.innerWidth()-len(label)-2), "…")
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, endpointLabelStyle.Render(label), value)
 }
