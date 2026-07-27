@@ -25,6 +25,10 @@ func (ui *UI) runHuhIO(form *huh.Form, input io.Reader, output io.Writer) error 
 }
 
 func (ui *UI) promptProvider(item *provider, edit bool) error {
+	return ui.promptProviderIO(item, edit, ui.In, ui.Out)
+}
+
+func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, output io.Writer) error {
 	apiType := item.APIType
 	finish := "Save"
 	if apiType == "" {
@@ -45,7 +49,7 @@ func (ui *UI) promptProvider(item *provider, edit bool) error {
 			huh.NewOption("Back", "Back"),
 		).Value(&finish),
 	))
-	if err := ui.runHuh(form); err != nil {
+	if err := ui.runHuhIO(form, input, output); err != nil {
 		return err
 	}
 	if finish == "Back" {

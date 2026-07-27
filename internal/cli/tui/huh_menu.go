@@ -130,7 +130,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		}
 		switch choice {
 		case providers:
-			run(providers, func() error { return ui.providers(reader) })
+			run(providers, func() error {
+				if ui.huhMode() {
+					return ui.liveProviders()
+				}
+				return ui.providers(reader)
+			})
 		case endpoint:
 			run(endpoint, func() error { return ui.liveEndpoint() })
 		case combos:

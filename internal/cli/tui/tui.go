@@ -85,6 +85,7 @@ type provider struct {
 	BaseURL string `json:"baseURL"`
 	APIKey  string `json:"apiKey"`
 	APIType string `json:"apiType"`
+	OAuthID string `json:"oauthId"`
 	Enabled bool   `json:"enabled"`
 }
 
