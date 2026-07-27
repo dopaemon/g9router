@@ -195,7 +195,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/oidc/start", s.oidcStart)
 	mux.HandleFunc("/api/auth/oidc/callback", s.oidcCallback)
 	mux.HandleFunc("/api/auth/oidc/test", s.oidcTestAPI)
-	mux.Handle("/", web.Handler())
+	if s.options.WebUI {
+		mux.Handle("/", web.Handler())
+	}
 	handler := logging(mux)
 	_, passwordConfigured := s.settings.Secret("password")
 	loginRequired := s.keys.HasActive() || os.Getenv("G9ROUTER_PASSWORD") != "" || passwordConfigured

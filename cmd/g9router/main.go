@@ -35,6 +35,7 @@ func main() {
 	flags.IntVarP(&options.port, "port", "p", 0, "port to run the server")
 	flags.StringVarP(&options.host, "host", "H", "", "host to bind")
 	flags.BoolVarP(&options.noBrowser, "no-browser", "n", false, "do not open the dashboard")
+	flags.BoolVar(&options.webUI, "webui", false, "enable the web UI")
 	flags.BoolVar(&options.interactive, "interactive", false, "run the interactive Huh CLI")
 	flags.BoolVar(&options.log, "log", false, "show server logs")
 	flags.BoolVar(&options.tray, "tray", false, "run in system tray mode")
@@ -46,10 +47,11 @@ func main() {
 }
 
 type runOptions struct {
-	port                   int
-	host                   string
-	noBrowser, interactive bool
-	log, tray, skipUpdate  bool
+	port                  int
+	host                  string
+	noBrowser, webUI      bool
+	interactive           bool
+	log, tray, skipUpdate bool
 }
 
 func run(options runOptions) error {
@@ -68,7 +70,7 @@ func run(options runOptions) error {
 	if addr == "" {
 		addr = ":20128"
 	}
-	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY")})
+	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY"), WebUI: options.webUI})
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -91,7 +93,7 @@ func run(options runOptions) error {
 		}
 		return nil
 	}
-	if ready && !options.noBrowser {
+	if ready && options.webUI && !options.noBrowser {
 		openBrowser("http://localhost:" + portFromAddr(addr))
 	}
 	return <-errors

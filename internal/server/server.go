@@ -54,6 +54,7 @@ import (
 
 type Options struct {
 	Addr, Upstream, APIKey, ProviderPath, OAuthPath, DatabasePath, ProviderNodesPath string
+	WebUI                                                                            bool
 }
 
 type Server struct {
