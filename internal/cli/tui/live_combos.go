@@ -105,9 +105,6 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "a":
 			model.cursor = 1
 			return model, model.action(model.addModel)
-		case "r":
-			model.cursor = 2
-			return model, model.action(model.removeModel)
 		case "e":
 			return model, model.action(model.edit)
 		case "d":
@@ -139,8 +136,8 @@ func (model *comboLiveModel) View() string {
 	}
 	controls := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move")), model.ui.controlStyle().Render(mutedStyle.Render("Enter select"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("c create  a add model")), model.ui.controlStyle().Render(mutedStyle.Render("r remove model"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("e edit  d delete")), model.ui.controlStyle().Render(mutedStyle.Render("q back"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("c create  a add model")), model.ui.controlStyle().Render(mutedStyle.Render("e edit"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("d delete")), model.ui.controlStyle().Render(mutedStyle.Render("q back"))),
 	)
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)
@@ -157,13 +154,12 @@ func (model *comboLiveModel) createCard() string {
 		model.ui.t("screen.comboName") + ": " + valueOrDash(model.draft.Name),
 		model.ui.t("screen.modelsList") + ": " + valueOrDash(models),
 		comboActionItem(1, model.ui.t("screen.addModel"), model.cursor == 1),
-		comboActionItem(2, model.ui.t("screen.removeModel"), model.cursor == 2),
 	}
 	return model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("screen.createCombo")) + "\n" + strings.Join(rows, "\n"))
 }
 
 func (model *comboLiveModel) comboCard(cardIndex int, item combo) string {
-	editCursor := 3 + cardIndex*2
+	editCursor := 2 + cardIndex*2
 	deleteCursor := editCursor + 1
 	rows := []string{
 		model.ui.t("screen.comboName") + ": " + item.Name,
@@ -182,7 +178,7 @@ func comboActionItem(index int, label string, selected bool) string {
 	return controlsStyle.Render(text)
 }
 
-func (model *comboLiveModel) itemCount() int { return 3 + len(model.combos)*2 }
+func (model *comboLiveModel) itemCount() int { return 2 + len(model.combos)*2 }
 
 func (model *comboLiveModel) runAction() tea.Cmd {
 	switch {
@@ -190,9 +186,7 @@ func (model *comboLiveModel) runAction() tea.Cmd {
 		return model.action(model.create)
 	case model.cursor == 1:
 		return model.action(model.addModel)
-	case model.cursor == 2:
-		return model.action(model.removeModel)
-	case (model.cursor-3)%2 == 0:
+	case (model.cursor-2)%2 == 0:
 		return model.action(model.edit)
 	default:
 		return model.action(model.delete)
@@ -244,28 +238,6 @@ func (model *comboLiveModel) addModel(input io.Reader, output io.Writer) (string
 	}
 	model.draft.Models = append(model.draft.Models, selected)
 	return "Model added", nil
-}
-
-func (model *comboLiveModel) removeModel(input io.Reader, output io.Writer) (string, error) {
-	models := comboModels(model.draft)
-	if len(models) == 0 {
-		return "No models to remove", nil
-	}
-	selected, err := model.ui.tuiSelect(model.ui.t("screen.removeModel"), model.ui.t("screen.modelsList"), models, input, output)
-	if err != nil {
-		return "", err
-	}
-	filtered := model.draft.Models[:0]
-	removed := false
-	for _, value := range model.draft.Models {
-		if text, ok := value.(string); ok && text == selected && !removed {
-			removed = true
-			continue
-		}
-		filtered = append(filtered, value)
-	}
-	model.draft.Models = filtered
-	return "Model removed", nil
 }
 
 func (model *comboLiveModel) edit(input io.Reader, output io.Writer) (string, error) {
