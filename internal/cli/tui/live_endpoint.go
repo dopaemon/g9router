@@ -107,7 +107,7 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *endpointLiveModel) View() string {
 	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
+		return model.ui.errorView(model.ui.t("endpoint.title"), model.err)
 	}
 	endpointCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
 		endpointLine(model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +

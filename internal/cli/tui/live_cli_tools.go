@@ -119,7 +119,7 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *cliToolsModel) View() string {
 	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
+		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)
 	}
 	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
 	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))

@@ -141,6 +141,11 @@ func init() {
 		"controls.toolsShowResetBack": {"Enter/s show  r reset  q back", "Enter/s xem  r đặt lại  q quay lại"},
 		"controls.languageSwitch":     {"←→/hl switch", "←→/hl đổi"},
 		"controls.languageSelectBack": {"Enter select  q back", "Enter chọn  q quay lại"},
+		"error.auth":                  {"Authentication failed. Check API key or endpoint.", "Xác thực thất bại. Kiểm tra API key hoặc endpoint."},
+		"error.permission":            {"Permission denied.", "Không có quyền truy cập."},
+		"error.notFound":              {"Resource not found.", "Không tìm thấy tài nguyên."},
+		"error.server":                {"Server error. Retry shortly.", "Lỗi server. Thử lại sau."},
+		"error.network":               {"Network error. Check the connection.", "Lỗi mạng. Kiểm tra kết nối."},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}

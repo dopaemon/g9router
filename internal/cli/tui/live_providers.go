@@ -149,7 +149,7 @@ func (model *providerLiveModel) providerMouseIndex(x, y int) int {
 func (model *providerLiveModel) View() string {
 	model.tabRegions = nil
 	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
+		return model.ui.errorView(model.ui.t("menu.providers"), model.err)
 	}
 	tabs := []string{model.ui.t("tab.custom"), model.ui.t("tab.oauth"), model.ui.t("tab.free"), model.ui.t("tab.apiKey")}
 	tabLine := make([]string, len(tabs))

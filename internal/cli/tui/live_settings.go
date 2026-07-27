@@ -88,7 +88,7 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *settingsModel) View() string {
 	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
+		return model.ui.errorView(model.ui.t("menu.settings"), model.err)
 	}
 	cardWidth := model.ui.columnWidth(2)
 	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +

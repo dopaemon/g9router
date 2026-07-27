@@ -128,7 +128,7 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *comboLiveModel) View() string {
 	if model.err != nil {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
+		return model.ui.errorView(model.ui.t("menu.combos"), model.err)
 	}
 	cards := []string{model.createCard()}
 	for index, item := range model.combos {

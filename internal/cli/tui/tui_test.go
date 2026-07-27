@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -291,6 +292,16 @@ func TestSharedFormValidation(t *testing.T) {
 	}
 	if err := validateComboValues("combo", []string{"model"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestErrorSummaryLocalizesHTTPFailures(t *testing.T) {
+	ui := &UI{Locale: "en"}
+	if got := ui.errorSummary(errors.New("HTTP 401 Unauthorized")); got != "Authentication failed. Check API key or endpoint." {
+		t.Fatalf("auth summary = %q", got)
+	}
+	if got := ui.errorSummary(errors.New("dial timeout")); got != "Network error. Check the connection." {
+		t.Fatalf("network summary = %q", got)
 	}
 }
 
