@@ -255,6 +255,19 @@ func TestProviderMouseRegionsUseRenderedBounds(t *testing.T) {
 	}
 }
 
+func TestLanguageMouseRegionsUseRenderedCards(t *testing.T) {
+	model := &languageModel{cardRegions: []tuiRegion{
+		{left: 3, top: 5, width: 20, height: 5},
+		{left: 3, top: 10, width: 20, height: 5},
+	}}
+	if !model.cardRegions[0].contains(4, 6) || !model.cardRegions[1].contains(4, 11) {
+		t.Fatal("language card regions should contain their rendered rows")
+	}
+	if model.cardRegions[0].contains(24, 6) {
+		t.Fatal("outside language card should not be clickable")
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})

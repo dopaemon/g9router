@@ -12,6 +12,7 @@ type languageModel struct {
 	ui            *UI
 	cursor        int
 	cardsTopValue int
+	cardRegions   []tuiRegion
 }
 
 func (model *languageModel) cardsTop() int { return model.cardsTopValue }
@@ -27,13 +28,13 @@ func (ui *UI) liveLanguage() error {
 func (model *languageModel) Init() tea.Cmd { return nil }
 
 func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
-	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft && mouse.Y >= model.cardsTop() && mouse.Y < model.cardsTop()+6 {
-		if mouse.X < model.ui.columnWidth(2) {
-			model.cursor = 0
-		} else {
-			model.cursor = 1
+	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft {
+		for index, region := range model.cardRegions {
+			if region.contains(mouse.X, mouse.Y) {
+				model.cursor = index
+				return model, model.selectLanguage()
+			}
 		}
-		return model, model.selectLanguage()
 	}
 	if key, ok := message.(tea.KeyMsg); ok {
 		if index, err := strconv.Atoi(key.String()); err == nil && index >= 1 && index <= 2 {
@@ -66,12 +67,35 @@ func (model *languageModel) selectLanguage() tea.Cmd {
 func (model *languageModel) View() string {
 	english := languageCard(model.ui.columnWidth(2), 0, model.ui.t("language.english"), model.cursor == 0)
 	vietnamese := languageCard(model.ui.columnWidth(2), 1, model.ui.t("language.vietnamese"), model.cursor == 1)
+	model.cardRegions = nil
+	cardTop := 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("language.title"))) + 2
+	cardLeft := 1 + 2
+	if model.ui.compact() {
+		cardHeight := lipgloss.Height(english)
+		model.cardRegions = []tuiRegion{
+			{left: cardLeft, top: cardTop, width: model.ui.innerWidth(), height: cardHeight},
+			{left: cardLeft, top: cardTop + cardHeight, width: model.ui.innerWidth(), height: cardHeight},
+		}
+	} else {
+		cardWidth := model.ui.columnWidth(2)
+		cardHeight := lipgloss.Height(english)
+		model.cardRegions = []tuiRegion{
+			{left: cardLeft, top: cardTop, width: cardWidth, height: cardHeight},
+			{left: cardLeft + cardWidth + 1, top: cardTop, width: cardWidth, height: cardHeight},
+		}
+	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
 		model.ui.controlStyle().Render(mutedStyle.Render("←→/hl switch")),
 		model.ui.controlStyle().Render(mutedStyle.Render("Enter select  q back")),
 	))
-	model.cardsTopValue = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("language.title"))) + 2 + 2
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese) + "\n\n" + controls)
+	model.cardsTopValue = cardTop
+	var cards string
+	if model.ui.compact() {
+		cards = lipgloss.JoinVertical(lipgloss.Left, english, vietnamese)
+	} else {
+		cards = lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese)
+	}
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + cards + "\n\n" + controls)
 }
 
 func languageCard(width, index int, label string, selected bool) string {
