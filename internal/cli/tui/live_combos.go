@@ -138,7 +138,7 @@ func (model *comboLiveModel) View() string {
 		lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("e edit  d delete")), lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("q back"))),
 	)
 	controlCard := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + controls)
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)
 	if model.notice != "" {
 		content += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)

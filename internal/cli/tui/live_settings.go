@@ -100,7 +100,7 @@ func (model *settingsModel) View() string {
 	if model.notice != "" {
 		controls += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
 	}
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render("Settings") + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard) + "\n\n" + controls)
 }
 

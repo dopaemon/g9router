@@ -120,7 +120,7 @@ func (model *endpointLiveModel) View() string {
 	}
 	keysCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("keys.card")) + "\n" + keys + "\n\n" + mutedStyle.Render(model.ui.t("keys.selectShow")))
 	controlsCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controlGrid(model))
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	view := outerCardStyle.Render(banner + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
 	if model.notice != "" {
 		view += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice) + "\n"
@@ -348,7 +348,7 @@ func formatLiveKey(index int, key apiKey, locale string) string {
 	return strconv.Itoa(index) + ". " + key.Name + " [" + statusTextLocale(key.IsActive, locale) + "] " + maskSecret(key.Key)
 }
 
-var outerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7C3AED")).Padding(1, 2).Width(78)
+var outerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7C3AED")).Padding(1, 2).Width(78).Align(lipgloss.Center)
 var innerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A855F7")).Padding(1, 2).Width(66)
 var cardTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F0ABFC"))
 var endpointLabelStyle = lipgloss.NewStyle().Width(12).Foreground(lipgloss.Color("#CBD5E1"))

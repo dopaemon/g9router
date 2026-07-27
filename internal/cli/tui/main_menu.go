@@ -55,15 +55,15 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if _, ok := message.(mainMenuTickMsg); ok {
-		model.bannerX, model.bannerV = model.spring.Update(model.bannerX, model.bannerV, 4)
+		model.bannerX, model.bannerV = model.spring.Update(model.bannerX, model.bannerV, 3)
 		if model.bannerX < 0 {
 			model.bannerX, model.bannerV = 0, 0
 		}
-		if model.bannerX > 4 {
-			model.bannerX, model.bannerV = 4, 0
+		if model.bannerX > 3 {
+			model.bannerX, model.bannerV = 3, 0
 		}
-		if math.Abs(model.bannerX-4) < 0.05 && math.Abs(model.bannerV) < 0.05 {
-			model.bannerX, model.bannerV = 4, 0
+		if math.Abs(model.bannerX-3) < 0.05 && math.Abs(model.bannerV) < 0.05 {
+			model.bannerX, model.bannerV = 3, 0
 			return model, nil
 		}
 		return model, mainMenuTick()
@@ -106,59 +106,32 @@ func (model *mainMenuModel) mouseItem(x, y int) int {
 	if y < 15 {
 		return -1
 	}
-	row := y - 15
-	if row < 0 || row >= (len(model.items)+1)/2 {
-		return -1
-	}
-	column := 0
-	if x >= 40 {
-		column = 1
-	}
-	index := row*2 + column
-	if index >= len(model.items) {
+	index := y - 15
+	if index < 0 || index >= len(model.items) {
 		return -1
 	}
 	return index
 }
 
 func (model *mainMenuModel) View() string {
-	rows := make([]string, 0, 3)
-	column := lipgloss.NewStyle().Width(38)
-	rowCount := (len(model.items) + 1) / 2
-	startRow := model.cursor / 2
-	if startRow > 2 {
-		startRow -= 2
-	}
-	if startRow+3 > rowCount {
-		startRow = rowCount - 3
-	}
-	if startRow < 0 {
-		startRow = 0
-	}
-	for row := startRow; row < rowCount && row < startRow+3; row++ {
-		index := row * 2
-		left := model.menuItem(index)
-		right := ""
-		if index+1 < len(model.items) {
-			right = model.menuItem(index + 1)
-		}
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
+	rows := make([]string, 0, len(model.items))
+	column := lipgloss.NewStyle().Width(60)
+	rowCount := len(model.items)
+	for row := 0; row < rowCount; row++ {
+		rows = append(rows, column.Render(model.menuItem(row)))
 	}
 	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Left).Render(slidingBanner(int(math.Round(model.bannerX))))
-	menuCard := innerCardStyle.Render(strings.Join(rows, "\n"))
-	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/←→ move by number")),
-		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select  1–9 direct  q exit")),
-	))
-	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard + "\n\n" + controls)
+	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select  1–8 direct  q exit")
+	menuCard := innerCardStyle.Render(menu)
+	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
 }
 
 func slidingBanner(offset int) string {
 	if offset < 0 {
 		offset = 0
 	}
-	if offset > 4 {
-		offset = 4
+	if offset > 3 {
+		offset = 3
 	}
 	rows := strings.Split(cliBanner, "\n")
 	for index, row := range rows {
@@ -182,5 +155,5 @@ func (model *mainMenuModel) menuItem(index int) string {
 	} else {
 		label = cardTitleStyle.Render(label)
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Render(label)
+	return lipgloss.NewStyle().Width(60).Padding(0, 1).Render(label)
 }

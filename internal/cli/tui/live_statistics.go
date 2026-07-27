@@ -115,7 +115,7 @@ func (model *statisticsModel) View() string {
 		}
 		periods[index] = style.Render(periodLabel(period))
 	}
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls")+"\n"+lipgloss.JoinHorizontal(lipgloss.Top,
 		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("←→/hl period")),
 		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/jk token cursor"))),

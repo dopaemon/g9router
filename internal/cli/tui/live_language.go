@@ -67,7 +67,7 @@ func (model *languageModel) View() string {
 		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("←→/hl switch")),
 		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select  q back")),
 	))
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese) + "\n\n" + controls)
 }
 

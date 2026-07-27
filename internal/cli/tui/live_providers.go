@@ -170,7 +170,7 @@ func (model *providerLiveModel) View() string {
 		controls += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80")).Render(model.notice)
 	}
 	controlCard := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + controls)
-	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
+	banner := lipgloss.NewStyle().Width(bannerArea).Align(lipgloss.Center).Render(gradientText(cliBanner))
 	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, tabLine...) + "\n\n" + content + "\n\n" + controlCard)
 }
 
