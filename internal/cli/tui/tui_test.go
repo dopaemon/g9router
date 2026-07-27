@@ -236,6 +236,25 @@ func TestMainMenuMouseItemUsesRenderedBounds(t *testing.T) {
 	}
 }
 
+func TestProviderMouseRegionsUseRenderedBounds(t *testing.T) {
+	model := &providerLiveModel{
+		tabRegions: []tuiRegion{{left: 3, top: 5, width: 8, height: 1}, {left: 13, top: 5, width: 10, height: 1}},
+		itemsTop:   11, itemsLeft: 6, itemsWidth: 20,
+	}
+	if got, ok := model.providerMouseTab(14, 5); !ok || got != oauthProviderTab {
+		t.Fatalf("provider tab = %d, %v", got, ok)
+	}
+	if _, ok := model.providerMouseTab(11, 5); ok {
+		t.Fatal("gap between tabs should not select a tab")
+	}
+	if got := model.providerMouseIndex(6, 12); got != 1 {
+		t.Fatalf("provider row = %d, want 1", got)
+	}
+	if got := model.providerMouseIndex(5, 12); got != -1 {
+		t.Fatalf("outside provider row = %d, want -1", got)
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})

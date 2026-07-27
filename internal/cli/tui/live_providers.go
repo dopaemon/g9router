@@ -49,6 +49,9 @@ type providerLiveModel struct {
 	err              error
 	tabsTop          int
 	itemsTop         int
+	itemsLeft        int
+	itemsWidth       int
+	tabRegions       []tuiRegion
 }
 
 var freeProviderNames = []string{"mimo-free"}
@@ -69,7 +72,7 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.tab, model.cursor = tab, 0
 			return model, nil
 		}
-		if index := model.providerMouseIndex(message.Y); index >= 0 && index < model.itemCount() {
+		if index := model.providerMouseIndex(message.X, message.Y); index >= 0 && index < model.itemCount() {
 			model.cursor = index
 			if (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft {
 				return model, model.runAction()
@@ -128,25 +131,23 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *providerLiveModel) providerMouseTab(x, y int) (providerTab, bool) {
-	if y < model.tabsTop || y >= model.tabsTop+1 {
-		return 0, false
-	}
-	width := model.ui.columnWidth(4)
-	index := x / width
-	if index >= 0 && index < 4 {
-		return providerTab(index), true
+	for index, region := range model.tabRegions {
+		if region.contains(x, y) {
+			return providerTab(index), true
+		}
 	}
 	return 0, false
 }
 
-func (model *providerLiveModel) providerMouseIndex(y int) int {
-	if y < model.itemsTop {
+func (model *providerLiveModel) providerMouseIndex(x, y int) int {
+	if x < model.itemsLeft || x >= model.itemsLeft+model.itemsWidth || y < model.itemsTop {
 		return -1
 	}
 	return y - model.itemsTop
 }
 
 func (model *providerLiveModel) View() string {
+	model.tabRegions = nil
 	if model.err != nil {
 		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + mutedStyle.Render(model.ui.t("common.retryBack")))
 	}
@@ -172,7 +173,18 @@ func (model *providerLiveModel) View() string {
 	}
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
-	model.itemsTop = model.tabsTop + 1 + 2 + 2 + lipgloss.Height(cardTitleStyle.Render("Custom")) + 1
+	left := 1 + 2
+	for index, tab := range tabLine {
+		width := lipgloss.Width(tab)
+		model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: model.tabsTop, width: width, height: 1})
+		left += width
+		if index+1 < len(tabLine) {
+			left += 2
+		}
+	}
+	model.itemsTop = model.tabsTop + 1 + 2 + 2 + 1
+	model.itemsLeft = 1 + 2 + 1 + 2
+	model.itemsWidth = model.ui.innerWidth()
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.providers")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, tabLine...) + "\n\n" + content + "\n\n" + controlCard)
 }
 

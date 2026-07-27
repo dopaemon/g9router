@@ -13,6 +13,17 @@ type sizedModel struct {
 	model tea.Model
 }
 
+type tuiRegion struct {
+	left   int
+	top    int
+	width  int
+	height int
+}
+
+func (region tuiRegion) contains(x, y int) bool {
+	return x >= region.left && x < region.left+region.width && y >= region.top && y < region.top+region.height
+}
+
 func (model sizedModel) Init() tea.Cmd { return model.model.Init() }
 
 func (model sizedModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
