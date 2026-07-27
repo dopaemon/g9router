@@ -102,7 +102,7 @@ func (model *mainMenuModel) View() string {
 	}
 	bannerWidth := min(menuWidth, bannerArea)
 	banner := lipgloss.NewStyle().Width(bannerWidth).Align(lipgloss.Left).Render(slidingBanner(0, bannerWidth))
-	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(model.ui.t("common.menuControls"))
+	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(fmt.Sprintf(model.ui.t("common.menuControls"), len(model.items)))
 	model.menuTop = 2 + lipgloss.Height(banner) + 2 + 1 + 2 + 2
 	menuCard := model.ui.innerStyle().Render(menu)
 	return model.ui.outerStyle().Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)

@@ -248,3 +248,13 @@ func TestTUIFormMultiSelectShowsTenCursorRows(t *testing.T) {
 		t.Fatalf("multi-select view = %q", view)
 	}
 }
+
+func TestLogsRowsKeepTenLineViewport(t *testing.T) {
+	model := &logsModel{ui: &UI{Locale: "en"}, tab: 1, cursor: 11, httpLog: make([]string, 12)}
+	for index := range model.httpLog {
+		model.httpLog[index] = fmt.Sprintf("log-%d", index)
+	}
+	if got := strings.Count(model.rows(), "log-"); got != 10 {
+		t.Fatalf("visible logs = %d", got)
+	}
+}

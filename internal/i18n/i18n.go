@@ -9,7 +9,7 @@ const (
 
 var translations = map[string]map[string]string{
 	English: {
-		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.cliTools": "CLI Tools", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–8 direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.disableTailscale": "Disable Tailscale?", "form.chooseKey": "Choose API key",
+		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.disableTailscale": "Disable Tailscale?", "form.chooseKey": "Choose API key",
 	},
 	Vietnamese: {
 		"menu.endpoint":           "Endpoint & Key",
@@ -17,6 +17,7 @@ var translations = map[string]map[string]string{
 		"menu.combos":             "Combo",
 		"menu.statistics":         "Thống kê",
 		"menu.cliTools":           "Công cụ CLI",
+		"menu.logs":               "Nhật ký",
 		"menu.settings":           "Cài đặt",
 		"menu.language":           "Ngôn ngữ",
 		"menu.exit":               "Thoát",
@@ -53,7 +54,7 @@ var translations = map[string]map[string]string{
 		"common.error":            "Lỗi",
 		"common.back":             "Quay lại",
 		"common.retryBack":        "r thử lại  q quay lại",
-		"common.menuControls":     "↑↓/jk di chuyển  Enter chọn  1–8 chọn nhanh  q thoát",
+		"common.menuControls":     "↑↓/jk di chuyển  Enter chọn  1–%d chọn nhanh  q thoát",
 		"common.controls":         "Điều khiển",
 		"common.save":             "Lưu",
 		"common.cancel":           "Hủy",
@@ -111,6 +112,10 @@ func init() {
 		"form.apiKey":                 {"API key", "API key"},
 		"form.apiType":                {"API type", "Loại API"},
 		"screen.providerForm":         {"Provider", "Provider"},
+		"logs.apiAgent":               {"API & Agent Requests", "Request API & Agent"},
+		"logs.http":                   {"HTTP Server", "HTTP Server"},
+		"logs.empty":                  {"No logs yet.", "Chưa có log."},
+		"logs.controls":               {"↑↓/jk scroll  Tab switch  r refresh  q back", "↑↓/jk cuộn  Tab đổi tab  r làm mới  q quay lại"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}
