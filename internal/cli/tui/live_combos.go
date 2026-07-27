@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -167,7 +168,7 @@ func (model *comboLiveModel) comboCard(cardIndex int, item combo) string {
 		comboActionItem(editCursor, model.ui.t("screen.edit"), model.cursor == editCursor),
 		comboActionItem(deleteCursor, model.ui.t("screen.delete"), model.cursor == deleteCursor),
 	}
-	return model.ui.innerStyle().Render(cardTitleStyle.Render("Combo: "+item.Name) + "\n" + strings.Join(rows, "\n"))
+	return model.ui.innerStyle().Render(cardTitleStyle.Render(fmt.Sprintf(model.ui.t("screen.combo"), item.Name)) + "\n" + strings.Join(rows, "\n"))
 }
 
 func comboActionItem(index int, label string, selected bool) string {
@@ -258,7 +259,7 @@ func (model *comboLiveModel) delete(input io.Reader, output io.Writer) (string, 
 		return "", nil
 	}
 	item := model.combos[index]
-	ok, err := model.ui.tuiConfirm("Delete combo "+item.Name+"?", input, output)
+	ok, err := model.ui.tuiConfirm(fmt.Sprintf(model.ui.t("confirm.deleteCombo"), item.Name), input, output)
 	if err != nil || !ok {
 		return "", err
 	}

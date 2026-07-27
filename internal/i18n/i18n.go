@@ -174,6 +174,15 @@ func init() {
 		"notice.tunnelDisabled":       {"Tunnel disabled", "Đã tắt Tunnel"},
 		"notice.authReset":            {"Auth mode reset", "Đã đặt lại chế độ xác thực"},
 		"notice.passwordReset":        {"Password reset", "Đã đặt lại mật khẩu"},
+		"status.notInstalled":         {"Not installed", "Chưa cài"},
+		"status.notConfigured":        {"Not configured", "Chưa cấu hình"},
+		"status.connected":            {"Connected", "Đã kết nối"},
+		"confirm.deleteCombo":         {"Delete combo %s?", "Xóa Combo %s?"},
+		"confirm.deleteProvider":      {"Delete provider %s?", "Xóa provider %s?"},
+		"confirm.deleteOAuthProvider": {"Delete OAuth provider?", "Xóa provider OAuth?"},
+		"confirm.resetTool":           {"Reset %s settings?", "Đặt lại cấu hình %s?"},
+		"notice.settingsReset":        {"Settings reset", "Đã đặt lại cấu hình"},
+		"screen.combo":                {"Combo: %s", "Combo: %s"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}

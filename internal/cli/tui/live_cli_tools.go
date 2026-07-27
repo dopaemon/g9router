@@ -139,7 +139,7 @@ func (model *cliToolsModel) View() string {
 			start = max(0, len(cliToolOrder)-5)
 		}
 		for index := start; index < len(cliToolOrder) && index < start+5; index++ {
-			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
+			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 		}
 	} else {
 		column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
@@ -156,10 +156,10 @@ func (model *cliToolsModel) View() string {
 		}
 		for row := startRow; row < rowCount && row < startRow+3; row++ {
 			index := row * 2
-			left := cliToolCard(index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
+			left := cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
 			right := ""
 			if index+1 < len(cliToolOrder) {
-				right = cliToolCard(index+1, cliToolOrder[index+1], model.statuses[cliToolOrder[index+1]], index+1 == model.cursor)
+				right = cliToolCard(model.ui, index+1, cliToolOrder[index+1], model.statuses[cliToolOrder[index+1]], index+1 == model.cursor)
 			}
 			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 		}
@@ -174,15 +174,15 @@ func (model *cliToolsModel) View() string {
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
 }
 
-func cliToolCard(index int, id string, status cliToolStatus, selected bool) string {
+func cliToolCard(ui *UI, index int, id string, status cliToolStatus, selected bool) string {
 	label := cliToolLabels[id]
-	state := "Not installed"
+	state := ui.t("status.notInstalled")
 	color := "#94A3B8"
 	if status.Installed && !status.Configured {
-		state, color = "Not configured", "#FBBF24"
+		state, color = ui.t("status.notConfigured"), "#FBBF24"
 	}
 	if status.Configured {
-		state, color = "Connected", "#4ADE80"
+		state, color = ui.t("status.connected"), "#4ADE80"
 	}
 	title := fmt.Sprintf("%d  %s", index+1, label)
 	if selected {
@@ -216,11 +216,11 @@ func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, err
 
 func (model *cliToolsModel) reset(input io.Reader, output io.Writer) (string, error) {
 	id := cliToolOrder[model.cursor]
-	ok, err := model.ui.tuiConfirm("Reset "+cliToolLabels[id]+" settings?", input, output)
+	ok, err := model.ui.tuiConfirm(fmt.Sprintf(model.ui.t("confirm.resetTool"), cliToolLabels[id]), input, output)
 	if err != nil || !ok {
 		return "", err
 	}
-	return "Settings reset", model.ui.request(http.MethodDelete, cliToolPaths[id], nil, nil)
+	return model.ui.t("notice.settingsReset"), model.ui.request(http.MethodDelete, cliToolPaths[id], nil, nil)
 }
 
 func (model *cliToolsModel) refresh() {

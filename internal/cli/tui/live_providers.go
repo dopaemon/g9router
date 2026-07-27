@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -357,7 +358,7 @@ func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (strin
 }
 
 func (model *providerLiveModel) deleteProvider(id string, input io.Reader, output io.Writer) error {
-	ok, err := model.ui.tuiConfirm("Delete provider "+id+"?", input, output)
+	ok, err := model.ui.tuiConfirm(fmt.Sprintf(model.ui.t("confirm.deleteProvider"), id), input, output)
 	if err != nil || !ok {
 		return err
 	}
@@ -365,7 +366,7 @@ func (model *providerLiveModel) deleteProvider(id string, input io.Reader, outpu
 }
 
 func (model *providerLiveModel) deleteOAuthProvider(item provider, input io.Reader, output io.Writer) error {
-	ok, err := model.ui.tuiConfirm("Delete OAuth provider?", input, output)
+	ok, err := model.ui.tuiConfirm(model.ui.t("confirm.deleteOAuthProvider"), input, output)
 	if err != nil || !ok {
 		return err
 	}
