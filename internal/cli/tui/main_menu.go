@@ -35,19 +35,19 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch key.String() {
 		case "up", "k":
-			if model.cursor >= 2 {
-				model.cursor -= 2
+			if model.cursor > 0 {
+				model.cursor--
 			}
 		case "down", "j":
-			if model.cursor+2 < len(model.items) {
-				model.cursor += 2
+			if model.cursor+1 < len(model.items) {
+				model.cursor++
 			}
 		case "left", "h":
-			if model.cursor%2 == 1 {
+			if model.cursor > 0 {
 				model.cursor--
 			}
 		case "right", "l":
-			if model.cursor%2 == 0 && model.cursor+1 < len(model.items) {
+			if model.cursor+1 < len(model.items) {
 				model.cursor++
 			}
 		case "enter", " ":
@@ -62,9 +62,21 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *mainMenuModel) View() string {
-	rows := make([]string, 0, (len(model.items)+1)/2)
-	column := lipgloss.NewStyle().Width(31)
-	for index := 0; index < len(model.items); index += 2 {
+	rows := make([]string, 0, 3)
+	column := lipgloss.NewStyle().Width(38)
+	rowCount := (len(model.items) + 1) / 2
+	startRow := model.cursor / 2
+	if startRow > 2 {
+		startRow -= 2
+	}
+	if startRow+3 > rowCount {
+		startRow = rowCount - 3
+	}
+	if startRow < 0 {
+		startRow = 0
+	}
+	for row := startRow; row < rowCount && row < startRow+3; row++ {
+		index := row * 2
 		left := model.menuItem(index)
 		right := ""
 		if index+1 < len(model.items) {
@@ -73,15 +85,19 @@ func (model *mainMenuModel) View() string {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 	}
 	banner := lipgloss.NewStyle().Width(78).Align(lipgloss.Center).Render(gradientText(cliBanner))
-	menu := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("menu.title")) + "\n" + lipgloss.JoinVertical(lipgloss.Left, rows...))
-	controls := mutedStyle.Render("↑↓/jk move  ←→/hl switch  Enter select  q exit")
-	return outerCardStyle.Render(banner + "\n\n" + menu + "\n\n" + controls)
+	controls := innerCardStyle.Render(cardTitleStyle.Render("Controls") + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("↑↓/←→ move by number")),
+		lipgloss.NewStyle().Width(30).Render(mutedStyle.Render("Enter select  1–9 direct  q exit")),
+	))
+	return outerCardStyle.Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, rows...) + "\n\n" + controls)
 }
 
 func (model *mainMenuModel) menuItem(index int) string {
 	label := fmt.Sprintf("%d  %s", index+1, model.items[index])
 	if index == model.cursor {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(label)
+		label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1).Render(label)
+	} else {
+		label = cardTitleStyle.Render(label)
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#CBD5E1")).Padding(0, 1).Render(label)
+	return innerCardStyle.Width(31).Padding(0, 1).Render(label)
 }
