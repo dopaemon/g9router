@@ -163,9 +163,9 @@ func (model *providerLiveModel) View() string {
 	content := model.cardContent()
 	column := model.ui.controlStyle()
 	controlRows := []string{
-		lipgloss.JoinHorizontal(lipgloss.Top, column.Render(mutedStyle.Render("↑↓/jk move")), column.Render(mutedStyle.Render("Tab switch card"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, column.Render(mutedStyle.Render("Enter select")), column.Render(mutedStyle.Render("e edit"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, column.Render(mutedStyle.Render("d delete")), column.Render(mutedStyle.Render("q back"))),
+		column.Render(mutedStyle.Render(model.ui.t("controls.moveSwitch"))),
+		column.Render(mutedStyle.Render(model.ui.t("controls.selectEdit"))),
+		column.Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
 	}
 	controls := strings.Join(controlRows, "\n")
 	if model.notice != "" {

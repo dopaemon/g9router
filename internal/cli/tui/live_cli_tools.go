@@ -144,8 +144,8 @@ func (model *cliToolsModel) View() string {
 		cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
-		model.ui.controlStyle().Render(mutedStyle.Render("Enter/s show  r reset  q back")),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsShowResetBack"))),
 	))
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)

@@ -135,9 +135,9 @@ func (model *comboLiveModel) View() string {
 		cards = append(cards, model.comboCard(index, item))
 	}
 	controls := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move")), model.ui.controlStyle().Render(mutedStyle.Render("Enter select"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("c create  a add model")), model.ui.controlStyle().Render(mutedStyle.Render("e edit"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render("d delete")), model.ui.controlStyle().Render(mutedStyle.Render("q back"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboMoveSelect"))),
+		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboCreateAdd"))), model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboEdit")))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
 	)
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)

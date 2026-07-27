@@ -100,8 +100,8 @@ func (model *settingsModel) View() string {
 		settingsActionItem(4, "Reset auth mode", false, model.cursor == 4) + "\n" +
 		settingsActionItem(5, "Reset password", false, model.cursor == 5) + "\n\n" + mutedStyle.Render("Password: "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render("↑↓/jk move  ←→/hl switch")),
-		model.ui.controlStyle().Render(mutedStyle.Render("Enter select  q back")),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
 	))
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)

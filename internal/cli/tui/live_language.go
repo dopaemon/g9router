@@ -85,8 +85,8 @@ func (model *languageModel) View() string {
 		}
 	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render("←→/hl switch")),
-		model.ui.controlStyle().Render(mutedStyle.Render("Enter select  q back")),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSwitch"))),
+		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
 	))
 	model.cardsTopValue = cardTop
 	var cards string
