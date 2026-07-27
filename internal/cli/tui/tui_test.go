@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRunCLIToolsBack(t *testing.T) {
@@ -210,5 +212,39 @@ func TestResponsiveCardWidths(t *testing.T) {
 	}
 	if got := ui.columnWidth(2) * 2; got > ui.innerWidth() {
 		t.Fatalf("columns = %d, exceeds inner width %d", got, ui.innerWidth())
+	}
+}
+
+func TestTUIFormMultiSelect(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
+	model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if !model.fields[0].selected[0] || !model.fields[0].selected[1] {
+		t.Fatalf("selected = %#v", model.fields[0].selected)
+	}
+}
+
+func TestTUIFormInputKeepsNavigationLetters(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiInput}}}
+	for _, value := range "Global" {
+		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{value}})
+	}
+	if got := model.fields[0].value; got != "Global" {
+		t.Fatalf("input = %q", got)
+	}
+}
+
+func TestTUIFormMultiSelectShowsTenCursorRows(t *testing.T) {
+	options := make([]string, 12)
+	for index := range options {
+		options[index] = fmt.Sprintf("model-%d", index)
+	}
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: options, selected: make([]bool, len(options))}}}
+	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	view := model.fieldValue(&model.fields[0])
+	if strings.Count(view, "model-") != 10 || !strings.Contains(view, "> [ ] model-2") {
+		t.Fatalf("multi-select view = %q", view)
 	}
 }

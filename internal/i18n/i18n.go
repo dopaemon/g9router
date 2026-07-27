@@ -101,6 +101,16 @@ func init() {
 		"tab.oauth":                   {"OAuth", "OAuth"},
 		"tab.free":                    {"Free", "Miễn phí"},
 		"tab.apiKey":                  {"API key", "API key"},
+		"common.confirm":              {"Confirm", "Xác nhận"},
+		"common.yes":                  {"Yes", "Có"},
+		"common.no":                   {"No", "Không"},
+		"form.controls":               {"↑↓/jk field  ←→/hl option  Space toggle  Enter save  Esc cancel", "↑↓/jk trường  ←→/hl chọn  Space đánh dấu  Enter lưu  Esc hủy"},
+		"form.providerID":             {"Provider ID", "ID provider"},
+		"form.displayName":            {"Display name", "Tên hiển thị"},
+		"form.baseURL":                {"Base URL", "URL gốc"},
+		"form.apiKey":                 {"API key", "API key"},
+		"form.apiType":                {"API type", "Loại API"},
+		"screen.providerForm":         {"Provider", "Provider"},
 	} {
 		translations[English][key], translations[Vietnamese][key] = values[0], values[1]
 	}

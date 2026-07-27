@@ -195,9 +195,7 @@ func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, err
 
 func (model *cliToolsModel) reset(input io.Reader, output io.Writer) (string, error) {
 	id := cliToolOrder[model.cursor]
-	ok, err := confirmHuh(input, output, "Reset "+cliToolLabels[id]+" settings?", func(form *huh.Form) error {
-		return model.ui.runHuhIO(form, input, output)
-	})
+	ok, err := model.ui.tuiConfirm("Reset "+cliToolLabels[id]+" settings?", input, output)
 	if err != nil || !ok {
 		return "", err
 	}

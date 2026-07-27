@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"io"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -66,6 +67,11 @@ func (ui *UI) innerStyle(width ...int) lipgloss.Style {
 
 func (ui *UI) controlStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Width(ui.columnWidth(2))
+}
+
+func (ui *UI) runTeaIO(model tea.Model, input io.Reader, output io.Writer) error {
+	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, tea.WithInput(input), tea.WithOutput(output), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	return err
 }
 
 func joinLines(lines ...string) string { return strings.Join(lines, "\n") }

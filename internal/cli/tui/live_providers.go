@@ -270,7 +270,7 @@ func (model *providerLiveModel) add(input io.Reader, output io.Writer) (string, 
 	if descriptor, ok := providers.Lookup(apiType); ok {
 		item.ID, item.Name, item.BaseURL = apiType, apiType, descriptor.BaseURL
 	}
-	if err := model.ui.promptProviderIO(item, false, input, output); err != nil {
+	if err := model.ui.promptProviderTUI(item, false, input, output); err != nil {
 		return "", err
 	}
 	return "Provider added", nil
@@ -319,7 +319,7 @@ func (model *providerLiveModel) editProvider(item provider, input io.Reader, out
 	if err := model.ui.request(http.MethodGet, "/api/providers/"+url.PathEscape(item.ID), nil, &current); err != nil {
 		return "", err
 	}
-	return "Provider updated", model.ui.promptProviderIO(&current.Connection, true, input, output)
+	return "Provider updated", model.ui.promptProviderTUI(&current.Connection, true, input, output)
 }
 
 func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (string, error) {
@@ -345,9 +345,7 @@ func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (strin
 }
 
 func (model *providerLiveModel) deleteProvider(id string, input io.Reader, output io.Writer) error {
-	ok, err := confirmHuh(input, output, "Delete provider "+id+"?", func(form *huh.Form) error {
-		return model.ui.runHuhIO(form, input, output)
-	})
+	ok, err := model.ui.tuiConfirm("Delete provider "+id+"?", input, output)
 	if err != nil || !ok {
 		return err
 	}
@@ -355,9 +353,7 @@ func (model *providerLiveModel) deleteProvider(id string, input io.Reader, outpu
 }
 
 func (model *providerLiveModel) deleteOAuthProvider(item provider, input io.Reader, output io.Writer) error {
-	ok, err := confirmHuh(input, output, "Delete OAuth provider?", func(form *huh.Form) error {
-		return model.ui.runHuhIO(form, input, output)
-	})
+	ok, err := model.ui.tuiConfirm("Delete OAuth provider?", input, output)
 	if err != nil || !ok {
 		return err
 	}

@@ -144,19 +144,19 @@ func (model *settingsModel) runAction(input io.Reader, output io.Writer) (string
 	case 2:
 		return "Tunnel enabled", model.ui.request(http.MethodPost, "/api/tunnel/enable", nil, nil)
 	case 3:
-		ok, err := confirmHuh(input, output, "Disable the tunnel?", func(form *huh.Form) error { return model.ui.runHuhIO(form, input, output) })
+		ok, err := model.ui.tuiConfirm("Disable the tunnel?", input, output)
 		if err != nil || !ok {
 			return "", err
 		}
 		return "Tunnel disabled", model.ui.request(http.MethodPost, "/api/tunnel/disable", nil, nil)
 	case 4:
-		ok, err := confirmHuh(input, output, "Switch authentication to password mode?", func(form *huh.Form) error { return model.ui.runHuhIO(form, input, output) })
+		ok, err := model.ui.tuiConfirm("Switch authentication to password mode?", input, output)
 		if err != nil || !ok {
 			return "", err
 		}
 		return "Auth mode reset", model.ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil)
 	case 5:
-		ok, err := confirmHuh(input, output, "Reset the admin password?", func(form *huh.Form) error { return model.ui.runHuhIO(form, input, output) })
+		ok, err := model.ui.tuiConfirm("Reset the admin password?", input, output)
 		if err != nil || !ok {
 			return "", err
 		}

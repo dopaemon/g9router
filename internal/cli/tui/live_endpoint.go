@@ -221,7 +221,7 @@ func (model *endpointLiveModel) action(run func(io.Reader, io.Writer) (string, e
 func (model *endpointLiveModel) toggleTunnelIO(input io.Reader, output io.Writer) (string, error) {
 	path := "/api/tunnel/enable"
 	if model.status.Tunnel.Enabled {
-		ok, err := confirmHuh(input, output, "Disable Tunnel?", model.huhRun(input, output))
+		ok, err := model.ui.tuiConfirm(model.ui.t("form.disableTunnel"), input, output)
 		if err != nil || !ok {
 			return model.ui.t("keys.tunnelUnchanged"), err
 		}
@@ -236,7 +236,7 @@ func (model *endpointLiveModel) toggleTailscale(input io.Reader, output io.Write
 	}
 	path := "/api/tunnel/tailscale-enable"
 	if model.status.Tailscale.Enabled {
-		ok, err := confirmHuh(input, output, "Disable Tailscale?", model.huhRun(input, output))
+		ok, err := model.ui.tuiConfirm(model.ui.t("form.disableTailscale"), input, output)
 		if err != nil || !ok {
 			return model.ui.t("keys.tailscaleUnchanged"), err
 		}
@@ -246,7 +246,7 @@ func (model *endpointLiveModel) toggleTailscale(input io.Reader, output io.Write
 }
 
 func (model *endpointLiveModel) createKey(input io.Reader, output io.Writer) (string, error) {
-	_, err := promptAPIKeyIO(input, output, model.huhRun(input, output), model.ui.request, model.ui.Locale)
+	_, err := model.ui.promptAPIKeyTUI(input, output)
 	if err != nil {
 		return "", err
 	}
@@ -254,19 +254,19 @@ func (model *endpointLiveModel) createKey(input io.Reader, output io.Writer) (st
 }
 
 func (model *endpointLiveModel) renameKey(input io.Reader, output io.Writer) (string, error) {
-	key, err := model.selectKey(input, output)
+	key, err := model.ui.tuiSelectKey(model.keys, input, output)
 	if err != nil {
 		return "", err
 	}
-	return model.ui.t("keys.rename"), model.ui.promptAPIKeyRenameIO(&key, input, output, model.huhRun(input, output), model.ui.request, model.ui.Locale)
+	return model.ui.t("keys.rename"), model.ui.promptAPIKeyRenameTUI(&key, input, output)
 }
 
 func (model *endpointLiveModel) deleteKey(input io.Reader, output io.Writer) (string, error) {
-	key, err := model.selectKey(input, output)
+	key, err := model.ui.tuiSelectKey(model.keys, input, output)
 	if err != nil {
 		return "", err
 	}
-	ok, err := confirmHuh(input, output, model.ui.t("form.delete"), model.huhRun(input, output))
+	ok, err := model.ui.tuiConfirm(model.ui.t("form.delete"), input, output)
 	if err != nil || !ok {
 		return model.ui.t("keys.delete"), err
 	}
@@ -274,11 +274,11 @@ func (model *endpointLiveModel) deleteKey(input io.Reader, output io.Writer) (st
 }
 
 func (model *endpointLiveModel) showKey(input io.Reader, output io.Writer) (string, error) {
-	key, err := model.selectKey(input, output)
+	key, err := model.ui.tuiSelectKey(model.keys, input, output)
 	if err != nil {
 		return "", err
 	}
-	ok, err := confirmHuh(input, output, model.ui.t("form.reveal"), model.huhRun(input, output))
+	ok, err := model.ui.tuiConfirm(model.ui.t("form.reveal"), input, output)
 	if err != nil || !ok {
 		return model.ui.t("keys.show"), err
 	}
@@ -292,45 +292,11 @@ func (model *endpointLiveModel) showKey(input io.Reader, output io.Writer) (stri
 }
 
 func (model *endpointLiveModel) toggleKey(input io.Reader, output io.Writer) (string, error) {
-	key, err := model.selectKey(input, output)
+	key, err := model.ui.tuiSelectKey(model.keys, input, output)
 	if err != nil {
 		return "", err
 	}
 	return model.ui.t("keys.toggleUpdated"), model.ui.request(http.MethodPut, "/api/keys/"+key.ID, map[string]bool{"isActive": !key.IsActive}, nil)
-}
-
-func (model *endpointLiveModel) selectKey(input io.Reader, output io.Writer) (apiKey, error) {
-	if len(model.keys) == 0 {
-		return apiKey{}, errors.New("no API keys found")
-	}
-	options := make([]huh.Option[string], 0, len(model.keys))
-	selected := model.keys[0].ID
-	for _, key := range model.keys {
-		options = append(options, huh.NewOption(key.Name, key.ID))
-	}
-	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(model.ui.t("form.chooseKey")).Options(options...).Value(&selected)))
-	if err := model.huhRun(input, output)(form); err != nil {
-		return apiKey{}, err
-	}
-	for _, key := range model.keys {
-		if key.ID == selected {
-			return key, nil
-		}
-	}
-	return apiKey{}, errors.New("invalid API key")
-}
-
-func (model *endpointLiveModel) huhRun(input io.Reader, output io.Writer) func(*huh.Form) error {
-	return func(form *huh.Form) error { return model.ui.runHuhIO(form, input, output) }
-}
-
-func confirmHuh(input io.Reader, output io.Writer, title string, run func(*huh.Form) error) (bool, error) {
-	value := false
-	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(title).Value(&value)))
-	if err := run(form); err != nil {
-		return false, err
-	}
-	return value, nil
 }
 
 type endpointExecCommand struct {
@@ -361,6 +327,8 @@ var mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#94A3B8"))
 var focusStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0B1020")).Background(lipgloss.Color("#67E8F9")).Padding(0, 1)
 var errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FB7185"))
 var successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ADE80"))
+var multiSelectStyle = lipgloss.NewStyle().Background(lipgloss.Color("#000000")).Padding(0, 1)
+var multiCursorStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F472B6"))
 
 func statusText(enabled bool) string {
 	return statusTextLocale(enabled, "en")

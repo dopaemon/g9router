@@ -224,29 +224,22 @@ func (model *comboLiveModel) create(input io.Reader, output io.Writer) (string, 
 }
 
 func (model *comboLiveModel) comboName(input io.Reader, output io.Writer) (string, error) {
-	name := model.draft.Name
-	finish := "Save"
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Combo Name").Value(&name).Validate(huh.ValidateNotEmpty()),
-		huh.NewSelect[string]().Title("Finish").Options(huh.NewOption("Save", "Save"), huh.NewOption("Back", "Back")).Value(&finish),
-	))
-	if err := model.ui.runHuhIO(form, input, output); err != nil {
-		return "", err
-	}
-	if finish == "Back" {
-		return "", huh.ErrUserAborted
-	}
-	return strings.TrimSpace(name), nil
-}
-
-func (model *comboLiveModel) addModel(input io.Reader, output io.Writer) (string, error) {
-	options, err := model.ui.comboModelOptions()
+	result, err := model.ui.runTUIForm(model.ui.t("screen.createCombo"), []tuiField{
+		{label: model.ui.t("screen.comboName"), kind: tuiInput, value: model.draft.Name},
+	}, input, output)
 	if err != nil {
 		return "", err
 	}
-	selected := ""
-	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Add Model").Options(options...).Value(&selected)))
-	if err := model.ui.runHuhIO(form, input, output); err != nil {
+	return strings.TrimSpace(result.values[0]), nil
+}
+
+func (model *comboLiveModel) addModel(input io.Reader, output io.Writer) (string, error) {
+	options, err := model.ui.comboModelValues()
+	if err != nil {
+		return "", err
+	}
+	selected, err := model.ui.tuiSelect(model.ui.t("screen.addModel"), model.ui.t("screen.modelsList"), options, input, output)
+	if err != nil {
 		return "", err
 	}
 	model.draft.Models = append(model.draft.Models, selected)
@@ -258,13 +251,8 @@ func (model *comboLiveModel) removeModel(input io.Reader, output io.Writer) (str
 	if len(models) == 0 {
 		return "No models to remove", nil
 	}
-	selected := models[0]
-	options := make([]huh.Option[string], 0, len(models))
-	for _, value := range models {
-		options = append(options, huh.NewOption(value, value))
-	}
-	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Remove Model").Options(options...).Value(&selected)))
-	if err := model.ui.runHuhIO(form, input, output); err != nil {
+	selected, err := model.ui.tuiSelect(model.ui.t("screen.removeModel"), model.ui.t("screen.modelsList"), models, input, output)
+	if err != nil {
 		return "", err
 	}
 	filtered := model.draft.Models[:0]
@@ -286,7 +274,7 @@ func (model *comboLiveModel) edit(input io.Reader, output io.Writer) (string, er
 		return "", nil
 	}
 	item := model.combos[index]
-	if err := model.ui.promptComboIO(&item, true, input, output); err != nil {
+	if err := model.ui.promptComboTUI(&item, true, input, output); err != nil {
 		return "", err
 	}
 	return "Combo updated", nil
@@ -298,9 +286,7 @@ func (model *comboLiveModel) delete(input io.Reader, output io.Writer) (string, 
 		return "", nil
 	}
 	item := model.combos[index]
-	ok, err := confirmHuh(input, output, "Delete combo "+item.Name+"?", func(form *huh.Form) error {
-		return model.ui.runHuhIO(form, input, output)
-	})
+	ok, err := model.ui.tuiConfirm("Delete combo "+item.Name+"?", input, output)
 	if err != nil || !ok {
 		return "", err
 	}
