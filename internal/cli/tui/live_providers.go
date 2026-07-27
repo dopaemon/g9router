@@ -93,10 +93,10 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "tab", "right", "l":
-			model.tab = (model.tab + 1) % 4
+			model.tab = providerTab(cycleIndex(int(model.tab), 4, 1))
 			model.cursor = 0
 		case "shift+tab", "left", "h":
-			model.tab = (model.tab + 3) % 4
+			model.tab = providerTab(cycleIndex(int(model.tab), 4, -1))
 			model.cursor = 0
 		case "up", "k":
 			if model.cursor > 0 {

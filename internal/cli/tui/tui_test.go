@@ -432,3 +432,12 @@ func TestProviderCompactTabsStack(t *testing.T) {
 		t.Fatalf("provider compact geometry: tabs=%+v itemsTop=%d tabsTop=%d", model.tabRegions, model.itemsTop, model.tabsTop)
 	}
 }
+
+func TestNavigationHelpers(t *testing.T) {
+	if got := moveIndex(0, 3, -1); got != 0 || moveIndex(2, 3, 1) != 2 {
+		t.Fatalf("clamped navigation failed")
+	}
+	if got := cycleIndex(0, 3, -1); got != 2 || cycleIndex(2, 3, 1) != 0 {
+		t.Fatalf("cycled navigation failed")
+	}
+}

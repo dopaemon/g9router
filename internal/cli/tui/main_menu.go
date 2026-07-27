@@ -57,21 +57,13 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch key.String() {
 		case "up", "k":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = moveIndex(model.cursor, len(model.items), -1)
 		case "down", "j":
-			if model.cursor+1 < len(model.items) {
-				model.cursor++
-			}
+			model.cursor = moveIndex(model.cursor, len(model.items), 1)
 		case "left", "h":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = moveIndex(model.cursor, len(model.items), -1)
 		case "right", "l":
-			if model.cursor+1 < len(model.items) {
-				model.cursor++
-			}
+			model.cursor = moveIndex(model.cursor, len(model.items), 1)
 		case "enter", " ":
 			model.selected = model.items[model.cursor]
 			return model, tea.Quit
