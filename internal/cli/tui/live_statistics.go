@@ -79,25 +79,23 @@ func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "left", "h":
-			if model.period > 0 {
-				model.period--
+			previous := moveIndex(model.period, len(statisticsPeriods), -1)
+			if previous != model.period {
+				model.period = previous
 				model.focusCurrent = true
 				model.refresh()
 			}
 		case "right", "l":
-			if model.period+1 < len(statisticsPeriods) {
-				model.period++
+			next := moveIndex(model.period, len(statisticsPeriods), 1)
+			if next != model.period {
+				model.period = next
 				model.focusCurrent = true
 				model.refresh()
 			}
 		case "up", "k":
-			if model.chartCursor > 0 {
-				model.chartCursor--
-			}
+			model.chartCursor = moveIndex(model.chartCursor, len(model.chart), -1)
 		case "down", "j":
-			if model.chartCursor+1 < len(model.chart) {
-				model.chartCursor++
-			}
+			model.chartCursor = moveIndex(model.chartCursor, len(model.chart), 1)
 		case "r", "enter", " ":
 			model.refresh()
 		}

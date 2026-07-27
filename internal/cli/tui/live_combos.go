@@ -91,13 +91,9 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = moveIndex(model.cursor, model.itemCount(), -1)
 		case "down", "j":
-			if model.cursor+1 < model.itemCount() {
-				model.cursor++
-			}
+			model.cursor = moveIndex(model.cursor, model.itemCount(), 1)
 		case "enter", " ":
 			return model, model.runAction()
 		case "c":

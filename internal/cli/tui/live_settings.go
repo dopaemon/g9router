@@ -52,13 +52,9 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = moveIndex(model.cursor, 6, -1)
 		case "down", "j":
-			if model.cursor+1 < 6 {
-				model.cursor++
-			}
+			model.cursor = moveIndex(model.cursor, 6, 1)
 		case "left", "h":
 			if model.cursor >= 4 {
 				model.cursor = 0
