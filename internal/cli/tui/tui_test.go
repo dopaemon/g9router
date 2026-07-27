@@ -221,6 +221,21 @@ func TestResponsiveCardWidths(t *testing.T) {
 	}
 }
 
+func TestMainMenuMouseItemUsesRenderedBounds(t *testing.T) {
+	model := &mainMenuModel{items: []string{"one", "two"}, menuTop: 5, menuLeft: 4, menuWidth: 20}
+	if got := model.mouseItem(4, 5); got != 0 {
+		t.Fatalf("left edge item = %d, want 0", got)
+	}
+	if got := model.mouseItem(23, 6); got != 1 {
+		t.Fatalf("right edge item = %d, want 1", got)
+	}
+	for _, point := range [][2]int{{3, 5}, {24, 5}, {4, 7}} {
+		if got := model.mouseItem(point[0], point[1]); got != -1 {
+			t.Fatalf("point %v = %d, want -1", point, got)
+		}
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})
