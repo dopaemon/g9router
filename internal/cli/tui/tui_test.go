@@ -311,6 +311,14 @@ func TestSettingsStatusSurvivesLocalizedLabels(t *testing.T) {
 	}
 }
 
+func TestCLIToolsCompactNavigationMovesOneRow(t *testing.T) {
+	model := &cliToolsModel{ui: &UI{width: 42}, cursor: 2}
+	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if model.cursor != 3 {
+		t.Fatalf("compact cursor = %d, want 3", model.cursor)
+	}
+}
+
 func TestTUIFormMultiSelect(t *testing.T) {
 	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{kind: tuiMultiSelect, options: []string{"a", "b"}, selected: []bool{false, false}}}}
 	model.Update(tea.KeyMsg{Type: tea.KeySpace})

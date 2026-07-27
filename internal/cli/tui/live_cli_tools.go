@@ -81,19 +81,27 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			if model.cursor >= 2 {
-				model.cursor -= 2
+			step := 2
+			if model.ui.compact() {
+				step = 1
+			}
+			if model.cursor >= step {
+				model.cursor -= step
 			}
 		case "down", "j":
-			if model.cursor+2 < len(cliToolOrder) {
-				model.cursor += 2
+			step := 2
+			if model.ui.compact() {
+				step = 1
+			}
+			if model.cursor+step < len(cliToolOrder) {
+				model.cursor += step
 			}
 		case "left", "h":
-			if model.cursor%2 == 1 {
+			if !model.ui.compact() && model.cursor%2 == 1 {
 				model.cursor--
 			}
 		case "right", "l":
-			if model.cursor%2 == 0 && model.cursor+1 < len(cliToolOrder) {
+			if !model.ui.compact() && model.cursor%2 == 0 && model.cursor+1 < len(cliToolOrder) {
 				model.cursor++
 			}
 		case "enter", " ", "s":
@@ -122,26 +130,39 @@ func (model *cliToolsModel) View() string {
 		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)
 	}
 	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
-	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
-	rowCount := (len(cliToolOrder) + 1) / 2
-	startRow := model.cursor / 2
-	if startRow > 2 {
-		startRow -= 2
-	}
-	if startRow+3 > rowCount {
-		startRow = rowCount - 3
-	}
-	if startRow < 0 {
-		startRow = 0
-	}
-	for row := startRow; row < rowCount && row < startRow+3; row++ {
-		index := row * 2
-		left := cliToolCard(index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
-		right := ""
-		if index+1 < len(cliToolOrder) {
-			right = cliToolCard(index+1, cliToolOrder[index+1], model.statuses[cliToolOrder[index+1]], index+1 == model.cursor)
+	if model.ui.compact() {
+		start := model.cursor - 2
+		if start < 0 {
+			start = 0
 		}
-		cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
+		if start+5 > len(cliToolOrder) {
+			start = max(0, len(cliToolOrder)-5)
+		}
+		for index := start; index < len(cliToolOrder) && index < start+5; index++ {
+			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
+		}
+	} else {
+		column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
+		rowCount := (len(cliToolOrder) + 1) / 2
+		startRow := model.cursor / 2
+		if startRow > 2 {
+			startRow -= 2
+		}
+		if startRow+3 > rowCount {
+			startRow = rowCount - 3
+		}
+		if startRow < 0 {
+			startRow = 0
+		}
+		for row := startRow; row < rowCount && row < startRow+3; row++ {
+			index := row * 2
+			left := cliToolCard(index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
+			right := ""
+			if index+1 < len(cliToolOrder) {
+				right = cliToolCard(index+1, cliToolOrder[index+1], model.statuses[cliToolOrder[index+1]], index+1 == model.cursor)
+			}
+			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
+		}
 	}
 	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
