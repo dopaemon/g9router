@@ -453,3 +453,23 @@ func TestHuhWidthFitsTerminal(t *testing.T) {
 		t.Fatalf("default huh width = %d, want 72", got)
 	}
 }
+
+func TestLiveScreensRenderAtNarrowWidth(t *testing.T) {
+	ui := &UI{width: 42, height: 24, Locale: "en"}
+	views := []string{
+		(&mainMenuModel{ui: ui, items: []string{"Endpoint", "Providers"}}).View(),
+		(&endpointLiveModel{ui: ui}).View(),
+		(&providerLiveModel{ui: ui}).View(),
+		(&comboLiveModel{ui: ui}).View(),
+		(&statisticsModel{ui: ui}).View(),
+		(&cliToolsModel{ui: ui}).View(),
+		(&settingsModel{ui: ui}).View(),
+		(&languageModel{ui: ui}).View(),
+		(&logsModel{ui: ui}).View(),
+	}
+	for index, view := range views {
+		if strings.TrimSpace(view) == "" {
+			t.Fatalf("screen %d rendered empty", index)
+		}
+	}
+}
