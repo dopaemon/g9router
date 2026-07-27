@@ -22,7 +22,14 @@ func (ui *UI) runHuhIO(form *huh.Form, input io.Reader, output io.Writer) error 
 	if file, ok := input.(*os.File); !ok || !IsTerminal(file) {
 		accessible = true
 	}
-	return form.WithAccessible(accessible).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(72).Run()
+	return form.WithAccessible(accessible).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(ui.huhWidth()).Run()
+}
+
+func (ui *UI) huhWidth() int {
+	if ui.width <= 0 {
+		return 72
+	}
+	return max(20, min(ui.width-4, 72))
 }
 
 func (ui *UI) promptProvider(item *provider, edit bool) error {

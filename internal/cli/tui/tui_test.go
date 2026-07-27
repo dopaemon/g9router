@@ -441,3 +441,12 @@ func TestNavigationHelpers(t *testing.T) {
 		t.Fatalf("cycled navigation failed")
 	}
 }
+
+func TestHuhWidthFitsTerminal(t *testing.T) {
+	if got := (&UI{width: 42}).huhWidth(); got > 38 {
+		t.Fatalf("huh width = %d, exceeds terminal content", got)
+	}
+	if got := (&UI{}).huhWidth(); got != 72 {
+		t.Fatalf("default huh width = %d, want 72", got)
+	}
+}
