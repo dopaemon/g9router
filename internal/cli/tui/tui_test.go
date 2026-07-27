@@ -376,3 +376,33 @@ func TestRedactLogText(t *testing.T) {
 		t.Fatalf("redacted log = %q", got)
 	}
 }
+
+func TestLogsRefreshPreservesHealthySource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/usage/logs":
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		case "/api/translator/console-logs":
+			_, _ = fmt.Fprint(w, `{"logs":["GET /api/test 200"]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	model := &logsModel{
+		ui:      &UI{BaseURL: server.URL, Client: server.Client(), Locale: "en"},
+		apiLogs: []apiLogEntry{{Provider: "old"}},
+		httpLog: []string{"old http"},
+	}
+	model.refresh()
+	if model.apiErr == nil || model.httpErr != nil {
+		t.Fatalf("errors = api %v, http %v", model.apiErr, model.httpErr)
+	}
+	if len(model.apiLogs) != 1 || model.apiLogs[0].Provider != "old" {
+		t.Fatalf("api logs were discarded: %#v", model.apiLogs)
+	}
+	if len(model.httpLog) != 1 || model.httpLog[0] != "GET /api/test 200" {
+		t.Fatalf("http logs = %#v", model.httpLog)
+	}
+}
