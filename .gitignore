@@ -10,6 +10,8 @@ proxy-pools.json
 usage.json
 logs/
 g9router
+PRODUCT.md
+.impeccable/critique/
 !go.mod
 !go.sum
 !README.md

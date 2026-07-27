@@ -83,9 +83,9 @@ func (model *endpointLiveModel) View() string {
 		return gradientText(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#FB7185")).Render(model.ui.t("common.error")+": "+model.err.Error()) + "\n\n" + model.ui.t("common.back") + ".\n"
 	}
 	endpointCard := innerCardStyle.Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
-		model.ui.t("endpoint.local") + "     " + apiEndpoint(model.ui.BaseURL) + "\n" +
-		model.ui.t("endpoint.tunnel") + "    " + statusTextLocale(model.status.Tunnel.Enabled, model.ui.Locale) + "  " + apiEndpoint(model.status.Tunnel.PublicURL) + "\n" +
-		model.ui.t("endpoint.tailscale") + " " + statusTextLocale(model.status.Tailscale.Enabled, model.ui.Locale) + "  " + apiEndpoint(tailscaleState(model.status.Tailscale.TunnelURL, model.tailscale.Installed)))
+		endpointLine(model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
+		endpointLine(model.ui.t("endpoint.tunnel"), statusTextLocale(model.status.Tunnel.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(model.status.Tunnel.PublicURL))) + "\n" +
+		endpointLine(model.ui.t("endpoint.tailscale"), statusTextLocale(model.status.Tailscale.Enabled, model.ui.Locale)+"  "+mutedStyle.Render(apiEndpoint(tailscaleState(model.status.Tailscale.TunnelURL, model.tailscale.Installed)))))
 	keys := ""
 	if len(model.keys) == 0 {
 		keys = model.ui.t("keys.none")
@@ -105,6 +105,10 @@ func (model *endpointLiveModel) View() string {
 	}
 	view += "\n" + mutedStyle.Render(model.ui.t("keys.autoRefresh")) + "\n"
 	return view
+}
+
+func endpointLine(label, value string) string {
+	return lipgloss.JoinHorizontal(lipgloss.Top, endpointLabelStyle.Render(label), value)
 }
 
 func controlGrid(model *endpointLiveModel) string {
@@ -288,6 +292,7 @@ func formatLiveKey(index int, key apiKey, locale string) string {
 var outerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7C3AED")).Padding(1, 2).Width(78)
 var innerCardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A855F7")).Padding(1, 2).Width(66)
 var cardTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F0ABFC"))
+var endpointLabelStyle = lipgloss.NewStyle().Width(12).Foreground(lipgloss.Color("#CBD5E1"))
 var controlsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#67E8F9"))
 var mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#94A3B8"))
 

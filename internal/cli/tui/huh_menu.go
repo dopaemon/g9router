@@ -108,7 +108,10 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		oauth := ui.t("menu.oauth")
 		language := ui.t("menu.language")
 		exit := ui.t("menu.exit")
-		choice, err := ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
+		choice, err := ui.mainMenuChoice([]string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
+		if !isInteractiveWriter(ui.Out) {
+			choice, err = ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, cliTools, settings, oauth, language, exit})
+		}
 		if err != nil {
 			return err
 		}
