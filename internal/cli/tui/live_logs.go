@@ -126,7 +126,7 @@ func (model *logsModel) currentRows() []string {
 	if model.tab == 1 {
 		rows := make([]string, len(model.httpLog))
 		for index, value := range model.httpLog {
-			rows[index] = model.logRow(index, value)
+			rows[index] = model.logRow(index, truncateText(value, model.ui.innerWidth()-2))
 		}
 		return rows
 	}
@@ -140,9 +140,18 @@ func (model *logsModel) currentRows() []string {
 		if status == "" {
 			status = "ok"
 		}
-		rows[index] = model.logRow(index, fmt.Sprintf("%-8s %-7s %-18s %-24s %d/%d", timestamp, status, truncateText(entry.Provider, 18), truncateText(entry.Model, 24), entry.Input, entry.Output))
+		rows[index] = model.logRow(index, model.formatAPILog(timestamp, status, entry))
 	}
 	return rows
+}
+
+func (model *logsModel) formatAPILog(timestamp, status string, entry apiLogEntry) string {
+	width := model.ui.innerWidth() - 2
+	line := fmt.Sprintf("%-8s %-7s %-18s %-24s %d/%d", timestamp, status, truncateText(entry.Provider, 18), truncateText(entry.Model, 24), entry.Input, entry.Output)
+	if width < 72 {
+		line = fmt.Sprintf("%s %-7s %s/%s %d/%d", timestamp, status, truncateText(entry.Provider, 12), truncateText(entry.Model, 18), entry.Input, entry.Output)
+	}
+	return truncateText(line, width)
 }
 
 func (model *logsModel) logRow(index int, value string) string {

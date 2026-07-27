@@ -258,3 +258,10 @@ func TestLogsRowsKeepTenLineViewport(t *testing.T) {
 		t.Fatalf("visible logs = %d", got)
 	}
 }
+
+func TestLogsRowsFitNarrowTerminal(t *testing.T) {
+	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
+	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {
+		t.Fatalf("log row width = %d, limit = %d", got, model.ui.innerWidth()-2)
+	}
+}
