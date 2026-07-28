@@ -27,18 +27,18 @@ type endpointLiveModel struct {
 	keys      []apiKey
 	notice    string
 	err       error
+	loading   bool
 	cursor    int
 }
 
 func (ui *UI) liveEndpoint() error {
 	EnableColors(ui.Out)
-	model := endpointLiveModel{ui: ui}
-	model.refresh()
+	model := endpointLiveModel{ui: ui, loading: true}
 	return ui.runTea(&model)
 }
 
 func (model *endpointLiveModel) Init() tea.Cmd {
-	return endpointRefresh()
+	return tea.Batch(func() tea.Msg { return endpointRefreshMsg{} }, endpointRefresh())
 }
 
 func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
@@ -106,8 +106,8 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *endpointLiveModel) View() string {
-	if model.err != nil {
-		return model.ui.errorView(model.ui.t("endpoint.title"), model.err)
+	if model.loading {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
 	}
 	endpointCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
 		endpointLine(model.ui, model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
@@ -127,6 +127,9 @@ func (model *endpointLiveModel) View() string {
 	controls := controlGrid(model) + "\n" + mutedStyle.Render(model.ui.t("keys.autoRefresh"))
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
+	}
+	if model.err != nil {
+		controls += "\n" + errorStyle.Render("ERROR: "+model.ui.errorSummary(model.err))
 	}
 	controlsCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controls)
 	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
@@ -196,6 +199,7 @@ func (model *endpointLiveModel) runEndpointAction(index int) tea.Cmd {
 }
 
 func (model *endpointLiveModel) refresh() {
+	defer func() { model.loading = false }()
 	var status tunnelStatus
 	if err := model.ui.request(http.MethodGet, "/api/tunnel/status", nil, &status); err != nil {
 		model.err = err

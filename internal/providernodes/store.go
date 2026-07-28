@@ -1,12 +1,11 @@
 package providernodes
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
+
+	"g9router/internal/db"
 )
 
 type Node struct {
@@ -27,21 +26,10 @@ func New(path string) *Store { store := &Store{path: path}; _ = store.load(); re
 func (s *Store) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := os.ReadFile(s.path)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(raw, &s.items)
+	return db.ReadJSON(s.path, &s.items)
 }
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(s.items, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.path, raw, 0600)
+	return db.WriteJSON(s.path, s.items)
 }
 func (s *Store) List() []Node {
 	s.mu.Lock()

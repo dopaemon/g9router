@@ -42,13 +42,13 @@ func (ui *UI) cardWidth() int {
 	if width <= 0 {
 		return 76
 	}
-	return max(20, min(width, 78))
+	return max(1, min(width, 78))
 }
 
 func (ui *UI) innerWidth() int {
 	width := ui.cardWidth() - 8
-	if width < 12 {
-		return 12
+	if width < 1 {
+		return 1
 	}
 	return width
 }
@@ -78,7 +78,10 @@ func (ui *UI) fitView(view string) string {
 	if len(lines) <= ui.height {
 		return view
 	}
-	keep := max(1, ui.height-1)
+	if ui.height == 1 {
+		return lines[0]
+	}
+	keep := ui.height - 1
 	start := len(lines) - keep
 	return strings.Join(append([]string{lines[0]}, lines[start:]...), "\n")
 }
@@ -115,7 +118,11 @@ func (ui *UI) controlStyle() lipgloss.Style {
 }
 
 func (ui *UI) runTeaIO(model tea.Model, input io.Reader, output io.Writer) error {
-	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, tea.WithInput(input), tea.WithOutput(output), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	options := []tea.ProgramOption{tea.WithInput(input), tea.WithOutput(output), tea.WithAltScreen()}
+	if !accessibleMode(input) {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, options...).Run()
 	return err
 }
 

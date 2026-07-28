@@ -751,7 +751,7 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			continue
 		}
 		if action != "e" && action != "d" || len(payload.Combos) == 0 {
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidSelection"))
 			continue
 		}
 		var index int

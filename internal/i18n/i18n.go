@@ -71,6 +71,20 @@ var translations = map[string]map[string]string{
 func init() {
 	translations[English]["keys.controls"] = "Controls"
 	translations[Vietnamese]["keys.controls"] = "Điều khiển"
+	translations[English]["common.refresh"] = "Refresh"
+	translations[Vietnamese]["common.refresh"] = "Làm mới"
+	translations[English]["common.loading"] = "Loading…"
+	translations[Vietnamese]["common.loading"] = "Đang tải…"
+	translations[English]["common.retryPrompt"] = "Retry %s?"
+	translations[Vietnamese]["common.retryPrompt"] = "Thử lại %s?"
+	translations[English]["form.required"] = "%s is required"
+	translations[Vietnamese]["form.required"] = "%s là bắt buộc"
+	translations[English]["form.selectOption"] = "Select at least one option"
+	translations[Vietnamese]["form.selectOption"] = "Hãy chọn ít nhất một mục"
+	translations[English]["form.providerValuesRequired"] = "Provider ID, base URL, and API key are required"
+	translations[Vietnamese]["form.providerValuesRequired"] = "Provider ID, base URL và API key là bắt buộc"
+	translations[English]["form.comboValuesRequired"] = "Combo name and at least one model are required"
+	translations[Vietnamese]["form.comboValuesRequired"] = "Tên combo và ít nhất một model là bắt buộc"
 	for key, values := range map[string][2]string{
 		"screen.runtime":                  {"Runtime", "Runtime"},
 		"screen.security":                 {"Security", "Bảo mật"},
@@ -239,6 +253,8 @@ func init() {
 		"controls.moveSwitch":             {"↑↓/jk move  Tab switch card", "↑↓/jk di chuyển  Tab đổi card"},
 		"controls.selectEdit":             {"Enter select  e edit", "Enter chọn  e sửa"},
 		"controls.deleteBack":             {"d delete  q back", "d xóa  q quay lại"},
+		"controls.providerEditDelete":     {"e edit  d delete", "e sửa  d xóa"},
+		"controls.providerCustomActions":  {"e edit  d delete  a add", "e sửa  d xóa  a thêm"},
 		"controls.comboMoveSelect":        {"↑↓/jk move  Enter select", "↑↓/jk di chuyển  Enter chọn"},
 		"controls.comboCreateAdd":         {"c create  a add model", "c tạo  a thêm model"},
 		"controls.comboEdit":              {"e edit", "e sửa"},

@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type statisticsRefreshMsg struct{}
@@ -23,6 +24,7 @@ type statisticsModel struct {
 	stats        statisticsPayload
 	chart        []statisticsPoint
 	err          error
+	loading      bool
 }
 
 type statisticsPayload struct {
@@ -54,12 +56,13 @@ var statisticsPeriods = []string{"today", "24h", "7d", "30d", "60d"}
 
 func (ui *UI) liveStatistics() error {
 	EnableColors(ui.Out)
-	model := statisticsModel{ui: ui, focusCurrent: true}
-	model.refresh()
+	model := statisticsModel{ui: ui, focusCurrent: true, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *statisticsModel) Init() tea.Cmd { return statisticsRefresh() }
+func (model *statisticsModel) Init() tea.Cmd {
+	return tea.Batch(func() tea.Msg { return statisticsRefreshMsg{} }, statisticsRefresh())
+}
 
 func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
@@ -107,8 +110,8 @@ func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *statisticsModel) View() string {
-	if model.err != nil {
-		return model.ui.errorView(model.ui.t("menu.statistics"), model.err)
+	if model.loading {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
 	}
 	periods := make([]string, len(statisticsPeriods))
 	for index, period := range statisticsPeriods {
@@ -135,7 +138,11 @@ func (model *statisticsModel) View() string {
 	if model.ui.compact() {
 		periodView = lipgloss.JoinVertical(lipgloss.Left, periods...)
 	}
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + periodView + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
+	content := cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + periodView + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls
+	if model.err != nil {
+		content += "\n\n" + errorStyle.Render("ERROR: "+model.ui.errorSummary(model.err))
+	}
+	return model.ui.outerStyle().Render(content)
 }
 
 func (model *statisticsModel) overviewCard() string {
@@ -176,11 +183,10 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 }
 
 func truncateText(value string, limit int) string {
-	runes := []rune(value)
-	if len(runes) <= limit {
-		return value
+	if limit <= 0 {
+		return ""
 	}
-	return string(runes[:limit-1]) + "…"
+	return ansi.Truncate(value, limit, "…")
 }
 
 func (model *statisticsModel) chartCard() string {
@@ -242,6 +248,7 @@ func (model *statisticsModel) recentCard() string {
 }
 
 func (model *statisticsModel) refresh() {
+	defer func() { model.loading = false }()
 	period := statisticsPeriods[model.period]
 	var stats statisticsPayload
 	if err := model.ui.request(http.MethodGet, "/api/usage/stats?period="+url.QueryEscape(period), nil, &stats); err != nil {

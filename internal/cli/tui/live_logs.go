@@ -24,6 +24,7 @@ type logsModel struct {
 	detail      string
 	paused      bool
 	followTail  bool
+	loading     bool
 	tabRegions  []tuiRegion
 	itemsRegion tuiRegion
 }
@@ -50,12 +51,13 @@ var logActions = struct {
 }
 
 func (ui *UI) liveLogs() error {
-	model := logsModel{ui: ui, followTail: true}
-	model.refresh()
+	model := logsModel{ui: ui, followTail: true, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *logsModel) Init() tea.Cmd { return logsRefresh() }
+func (model *logsModel) Init() tea.Cmd {
+	return tea.Batch(func() tea.Msg { return logsRefreshMsg{} }, logsRefresh())
+}
 
 func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
@@ -206,6 +208,9 @@ func (model *logsModel) currentError() error {
 }
 
 func (model *logsModel) currentContent() string {
+	if model.loading {
+		return mutedStyle.Render(model.ui.t("common.loading"))
+	}
 	if err := model.currentError(); err != nil {
 		message := errorStyle.Render(model.ui.t("common.error") + ": " + model.ui.errorSummary(err))
 		if model.rowCount() > 0 {
@@ -276,6 +281,7 @@ func (model *logsModel) rowCount() int {
 }
 
 func (model *logsModel) refresh() {
+	defer func() { model.loading = false }()
 	var apiLogs []apiLogEntry
 	apiErr := model.ui.request(http.MethodGet, "/api/usage/logs", nil, &apiLogs)
 	var payload struct {

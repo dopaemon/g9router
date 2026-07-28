@@ -3,11 +3,11 @@ package proxypools
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"g9router/internal/db"
 )
 
 type Pool struct {
@@ -32,9 +32,7 @@ type Store struct {
 
 func New(path string) *Store {
 	s := &Store{path: path}
-	if data, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(data, &s.items)
-	}
+	_ = db.ReadJSON(path, &s.items)
 	return s
 }
 
@@ -129,11 +127,7 @@ func (s *Store) saveLocked() error {
 	if s.path == "" {
 		return nil
 	}
-	data, err := json.MarshalIndent(s.items, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.path, data, 0600)
+	return db.WriteJSON(s.path, s.items)
 }
 
 func newID() string {

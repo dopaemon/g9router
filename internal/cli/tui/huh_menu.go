@@ -131,7 +131,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 					return
 				}
 				fmt.Fprintln(ui.Out, Error(err.Error()))
-				retry, retryErr := ui.huhConfirm("Retry "+name+"?", true)
+				retry, retryErr := ui.huhConfirm(fmt.Sprintf(ui.t("common.retryPrompt"), name), true)
 				if retryErr != nil || !retry {
 					return
 				}
@@ -146,7 +146,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 				return ui.providers(reader)
 			})
 		case endpoint:
-			run(endpoint, func() error { return ui.liveEndpoint() })
+			run(endpoint, func() error {
+				if ui.liveMode() {
+					return ui.liveEndpoint()
+				}
+				return ui.accessibleEndpoint(reader)
+			})
 		case combos:
 			run(combos, func() error {
 				if ui.liveMode() {
@@ -155,7 +160,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 				return ui.combos(reader)
 			})
 		case statistics:
-			run(statistics, func() error { return ui.liveStatistics() })
+			run(statistics, func() error {
+				if ui.liveMode() {
+					return ui.liveStatistics()
+				}
+				return ui.accessibleStatistics(reader)
+			})
 		case cliTools:
 			run(cliTools, func() error {
 				if ui.liveMode() {
@@ -164,7 +174,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 				return ui.cliTools(reader)
 			})
 		case logs:
-			run(logs, func() error { return ui.liveLogs() })
+			run(logs, func() error {
+				if ui.liveMode() {
+					return ui.liveLogs()
+				}
+				return ui.accessibleLogs(reader)
+			})
 		case settings:
 			run(settings, func() error {
 				if ui.liveMode() {

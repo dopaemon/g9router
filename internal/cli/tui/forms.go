@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -217,7 +218,7 @@ func (model *tuiForm) toggle(field *tuiField) {
 func (model *tuiForm) validate() error {
 	for _, field := range model.fields {
 		if field.kind == tuiInput && strings.TrimSpace(field.value) == "" {
-			return errors.New(field.label + " is required")
+			return errors.New(fmt.Sprintf(model.ui.t("form.required"), field.label))
 		}
 		if field.kind == tuiMultiSelect && len(field.options) > 0 {
 			selected := false
@@ -225,7 +226,7 @@ func (model *tuiForm) validate() error {
 				selected = selected || value
 			}
 			if !selected {
-				return errors.New("select at least one option")
+				return errors.New(model.ui.t("form.selectOption"))
 			}
 		}
 	}

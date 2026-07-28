@@ -19,10 +19,6 @@ type mainMenuModel struct {
 	menuWidth int
 }
 
-const (
-	bannerArea = 72
-)
-
 func (ui *UI) mainMenuChoice(items []string) (string, error) {
 	if !isInteractiveWriter(ui.Out) {
 		return "", nil
@@ -33,7 +29,11 @@ func (ui *UI) mainMenuChoice(items []string) (string, error) {
 }
 
 func (ui *UI) runTea(model tea.Model) error {
-	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	options := []tea.ProgramOption{tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen()}
+	if !accessibleMode(ui.In) {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, options...).Run()
 	return err
 }
 
@@ -94,32 +94,12 @@ func (model *mainMenuModel) View() string {
 	for row := 0; row < rowCount; row++ {
 		rows = append(rows, column.Render(model.menuItem(row)))
 	}
-	bannerWidth := min(menuWidth, bannerArea)
-	banner := lipgloss.NewStyle().Width(bannerWidth).Align(lipgloss.Left).Render(slidingBanner(0, bannerWidth))
 	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(fmt.Sprintf(model.ui.t("common.menuControls"), len(model.items)))
-	model.menuTop = 2 + lipgloss.Height(banner) + 2 + 1 + 2 + 2
+	model.menuTop = 2 + 1 + 2 + 2
 	model.menuLeft = 1 + 2 + 1 + 2
 	model.menuWidth = menuWidth
 	menuCard := model.ui.innerStyle().Render(menu)
-	return model.ui.outerStyle().Render(banner + "\n\n" + cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
-}
-
-func slidingBanner(offset, width int) string {
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > 3 {
-		offset = 3
-	}
-	rows := strings.Split(cliBanner, "\n")
-	for index, row := range rows {
-		line := []rune(strings.Repeat(" ", offset) + row)
-		if len(line) > width {
-			line = line[:width]
-		}
-		rows[index] = gradientText(string(line))
-	}
-	return strings.Join(rows, "\n")
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
 }
 
 func (model *mainMenuModel) menuItem(index int) string {

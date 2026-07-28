@@ -48,10 +48,12 @@ func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, outpu
 		apiType = "openai"
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(locale, "form.providerID")).Value(&item.ID).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.providerID"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.providerID")).Value(&item.ID).Validate(func(value string) error {
+			return validateRequiredLocale(locale, i18n.T(locale, "form.providerID"), value)
+		}),
 		huh.NewInput().Title(i18n.T(locale, "form.displayName")).Value(&item.Name),
-		huh.NewInput().Title(i18n.T(locale, "form.baseURL")).Value(&item.BaseURL).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.baseURL"), value) }),
-		huh.NewInput().Title(i18n.T(locale, "form.apiKey")).EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiKey"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.baseURL")).Value(&item.BaseURL).Validate(func(value string) error { return validateRequiredLocale(locale, i18n.T(locale, "form.baseURL"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.apiKey")).EchoMode(huh.EchoModePassword).Value(&item.APIKey).Validate(func(value string) error { return validateRequiredLocale(locale, i18n.T(locale, "form.apiKey"), value) }),
 		huh.NewSelect[string]().Title(i18n.T(locale, "form.apiType")).Options(
 			huh.NewOption(i18n.T(locale, "form.openAICompatible"), "openai"),
 			huh.NewOption(i18n.T(locale, "form.anthropic"), "anthropic"),
@@ -69,17 +71,7 @@ func (ui *UI) promptProviderIO(item *provider, edit bool, input io.Reader, outpu
 		return huh.ErrUserAborted
 	}
 	item.APIType = apiType
-	if err := validateProviderValues(item.ID, item.BaseURL, item.APIKey); err != nil {
-		return err
-	}
-	item.Enabled = true
-	method := http.MethodPost
-	path := "/api/providers"
-	if edit {
-		method = http.MethodPut
-		path = "/api/providers/" + item.ID
-	}
-	return ui.request(method, path, item, nil)
+	return ui.saveProvider(item, edit)
 }
 
 func (ui *UI) promptAPIKey() (apiKey, error) {
@@ -90,7 +82,7 @@ func promptAPIKeyIO(input io.Reader, output io.Writer, run func(*huh.Form) error
 	var name string
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiName"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequiredLocale(locale, i18n.T(locale, "form.apiName"), value) }),
 		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
 			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
 			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
@@ -102,7 +94,7 @@ func promptAPIKeyIO(input io.Reader, output io.Writer, run func(*huh.Form) error
 	if finish == "Back" {
 		return apiKey{}, huh.ErrUserAborted
 	}
-	if err := validateRequired(i18n.T(locale, "form.apiName"), name); err != nil {
+	if err := validateRequiredLocale(locale, i18n.T(locale, "form.apiName"), name); err != nil {
 		return apiKey{}, err
 	}
 	var created apiKey
@@ -118,7 +110,7 @@ func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Write
 	name := key.Name
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequired(i18n.T(locale, "form.apiName"), value) }),
+		huh.NewInput().Title(i18n.T(locale, "form.apiName")).Value(&name).Validate(func(value string) error { return validateRequiredLocale(locale, i18n.T(locale, "form.apiName"), value) }),
 		huh.NewSelect[string]().Title(i18n.T(locale, "form.finish")).Options(
 			huh.NewOption(i18n.T(locale, "common.save"), "Save"),
 			huh.NewOption(i18n.T(locale, "common.back"), "Back"),
@@ -130,7 +122,7 @@ func (ui *UI) promptAPIKeyRenameIO(key *apiKey, input io.Reader, output io.Write
 	if finish == "Back" {
 		return huh.ErrUserAborted
 	}
-	if err := validateRequired(i18n.T(locale, "form.apiName"), name); err != nil {
+	if err := validateRequiredLocale(locale, i18n.T(locale, "form.apiName"), name); err != nil {
 		return err
 	}
 	return request(http.MethodPut, "/api/keys/"+key.ID, map[string]string{"name": strings.TrimSpace(name)}, nil)
@@ -148,7 +140,9 @@ func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.W
 	}
 	finish := "Save"
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(i18n.T(ui.Locale, "screen.comboName")).Value(&item.Name).Validate(func(value string) error { return validateRequired(i18n.T(ui.Locale, "screen.comboName"), value) }),
+		huh.NewInput().Title(i18n.T(ui.Locale, "screen.comboName")).Value(&item.Name).Validate(func(value string) error {
+			return validateRequiredLocale(ui.Locale, i18n.T(ui.Locale, "screen.comboName"), value)
+		}),
 		huh.NewMultiSelect[string]().Title(i18n.T(ui.Locale, "screen.modelsList")).Options(options...).Value(&models).Validate(func(value []string) error {
 			if len(value) == 0 {
 				return errors.New(i18n.T(ui.Locale, "form.selectModels"))
@@ -173,13 +167,7 @@ func (ui *UI) promptComboIO(item *combo, edit bool, input io.Reader, output io.W
 	if err := validateComboValues(item.Name, models); err != nil {
 		return err
 	}
-	method := http.MethodPost
-	path := "/api/combos"
-	if edit {
-		method = http.MethodPut
-		path = "/api/combos/" + item.ID
-	}
-	return ui.request(method, path, item, nil)
+	return ui.saveCombo(item, edit, models)
 }
 
 func huhActionError(action string, err error) error {

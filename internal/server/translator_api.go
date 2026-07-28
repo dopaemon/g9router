@@ -95,11 +95,7 @@ func (s *Server) translatorSendAPI(w http.ResponseWriter, r *http.Request) {
 		if provider.ID != input.Provider && !strings.HasPrefix(provider.ID, input.Provider) {
 			continue
 		}
-		if provider.OAuthID != "" {
-			if credential, ok := s.oauth.Get(provider.OAuthID); ok {
-				provider.APIKey = credential.AccessToken
-			}
-		}
+		provider, _ = s.credentialProvider(r.Context(), provider, false)
 		if stream, _ := input.Body["stream"].(bool); stream {
 			r.Header.Set("Accept", "text/event-stream")
 		}

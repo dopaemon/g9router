@@ -10,39 +10,10 @@ import (
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	handleAliases := func(handler http.HandlerFunc, paths ...string) {
-		for _, path := range paths {
-			mux.HandleFunc(path, handler)
-		}
-	}
+	registerAliases := func(handler http.HandlerFunc, paths ...string) { registerRoutes(mux, handler, paths...) }
+	s.registerOpenAIRoutes(mux, registerAliases)
+	s.registerProviderRoutes(mux)
 	mux.HandleFunc("/healthz", s.health)
-	handleAliases(s.models, "/v1/models", "/api/v1/models", "/v1", "/api/v1")
-	handleAliases(s.modelCatalogAPI, "/v1/models/", "/api/v1/models/")
-	mux.HandleFunc("/v1beta/models", s.betaModels)
-	mux.HandleFunc("/v1beta/models/", s.betaModelResource)
-	mux.HandleFunc("/api/v1beta/models", s.betaModels)
-	mux.HandleFunc("/api/v1beta/models/", s.betaModelResource)
-	handleAliases(s.chatCompletions, "/v1/chat/completions", "/api/v1/chat/completions", "/api/dashboard/chat/completions")
-	handleAliases(s.responses, "/v1/responses", "/api/v1/responses")
-	handleAliases(s.responsesCompactAPI, "/v1/responses/compact", "/api/v1/responses/compact")
-	handleAliases(s.ollamaChatAPI, "/v1/api/chat", "/api/v1/api/chat")
-	handleAliases(s.messages, "/v1/messages", "/api/v1/messages")
-	handleAliases(s.countTokensAPI, "/v1/messages/count_tokens", "/api/v1/messages/count_tokens")
-	handleAliases(s.embeddings, "/v1/embeddings", "/api/v1/embeddings")
-	handleAliases(s.images, "/v1/images/generations", "/api/v1/images/generations")
-	handleAliases(s.transcriptions, "/v1/audio/transcriptions", "/api/v1/audio/transcriptions")
-	handleAliases(s.speech, "/v1/audio/speech", "/api/v1/audio/speech")
-	handleAliases(s.audioVoicesAPI, "/v1/audio/voices", "/api/v1/audio/voices")
-	handleAliases(s.search, "/v1/search", "/api/v1/search")
-	handleAliases(s.videoAPI, "/v1/videos/", "/api/v1/videos/")
-	handleAliases(s.webFetchAPI, "/v1/web/fetch", "/api/v1/web/fetch")
-	mux.HandleFunc("/api/providers", s.providerAPI)
-	mux.HandleFunc("/api/providers/validate", s.validateProviderAPI)
-	mux.HandleFunc("/api/providers/test-batch", s.providerBatchTestAPI)
-	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
-	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
-	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
-	mux.HandleFunc("/api/providers/kilo/free-models", s.kiloFreeModelsAPI)
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/init", s.initAPI)
 	mux.HandleFunc("/api/version", s.versionAPI)
@@ -202,4 +173,43 @@ func (s *Server) Handler() http.Handler {
 	_, passwordConfigured := s.settings.Secret("password")
 	loginRequired := s.keys.HasActive() || os.Getenv("G9ROUTER_PASSWORD") != "" || passwordConfigured
 	return auth.MiddlewareWithSession(handler, os.Getenv("G9ROUTER_ADMIN_KEY"), s.keys.Valid, loginRequired, s.sessions)
+}
+
+func registerRoutes(mux *http.ServeMux, handler http.HandlerFunc, paths ...string) {
+	for _, path := range paths {
+		mux.HandleFunc(path, handler)
+	}
+}
+
+func (s *Server) registerOpenAIRoutes(mux *http.ServeMux, aliases func(http.HandlerFunc, ...string)) {
+	aliases(s.models, "/v1/models", "/api/v1/models", "/v1", "/api/v1")
+	aliases(s.modelCatalogAPI, "/v1/models/", "/api/v1/models/")
+	mux.HandleFunc("/v1beta/models", s.betaModels)
+	mux.HandleFunc("/v1beta/models/", s.betaModelResource)
+	mux.HandleFunc("/api/v1beta/models", s.betaModels)
+	mux.HandleFunc("/api/v1beta/models/", s.betaModelResource)
+	aliases(s.chatCompletions, "/v1/chat/completions", "/api/v1/chat/completions", "/api/dashboard/chat/completions")
+	aliases(s.responses, "/v1/responses", "/api/v1/responses")
+	aliases(s.responsesCompactAPI, "/v1/responses/compact", "/api/v1/responses/compact")
+	aliases(s.ollamaChatAPI, "/v1/api/chat", "/api/v1/api/chat")
+	aliases(s.messages, "/v1/messages", "/api/v1/messages")
+	aliases(s.countTokensAPI, "/v1/messages/count_tokens", "/api/v1/messages/count_tokens")
+	aliases(s.embeddings, "/v1/embeddings", "/api/v1/embeddings")
+	aliases(s.images, "/v1/images/generations", "/api/v1/images/generations")
+	aliases(s.transcriptions, "/v1/audio/transcriptions", "/api/v1/audio/transcriptions")
+	aliases(s.speech, "/v1/audio/speech", "/api/v1/audio/speech")
+	aliases(s.audioVoicesAPI, "/v1/audio/voices", "/api/v1/audio/voices")
+	aliases(s.search, "/v1/search", "/api/v1/search")
+	aliases(s.videoAPI, "/v1/videos/", "/api/v1/videos/")
+	aliases(s.webFetchAPI, "/v1/web/fetch", "/api/v1/web/fetch")
+}
+
+func (s *Server) registerProviderRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/providers", s.providerAPI)
+	mux.HandleFunc("/api/providers/validate", s.validateProviderAPI)
+	mux.HandleFunc("/api/providers/test-batch", s.providerBatchTestAPI)
+	mux.HandleFunc("/api/providers/suggested-models", s.suggestedModelsAPI)
+	mux.HandleFunc("/api/providers/", s.providerResourceAPI)
+	mux.HandleFunc("/api/providers/client", s.providerClientAPI)
+	mux.HandleFunc("/api/providers/kilo/free-models", s.kiloFreeModelsAPI)
 }

@@ -308,6 +308,16 @@ func TestResponsiveCardWidths(t *testing.T) {
 	}
 }
 
+func TestResponsiveLayoutAtTinySize(t *testing.T) {
+	ui := &UI{width: 10, height: 1}
+	if got := ui.cardWidth(); got > 6 {
+		t.Fatalf("tiny card width = %d", got)
+	}
+	if got := ui.fitView("first\nsecond"); got != "first" {
+		t.Fatalf("height-one view = %q", got)
+	}
+}
+
 func TestMainMenuMouseItemUsesRenderedBounds(t *testing.T) {
 	model := &mainMenuModel{items: []string{"one", "two"}, menuTop: 5, menuLeft: 4, menuWidth: 20}
 	if got := model.mouseItem(4, 5); got != 0 {
@@ -563,6 +573,13 @@ func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {
 		t.Fatalf("log row width = %d, limit = %d", got, model.ui.innerWidth()-2)
+	}
+}
+
+func TestTruncateTextUsesDisplayWidth(t *testing.T) {
+	got := truncateText("你好世界", 4)
+	if width := lipgloss.Width(got); width > 4 {
+		t.Fatalf("display width = %d, value = %q", width, got)
 	}
 }
 

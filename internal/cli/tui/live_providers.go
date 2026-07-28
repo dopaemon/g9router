@@ -48,6 +48,7 @@ type providerLiveModel struct {
 	apiKeys          []provider
 	notice           string
 	err              error
+	loading          bool
 	tabsTop          int
 	itemsTop         int
 	itemsLeft        int
@@ -61,17 +62,18 @@ var freeProviderNames = []string{"mimo-free"}
 
 func (ui *UI) liveProviders() error {
 	EnableColors(ui.Out)
-	model := providerLiveModel{ui: ui}
-	model.refresh()
+	model := providerLiveModel{ui: ui, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *providerLiveModel) Init() tea.Cmd { return providerRefresh() }
+func (model *providerLiveModel) Init() tea.Cmd {
+	return tea.Batch(func() tea.Msg { return providerRefreshMsg{} }, providerRefresh())
+}
 
 func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.MouseMsg:
-		if tab, ok := model.providerMouseTab(message.X, message.Y); ok {
+		if tab, ok := model.providerMouseTab(message.X, message.Y); ok && (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft {
 			model.tab, model.cursor = tab, 0
 			return model, nil
 		}
@@ -151,9 +153,6 @@ func (model *providerLiveModel) providerMouseIndex(x, y int) int {
 
 func (model *providerLiveModel) View() string {
 	model.tabRegions = nil
-	if model.err != nil {
-		return model.ui.errorView(model.ui.t("menu.providers"), model.err)
-	}
 	tabs := []string{model.ui.t("tab.custom"), model.ui.t("tab.oauth"), model.ui.t("tab.free"), model.ui.t("tab.apiKey")}
 	tabLine := make([]string, len(tabs))
 	for index, tab := range tabs {
@@ -165,9 +164,14 @@ func (model *providerLiveModel) View() string {
 	}
 	content := model.cardContent()
 	column := model.ui.controlStyle()
+	actions := model.ui.t("controls.providerEditDelete")
+	if model.tab == customProviderTab {
+		actions = model.ui.t("controls.providerCustomActions")
+	}
 	controlRows := []string{
 		column.Render(mutedStyle.Render(model.ui.t("controls.moveSwitch"))),
 		column.Render(mutedStyle.Render(model.ui.t("controls.selectEdit"))),
+		column.Render(mutedStyle.Render(actions)),
 		column.Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
 	}
 	controls := strings.Join(controlRows, "\n")
@@ -176,6 +180,9 @@ func (model *providerLiveModel) View() string {
 	}
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
+	}
+	if model.err != nil {
+		controls += "\n" + errorStyle.Render("ERROR: "+model.ui.errorSummary(model.err))
 	}
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
@@ -205,6 +212,9 @@ func (model *providerLiveModel) View() string {
 }
 
 func (model *providerLiveModel) cardContent() string {
+	if model.loading {
+		return model.ui.innerStyle().Render(mutedStyle.Render(model.ui.t("common.loading")))
+	}
 	var title string
 	var rows []string
 	switch model.tab {
@@ -222,18 +232,18 @@ func (model *providerLiveModel) cardContent() string {
 			if name == "" {
 				name = item.ID
 			}
-			rows = append(rows, name+" ("+item.ID+") ["+statusText(item.Enabled)+"]")
+			rows = append(rows, name+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
 		}
 	case freeProviderTab:
 		title = model.ui.t("screen.freeProviders")
 		for _, name := range freeProviderNames {
 			item := model.find(model.free, name)
-			rows = append(rows, name+" ["+statusText(item != nil && item.Enabled)+"]")
+			rows = append(rows, name+" ["+statusTextLocale(item != nil && item.Enabled, model.ui.Locale)+"]")
 		}
 	case apiKeyProviderTab:
 		title = model.ui.t("screen.apiKeyProviders")
 		for _, item := range model.apiKeys {
-			rows = append(rows, item.Name+" ("+item.ID+") ["+statusText(item.Enabled)+"]")
+			rows = append(rows, item.Name+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
 		}
 	}
 	if len(rows) == 0 {
@@ -405,6 +415,7 @@ func (model *providerLiveModel) loginOAuth(input io.Reader, output io.Writer, na
 }
 
 func (model *providerLiveModel) refresh() {
+	defer func() { model.loading = false }()
 	var response providersResponse
 	if err := model.ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
 		model.err = err

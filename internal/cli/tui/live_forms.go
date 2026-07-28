@@ -31,16 +31,8 @@ func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, outp
 	if result.values[5] == ui.t("common.back") {
 		return huh.ErrUserAborted
 	}
-	item.ID, item.Name, item.BaseURL, item.APIKey, item.APIType = strings.TrimSpace(result.values[0]), strings.TrimSpace(result.values[1]), strings.TrimSpace(result.values[2]), result.values[3], result.values[4]
-	if err := validateProviderValues(item.ID, item.BaseURL, item.APIKey); err != nil {
-		return err
-	}
-	item.Enabled = true
-	method, path := http.MethodPost, "/api/providers"
-	if edit {
-		method, path = http.MethodPut, "/api/providers/"+item.ID
-	}
-	return ui.request(method, path, item, nil)
+	item.ID, item.Name, item.BaseURL, item.APIKey, item.APIType = result.values[0], result.values[1], result.values[2], result.values[3], result.values[4]
+	return ui.saveProvider(item, edit)
 }
 
 func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error) {
@@ -103,19 +95,7 @@ func (ui *UI) promptComboTUI(item *combo, edit bool, input io.Reader, output io.
 	if result.values[2] == ui.t("common.back") {
 		return huh.ErrUserAborted
 	}
-	item.Name = strings.TrimSpace(result.values[0])
-	item.Models = make([]any, len(result.selected[1]))
-	for index, model := range result.selected[1] {
-		item.Models[index] = model
-	}
-	if err := validateComboValues(item.Name, comboModels(*item)); err != nil {
-		return err
-	}
-	method, path := http.MethodPost, "/api/combos"
-	if edit {
-		method, path = http.MethodPut, "/api/combos/"+item.ID
-	}
-	return ui.request(method, path, item, nil)
+	return ui.saveCombo(item, edit, result.selected[1])
 }
 
 func selectedToMarks(options, selected []string) []bool {

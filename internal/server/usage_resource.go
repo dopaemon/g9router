@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"g9router/internal/providers"
 )
@@ -85,17 +84,11 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "Usage not available for this connection"})
 		return
 	}
-	if selected.OAuthID != "" {
-		if credential, ok := s.oauth.Get(selected.OAuthID); ok {
-			if credential.ExpiringSoon(time.Now()) && credential.RefreshToken != "" {
-				if refreshed, err := s.oauth.Refresh(r.Context(), selected.OAuthID); err != nil {
-					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Credential refresh failed: " + err.Error()})
-					return
-				} else {
-					selected.APIKey = refreshed.AccessToken
-				}
-			}
-		}
+	var err error
+	selected, err = s.credentialProvider(r.Context(), selected, true)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Credential refresh failed: " + err.Error()})
+		return
 	}
 	logs := s.usage.Recent(1000)
 	var requests, input, output, errors int64
