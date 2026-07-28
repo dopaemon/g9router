@@ -228,19 +228,7 @@ func (model *providerLiveModel) cardContent() string {
 		title = model.ui.t("screen.oauthProviders")
 		rows = []string{model.ui.t("provider.addOAuth")}
 		for _, item := range model.oauthConnections {
-			name := item.Name
-			if item.ID == "codex" && len(item.Accounts) > 0 {
-				account := item.Accounts[0]
-				if account.Name != "" {
-					name = account.Name
-				} else if account.Email != "" {
-					name = "Codex " + account.Email
-				}
-			}
-			if name == "" {
-				name = item.ID
-			}
-			rows = append(rows, name+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
+			rows = append(rows, oauthProviderDisplayName(item)+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
 		}
 	case freeProviderTab:
 		title = model.ui.t("screen.freeProviders")
@@ -264,6 +252,32 @@ func (model *providerLiveModel) cardContent() string {
 		items = append(items, providerMenuItem(index, rows[index], index == model.cursor))
 	}
 	return model.ui.innerStyle().Render(cardTitleStyle.Render(title) + "\n" + strings.Join(items, "\n"))
+}
+
+func oauthProviderDisplayName(item provider) string {
+	name := strings.TrimSpace(item.Name)
+	if name == "" {
+		name = item.ID
+	}
+	email := ""
+	if len(item.Accounts) > 0 {
+		email = strings.TrimSpace(item.Accounts[0].Email)
+		if email == "" && strings.TrimSpace(item.Accounts[0].Name) != "" {
+			name = strings.TrimSpace(item.Accounts[0].Name)
+		}
+	}
+	if email == "" {
+		for _, key := range []string{"email", "userEmail", "githubEmail"} {
+			if value, ok := item.ProviderSpecificData[key].(string); ok && strings.TrimSpace(value) != "" {
+				email = strings.TrimSpace(value)
+				break
+			}
+		}
+	}
+	if email != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(email)) {
+		name += " " + email
+	}
+	return name
 }
 
 func providerMenuItem(index int, label string, selected bool) string {

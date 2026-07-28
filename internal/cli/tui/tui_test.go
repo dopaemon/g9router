@@ -593,6 +593,13 @@ func TestCodexProviderIsOAuthProvider(t *testing.T) {
 	}
 }
 
+func TestOAuthProviderShowsEmail(t *testing.T) {
+	name := oauthProviderDisplayName(provider{Name: "Gemini CLI", ProviderSpecificData: map[string]any{"email": "user@example.com"}})
+	if name != "Gemini CLI user@example.com" {
+		t.Fatalf("display name = %q", name)
+	}
+}
+
 func TestLegacyTranslationsCoverVisibleGroups(t *testing.T) {
 	ui := &UI{Locale: i18n.Vietnamese}
 	for _, key := range []string{"oauth.title", "legacy.settings", "legacy.cliTools", "legacy.combos", "legacy.providers", "legacy.apiKeys", "legacy.invalidSelection"} {

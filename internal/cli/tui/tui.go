@@ -102,14 +102,15 @@ type apiKey struct {
 }
 
 type provider struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	BaseURL  string            `json:"baseURL"`
-	APIKey   string            `json:"apiKey"`
-	APIType  string            `json:"apiType"`
-	OAuthID  string            `json:"oauthId"`
-	Enabled  bool              `json:"enabled"`
-	Accounts []providerAccount `json:"accounts"`
+	ID                   string            `json:"id"`
+	Name                 string            `json:"name"`
+	BaseURL              string            `json:"baseURL"`
+	APIKey               string            `json:"apiKey"`
+	APIType              string            `json:"apiType"`
+	OAuthID              string            `json:"oauthId"`
+	Enabled              bool              `json:"enabled"`
+	Accounts             []providerAccount `json:"accounts"`
+	ProviderSpecificData map[string]any    `json:"providerSpecificData"`
 }
 
 type providerAccount struct {
