@@ -10,6 +10,9 @@ import (
 )
 
 func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, output io.Writer) error {
+	if accessibleMode(input) {
+		return ui.promptProviderIO(item, edit, input, output)
+	}
 	apiType := item.APIType
 	if apiType == "" {
 		apiType = "openai"
@@ -41,6 +44,11 @@ func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, outp
 }
 
 func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error) {
+	if accessibleMode(input) {
+		return promptAPIKeyIO(input, output, func(form *huh.Form) error {
+			return ui.runHuhIO(form, input, output)
+		}, ui.request, ui.Locale)
+	}
 	result, err := ui.runTUIForm(ui.t("keys.create"), []tuiField{
 		{label: ui.t("form.apiName"), kind: tuiInput},
 		{label: ui.t("form.finish"), kind: tuiSelect, options: []string{ui.t("common.save"), ui.t("common.back")}, value: ui.t("common.save")},
@@ -57,6 +65,11 @@ func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error)
 }
 
 func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writer) error {
+	if accessibleMode(input) {
+		return ui.promptAPIKeyRenameIO(key, input, output, func(form *huh.Form) error {
+			return ui.runHuhIO(form, input, output)
+		}, ui.request, ui.Locale)
+	}
 	result, err := ui.runTUIForm(ui.t("keys.rename"), []tuiField{
 		{label: ui.t("form.apiName"), kind: tuiInput, value: key.Name},
 		{label: ui.t("form.finish"), kind: tuiSelect, options: []string{ui.t("common.save"), ui.t("common.back")}, value: ui.t("common.save")},
@@ -71,6 +84,9 @@ func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writ
 }
 
 func (ui *UI) promptComboTUI(item *combo, edit bool, input io.Reader, output io.Writer) error {
+	if accessibleMode(input) {
+		return ui.promptComboIO(item, edit, input, output)
+	}
 	options, err := ui.comboModelValues()
 	if err != nil {
 		return err
@@ -139,7 +155,13 @@ func (ui *UI) tuiSelectKey(keys []apiKey, input io.Reader, output io.Writer) (ap
 	for index, key := range keys {
 		options[index] = key.Name
 	}
-	selected, err := ui.tuiSelect(ui.t("form.chooseKey"), ui.t("form.chooseKey"), options, input, output)
+	var selected string
+	var err error
+	if accessibleMode(input) {
+		selected, err = ui.huhChoiceIO(ui.t("form.chooseKey"), options, input, output)
+	} else {
+		selected, err = ui.tuiSelect(ui.t("form.chooseKey"), ui.t("form.chooseKey"), options, input, output)
+	}
 	if err != nil {
 		return apiKey{}, err
 	}

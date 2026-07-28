@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -178,6 +179,36 @@ func TestPromptAPIKeyRename(t *testing.T) {
 	ui := &UI{BaseURL: server.URL, In: strings.NewReader("renamed\n1\n"), Out: &bytes.Buffer{}, Client: server.Client()}
 	if err := ui.promptAPIKeyRename(&apiKey{ID: "key-1", Name: "old"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAccessibleMode(t *testing.T) {
+	t.Setenv("G9ROUTER_ACCESSIBLE", "1")
+	if !accessibleMode(os.Stdin) {
+		t.Fatal("forced accessible mode is disabled")
+	}
+	if !accessibleMode(strings.NewReader("")) {
+		t.Fatal("non-terminal input should use accessible mode")
+	}
+}
+
+func TestPromptAPIKeyTUIUsesHuhWhenAccessible(t *testing.T) {
+	t.Setenv("G9ROUTER_ACCESSIBLE", "1")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/keys" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"id":"key-1","name":"new","key":"sk-test"}`)
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, In: strings.NewReader("new\n1\n"), Out: &bytes.Buffer{}, Client: server.Client()}
+	created, err := ui.promptAPIKeyTUI(ui.In, ui.Out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != "key-1" {
+		t.Fatalf("created key = %#v", created)
 	}
 }
 

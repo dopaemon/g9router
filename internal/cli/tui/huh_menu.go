@@ -22,6 +22,10 @@ func (ui *UI) huhMode() bool {
 }
 
 func (ui *UI) huhChoice(title string, options []string) (string, error) {
+	return ui.huhChoiceIO(title, options, ui.In, ui.Out)
+}
+
+func (ui *UI) huhChoiceIO(title string, options []string, input io.Reader, output io.Writer) (string, error) {
 	if len(options) == 0 {
 		return "", fmt.Errorf("no choices available")
 	}
@@ -33,7 +37,7 @@ func (ui *UI) huhChoice(title string, options []string) (string, error) {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().Title(title).Options(formOptions...).Value(&value),
 	))
-	if err := ui.runHuh(form); err != nil {
+	if err := ui.runHuhIO(form, input, output); err != nil {
 		return "", err
 	}
 	return value, nil

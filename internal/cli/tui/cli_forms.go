@@ -18,11 +18,15 @@ func (ui *UI) runHuh(form *huh.Form) error {
 
 func (ui *UI) runHuhIO(form *huh.Form, input io.Reader, output io.Writer) error {
 	EnableColors(output)
-	accessible := os.Getenv("G9ROUTER_ACCESSIBLE") == "1"
-	if file, ok := input.(*os.File); !ok || !IsTerminal(file) {
-		accessible = true
+	return form.WithAccessible(accessibleMode(input)).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(ui.huhWidth()).Run()
+}
+
+func accessibleMode(input io.Reader) bool {
+	if os.Getenv("G9ROUTER_ACCESSIBLE") == "1" {
+		return true
 	}
-	return form.WithAccessible(accessible).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(ui.huhWidth()).Run()
+	file, ok := input.(*os.File)
+	return !ok || !IsTerminal(file)
 }
 
 func (ui *UI) huhWidth() int {
