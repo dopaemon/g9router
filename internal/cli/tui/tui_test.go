@@ -431,11 +431,18 @@ func TestStatisticsPeriodsStackInCompactLayout(t *testing.T) {
 func TestLogsControlsListPauseAction(t *testing.T) {
 	ui := &UI{Locale: i18n.English}
 	controls := ui.actionHints(
-		actionHint{"p", "logs.pause"},
-		actionHint{"q", "logs.back"},
+		actionDefinition{display: "p", label: "logs.pause"},
+		actionDefinition{display: "q", label: "logs.back"},
 	)
 	if !strings.Contains(controls, "p pause/resume") || !strings.Contains(controls, "q back") {
 		t.Fatalf("controls = %q", controls)
+	}
+}
+
+func TestActionDefinitionsShareKeyMatching(t *testing.T) {
+	action := actionDefinition{keys: []string{"up", "k"}, display: "↑/k", label: "logs.scroll"}
+	if !actionMatches("k", action) || actionMatches("down", action) {
+		t.Fatal("action key matching is inconsistent")
 	}
 }
 

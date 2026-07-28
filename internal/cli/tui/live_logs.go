@@ -37,6 +37,18 @@ type apiLogEntry struct {
 	Output    int64  `json:"outputTokens"`
 }
 
+var logActions = struct {
+	back, nextTab, previousTab, up, down, refresh, pause actionDefinition
+}{
+	back:        actionDefinition{keys: []string{"q", "esc", "ctrl+c"}, display: "q", label: "logs.back"},
+	nextTab:     actionDefinition{keys: []string{"tab", "right", "l"}, display: "Tab/right", label: "logs.switch"},
+	previousTab: actionDefinition{keys: []string{"shift+tab", "left", "h"}, display: "Shift+Tab/left", label: "logs.switch"},
+	up:          actionDefinition{keys: []string{"up", "k"}, display: "↑/k", label: "logs.scroll"},
+	down:        actionDefinition{keys: []string{"down", "j"}, display: "↓/j", label: "logs.scroll"},
+	refresh:     actionDefinition{keys: []string{"r"}, display: "r", label: "logs.refresh"},
+	pause:       actionDefinition{keys: []string{"p"}, display: "p", label: "logs.pause"},
+}
+
 func (ui *UI) liveLogs() error {
 	model := logsModel{ui: ui, followTail: true}
 	model.refresh()
@@ -74,34 +86,34 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return model, nil
 		}
-		switch message.String() {
-		case "q", "esc", "ctrl+c":
+		switch {
+		case actionMatches(message.String(), logActions.back):
 			return model, tea.Quit
-		case "tab", "right", "l":
+		case actionMatches(message.String(), logActions.nextTab):
 			model.tab = cycleIndex(model.tab, 2, 1)
 			model.cursor = 0
 			model.followTail = true
-		case "shift+tab", "left", "h":
+		case actionMatches(message.String(), logActions.previousTab):
 			model.tab = cycleIndex(model.tab, 2, -1)
 			model.cursor = 0
 			model.followTail = true
-		case "up", "k":
+		case actionMatches(message.String(), logActions.up):
 			if model.cursor > 0 {
 				model.cursor--
 			}
 			model.followTail = false
-		case "down", "j":
+		case actionMatches(message.String(), logActions.down):
 			if model.cursor+1 < model.rowCount() {
 				model.cursor++
 			}
 			model.followTail = model.cursor == model.rowCount()-1
-		case "r", "enter", " ":
+		case actionMatches(message.String(), logActions.refresh), message.String() == "enter", message.String() == " ":
 			if message.String() == "enter" && model.rowCount() > 0 {
 				model.detail = model.detailForCursor()
 				return model, nil
 			}
 			model.refresh()
-		case "p":
+		case actionMatches(message.String(), logActions.pause):
 			model.paused = !model.paused
 		}
 	case logsRefreshMsg:
@@ -156,11 +168,11 @@ func (model *logsModel) View() string {
 	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	controlsText := mutedStyle.Render(model.ui.actionHints(
-		actionHint{"↑↓/jk", "logs.scroll"},
-		actionHint{"Tab", "logs.switch"},
-		actionHint{"r", "logs.refresh"},
-		actionHint{"p", "logs.pause"},
-		actionHint{"q", "logs.back"},
+		actionDefinition{display: "↑↓/jk", label: "logs.scroll"},
+		actionDefinition{display: "Tab", label: "logs.switch"},
+		actionDefinition{display: "r", label: "logs.refresh"},
+		actionDefinition{display: "p", label: "logs.pause"},
+		actionDefinition{display: "q", label: "logs.back"},
 	))
 	if hint := model.ui.mouseHint(); hint != "" {
 		controlsText += "\n" + mutedStyle.Render(hint)

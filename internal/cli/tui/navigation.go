@@ -1,16 +1,26 @@
 package tui
 
-type actionHint struct {
-	keys  string
-	label string
+type actionDefinition struct {
+	keys    []string
+	display string
+	label   string
 }
 
-func (ui *UI) actionHints(hints ...actionHint) string {
-	items := make([]string, 0, len(hints))
-	for _, hint := range hints {
-		items = append(items, hint.keys+" "+ui.t(hint.label))
+func (ui *UI) actionHints(actions ...actionDefinition) string {
+	items := make([]string, 0, len(actions))
+	for _, action := range actions {
+		items = append(items, action.display+" "+ui.t(action.label))
 	}
 	return joinLines(items...)
+}
+
+func actionMatches(value string, action actionDefinition) bool {
+	for _, key := range action.keys {
+		if value == key {
+			return true
+		}
+	}
+	return false
 }
 
 func (ui *UI) mouseHint() string {
