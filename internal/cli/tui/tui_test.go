@@ -502,3 +502,21 @@ func TestAPIKeyDetailUsesLocale(t *testing.T) {
 		t.Fatalf("API key detail = %q", got)
 	}
 }
+
+func TestTUIFormRecoversAfterValidationError(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{label: "Combo Name", kind: tuiInput}}}
+	model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.err == nil {
+		t.Fatal("empty input should fail validation")
+	}
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.err != nil {
+		t.Fatalf("valid input kept stale error: %v", model.err)
+	}
+}

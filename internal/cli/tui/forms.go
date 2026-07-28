@@ -84,6 +84,7 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return model, nil
 	}
+	model.err = nil
 	field := &model.fields[model.cursor]
 	if field.kind == tuiInput {
 		switch key.String() {
