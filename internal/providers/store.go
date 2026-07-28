@@ -53,7 +53,11 @@ func (s *Store) Resolve(model string) []Provider {
 			selected.APIKey = s.accountKeyLocked(index)
 			selected.Accounts = s.items[index].Accounts
 		}
-		if strings.HasPrefix(model, item.ID+"/") {
+		alias := item.ID
+		if descriptor, ok := Registry[item.ID]; ok && descriptor.Alias != "" {
+			alias = descriptor.Alias
+		}
+		if strings.HasPrefix(model, item.ID+"/") || strings.HasPrefix(model, alias+"/") {
 			matched = append(matched, selected)
 		} else {
 			fallback = append(fallback, selected)

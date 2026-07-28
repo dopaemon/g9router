@@ -17,3 +17,14 @@ func TestResolveRotatesAccountsAndHonorsQuota(t *testing.T) {
 		t.Fatalf("quota ignored: %q", third[0].APIKey)
 	}
 }
+
+func TestResolveMatchesProviderAlias(t *testing.T) {
+	store := New(t.TempDir() + "/providers.json")
+	if err := store.Upsert(Provider{ID: "codex", BaseURL: "http://codex", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	resolved := store.Resolve("cx/gpt-5.5")
+	if len(resolved) != 1 || resolved[0].ID != "codex" {
+		t.Fatalf("resolved providers = %+v", resolved)
+	}
+}

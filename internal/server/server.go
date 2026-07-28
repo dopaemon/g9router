@@ -3903,7 +3903,8 @@ func (s *Server) forwardRaw(w http.ResponseWriter, r *http.Request, path string)
 			return
 		}
 		baseURL := providerProxyBaseURL(provider)
-		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, body, provider.APIKey) {
+		providerBody := providerModelBody(body, model, provider.ID)
+		if baseURL != "" && s.proxy(w, r, baseURL, path, http.MethodPost, providerBody, provider.APIKey) {
 			return
 		}
 	}
@@ -3920,6 +3921,28 @@ func providerProxyBaseURL(provider providers.Provider) string {
 		}
 	}
 	return strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/chat/completions")
+}
+
+func providerModelBody(body []byte, model, providerID string) []byte {
+	descriptor, ok := providers.Lookup(providerID)
+	if !ok {
+		descriptor.Alias = providerID
+	}
+	for _, prefix := range []string{descriptor.Alias, providerID} {
+		if prefix == "" || !strings.HasPrefix(model, prefix+"/") {
+			continue
+		}
+		var request map[string]any
+		if json.Unmarshal(body, &request) != nil {
+			return body
+		}
+		request["model"] = strings.TrimPrefix(model, prefix+"/")
+		updated, err := json.Marshal(request)
+		if err == nil {
+			return updated
+		}
+	}
+	return body
 }
 
 func (s *Server) proxyAzure(w http.ResponseWriter, incoming *http.Request, path string, body []byte, apiKey string, data map[string]any) bool {
@@ -4067,7 +4090,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				}
 			}
 		}
-		providerBody := body
+		providerBody := providerModelBody(body, model, provider.ID)
 		providerPath := path
 		translateResponse := false
 		if provider.ID == "codebuddy-cn" && path == "/chat/completions" {
@@ -4086,7 +4109,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 		}
 		if path == "/responses" && provider.APIType == "openai-chat" {
 			var responsesBody map[string]any
-			if json.Unmarshal(body, &responsesBody) == nil {
+			if json.Unmarshal(providerBody, &responsesBody) == nil {
 				translated, _ := json.Marshal(translator.ResponsesToChat(responsesBody))
 				if s.proxyResponses(w, r, provider.BaseURL, translated, provider.APIKey) {
 					return
@@ -4099,7 +4122,7 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 				return
 			}
 			var responsesBody map[string]any
-			if json.Unmarshal(body, &responsesBody) == nil {
+			if json.Unmarshal(providerBody, &responsesBody) == nil {
 				providerBody, _ = json.Marshal(translator.NormalizeCodexRequest(responsesBody))
 				if s.proxy(w, r, provider.BaseURL, "/responses", http.MethodPost, providerBody, provider.APIKey) {
 					return
