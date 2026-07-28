@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -40,11 +42,20 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodGet {
-			s.codexCreditsAPI(w, r, token)
+			s.codexCreditsAPI(w, r, token, codexUsageAccountID(provider, token))
 			return
 		}
 		if r.Method == http.MethodPost {
-			s.codexConsumeCreditAPI(w, r, token)
+			available, err := s.codexAvailableResetCredits(r.Context(), token, codexUsageAccountID(provider, token))
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			if available < 1 {
+				writeJSON(w, http.StatusConflict, map[string]any{"code": "no_credit", "reset": false, "availableCount": available, "message": "No Codex reset credits available."})
+				return
+			}
+			s.codexConsumeCreditAPI(w, r, token, codexUsageAccountID(provider, token))
 			return
 		}
 		if r.Method != http.MethodPost {
@@ -190,7 +201,41 @@ func (s *Server) codexUsageAPI(w http.ResponseWriter, r *http.Request, provider 
 			plan = summary["plan"]
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"provider": "codex", "plan": plan, "quotas": quotas})
+	result := map[string]any{"provider": "codex", "plan": plan, "quotas": quotas}
+	if available, err := s.codexAvailableResetCredits(r.Context(), token, codexUsageAccountID(provider, token)); err == nil {
+		result["resetCredits"] = map[string]any{"availableCount": available}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) codexAvailableResetCredits(ctx context.Context, token, accountID string) (int, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits", nil)
+	if err != nil {
+		return 0, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("OpenAI-Beta", "codex-1")
+	request.Header.Set("originator", "codex_cli_rs")
+	request.Header.Set("User-Agent", "codex_cli_rs/0.136.0")
+	if accountID != "" {
+		request.Header.Set("ChatGPT-Account-ID", accountID)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		return 0, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return 0, fmt.Errorf("Codex reset credits API returned %s", response.Status)
+	}
+	var payload struct {
+		AvailableCount int `json:"available_count"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload); err != nil {
+		return 0, err
+	}
+	return max(0, payload.AvailableCount), nil
 }
 
 func codexUsageAccountID(provider providers.Provider, token string) string {
@@ -268,11 +313,16 @@ func (s *Server) codexConnection(id string) (providers.Provider, string, bool) {
 	return providers.Provider{}, "", false
 }
 
-func (s *Server) codexCreditsAPI(w http.ResponseWriter, r *http.Request, token string) {
+func (s *Server) codexCreditsAPI(w http.ResponseWriter, r *http.Request, token, accountID string) {
 	request, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("OpenAI-Beta", "codex-1")
+	request.Header.Set("originator", "codex_cli_rs")
+	request.Header.Set("User-Agent", "codex_cli_rs/0.136.0")
+	if accountID != "" {
+		request.Header.Set("ChatGPT-Account-ID", accountID)
+	}
 	response, err := s.client.Do(request)
 	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": err.Error()})
@@ -295,7 +345,7 @@ func (s *Server) codexCreditsAPI(w http.ResponseWriter, r *http.Request, token s
 	writeJSON(w, 200, map[string]any{"availableCount": payload.AvailableCount, "credits": payload.Credits})
 }
 
-func (s *Server) codexConsumeCreditAPI(w http.ResponseWriter, r *http.Request, token string) {
+func (s *Server) codexConsumeCreditAPI(w http.ResponseWriter, r *http.Request, token, accountID string) {
 	idBytes := make([]byte, 16)
 	if _, err := rand.Read(idBytes); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
@@ -306,6 +356,11 @@ func (s *Server) codexConsumeCreditAPI(w http.ResponseWriter, r *http.Request, t
 	request, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume", strings.NewReader(string(body)))
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Accept", "application/json")
+	request.Header.Set("originator", "codex_cli_rs")
+	request.Header.Set("User-Agent", "codex_cli_rs/0.136.0")
+	if accountID != "" {
+		request.Header.Set("ChatGPT-Account-ID", accountID)
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := s.client.Do(request)
 	if err != nil {

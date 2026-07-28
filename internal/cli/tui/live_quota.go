@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -9,16 +11,19 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type quotaRefreshMsg struct{}
+type quotaActionDoneMsg struct{ err error }
 
 type quotaModel struct {
 	ui           *UI
 	items        []quotaItem
 	cursor       int
 	usageEnabled bool
+	autoRefresh  bool
 	loading      bool
 	err          error
 	detail       int
@@ -30,16 +35,18 @@ type quotaModel struct {
 }
 
 type quotaItem struct {
-	ID           string
-	Name         string
-	Email        string
-	Requests     int64
-	Errors       int64
-	InputTokens  int64
-	OutputTokens int64
-	Message      string
-	Plan         string
-	Quotas       map[string]quotaWindow
+	ID                string
+	Name              string
+	Email             string
+	Requests          int64
+	Errors            int64
+	InputTokens       int64
+	OutputTokens      int64
+	Message           string
+	Plan              string
+	Quotas            map[string]quotaWindow
+	ResetCredits      int
+	ResetCreditsKnown bool
 }
 
 type quotaWindow struct {
@@ -51,7 +58,7 @@ type quotaWindow struct {
 
 func (ui *UI) liveQuota() error {
 	EnableColors(ui.Out)
-	return ui.runTea(&quotaModel{ui: ui, loading: true, usageEnabled: true, detail: -1})
+	return ui.runTea(&quotaModel{ui: ui, loading: true, usageEnabled: true, autoRefresh: true, detail: -1})
 }
 
 func (model *quotaModel) Init() tea.Cmd {
@@ -60,15 +67,26 @@ func (model *quotaModel) Init() tea.Cmd {
 
 func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case quotaActionDoneMsg:
+		if errors.Is(message.err, huh.ErrUserAborted) {
+			message.err = nil
+		}
+		model.err = message.err
+		if model.err == nil {
+			model.loading = true
+			return model, quotaRefresh()
+		}
+		return model, nil
 	case tea.KeyMsg:
 		if model.detail >= 0 {
+			item := model.items[model.detail]
 			switch message.String() {
 			case "q", "esc":
 				model.detail = -1
 			case "up", "k":
-				model.detailCursor = moveIndex(model.detailCursor, 3, -1)
+				model.detailCursor = moveIndex(model.detailCursor, model.detailActionCount(item), -1)
 			case "down", "j":
-				model.detailCursor = moveIndex(model.detailCursor, 3, 1)
+				model.detailCursor = moveIndex(model.detailCursor, model.detailActionCount(item), 1)
 			case "enter", " ":
 				switch model.detailCursor {
 				case 0:
@@ -82,6 +100,14 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					model.loading = true
 					return model, quotaRefresh()
 				case 2:
+					if item.ID == "codex" {
+						if item.ResetCreditsKnown && item.ResetCredits > 0 {
+							return model, model.resetCodexLimit(item)
+						}
+						return model, nil
+					}
+					model.detail = -1
+				case 3:
 					model.detail = -1
 				}
 			case "r":
@@ -115,12 +141,37 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			model.loading = true
 			return model, quotaRefresh()
+		case "a":
+			model.autoRefresh = !model.autoRefresh
+			if model.autoRefresh {
+				return model, quotaRefresh()
+			}
 		}
 	case quotaRefreshMsg:
+		if !model.autoRefresh {
+			return model, nil
+		}
 		model.refresh()
 		return model, quotaRefresh()
 	}
 	return model, nil
+}
+
+func (model *quotaModel) detailActionCount(item quotaItem) int {
+	if item.ID == "codex" {
+		return 4
+	}
+	return 3
+}
+
+func (model *quotaModel) resetCodexLimit(item quotaItem) tea.Cmd {
+	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
+		ok, err := model.ui.tuiConfirm("Reset Codex limit?", input, output)
+		if err != nil || !ok {
+			return err
+		}
+		return model.ui.request(http.MethodPost, "/api/usage/"+url.PathEscape(item.ID)+"/codex-reset-credits", nil, nil)
+	}}, func(err error) tea.Msg { return quotaActionDoneMsg{err: err} })
 }
 
 func (model *quotaModel) toggleUsage() error {
@@ -161,7 +212,11 @@ func (model *quotaModel) View() string {
 		rows = append(rows, mutedStyle.Render(model.ui.t("quota.noProviders")))
 	}
 	content := cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota"))+"\n"+strings.Join(rows, "\n"))
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n↑↓/jk move  Enter select  r refresh  q back")
+	autoRefresh := "OFF"
+	if model.autoRefresh {
+		autoRefresh = "ON"
+	}
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n↑↓/jk move  Enter select  r refresh  a auto-refresh (" + autoRefresh + ")  q back")
 	return model.ui.outerStyle().Render(content + "\n\n" + controls)
 }
 
@@ -176,6 +231,13 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		model.ui.t("quota.errors") + ": " + formatInt(item.Errors),
 		model.ui.t("quota.input") + ": " + formatInt(item.InputTokens),
 		model.ui.t("quota.output") + ": " + formatInt(item.OutputTokens),
+	}
+	if item.ID == "codex" {
+		credits := "-"
+		if item.ResetCreditsKnown {
+			credits = formatInt(int64(item.ResetCredits))
+		}
+		info = append(info, model.ui.t("quota.resetCredits")+": "+credits)
 	}
 	if item.Message != "" {
 		info = append(info, errorStyle.Render(item.Message))
@@ -194,9 +256,18 @@ func (model *quotaModel) detailView(item quotaItem) string {
 	if model.usageEnabled {
 		usageStatus = model.ui.t("quota.usageOn")
 	}
-	actions := []string{model.ui.t("common.refresh"), model.ui.t("quota.toggleUsage") + " (" + usageStatus + ")", model.ui.t("common.back")}
+	actions := []string{model.ui.t("common.refresh"), model.ui.t("quota.toggleUsage") + " (" + usageStatus + ")"}
+	if item.ID == "codex" {
+		actions = append(actions, model.ui.t("quota.resetLimit"))
+	}
+	actions = append(actions, model.ui.t("common.back"))
 	menuRows := make([]string, 0, len(actions))
 	for index, action := range actions {
+		disabled := item.ID == "codex" && index == 2 && (!item.ResetCreditsKnown || item.ResetCredits == 0)
+		if disabled {
+			menuRows = append(menuRows, mutedStyle.Padding(0, 1).Render(string(rune('1'+index))+"  "+action+" (disabled)"))
+			continue
+		}
 		menuRows = append(menuRows, providerMenuItem(index, action, index == model.detailCursor))
 	}
 	menuCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("quota.functions")) + "\n" + strings.Join(menuRows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select"))
@@ -242,6 +313,9 @@ func (model *quotaModel) refresh() {
 			Message      string                 `json:"message"`
 			Plan         string                 `json:"plan"`
 			Quotas       map[string]quotaWindow `json:"quotas"`
+			ResetCredits *struct {
+				AvailableCount int `json:"availableCount"`
+			} `json:"resetCredits"`
 		}
 		if !model.usageEnabled {
 			item.Message = model.ui.t("quota.usageOff")
@@ -254,6 +328,10 @@ func (model *quotaModel) refresh() {
 		item.Requests, item.Errors = usage.Requests, usage.Errors
 		item.InputTokens, item.OutputTokens = usage.InputTokens, usage.OutputTokens
 		item.Message, item.Plan, item.Quotas = usage.Message, usage.Plan, usage.Quotas
+		if usage.ResetCredits != nil {
+			item.ResetCredits = usage.ResetCredits.AvailableCount
+			item.ResetCreditsKnown = true
+		}
 		items = append(items, item)
 	}
 	model.items, model.err = items, nil
