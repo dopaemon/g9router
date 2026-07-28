@@ -620,18 +620,19 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 		}
 		var tunnel map[string]any
 		_ = ui.request(http.MethodGet, "/api/tunnel/status", nil, &tunnel)
-		fmt.Fprintf(ui.Out, "\nSettings\nRTK: %v  Headroom: %v  Tunnel: %v\n", values["rtkEnabled"] != false, values["headroomEnabled"] == true, tunnel["enabled"] == true)
+		fmt.Fprintf(ui.Out, "\n%s\nRTK: %v  Headroom: %v  Tunnel: %v\n", ui.t("legacy.settings"), values["rtkEnabled"] != false, values["headroomEnabled"] == true, tunnel["enabled"] == true)
 		var line string
 		var err error
 		if ui.huhMode() {
-			choice, choiceErr := ui.huhChoice("Settings action", []string{"Toggle RTK", "Toggle Headroom", "Enable tunnel", "Disable tunnel", "Reset auth mode", "Reset password", "Back"})
+			choices := []string{ui.t("legacy.toggleRTK"), ui.t("legacy.toggleHeadroom"), ui.t("legacy.enableTunnel"), ui.t("legacy.disableTunnel"), ui.t("legacy.resetAuth"), ui.t("legacy.resetPassword"), ui.t("oauth.back")}
+			choice, choiceErr := ui.huhChoice(ui.t("legacy.settingsAction"), choices)
 			if choiceErr != nil {
 				return choiceErr
 			}
-			line = map[string]string{"Toggle RTK": "1", "Toggle Headroom": "2", "Enable tunnel": "3", "Disable tunnel": "4", "Reset auth mode": "5", "Reset password": "6", "Back": "b"}[choice]
+			line = map[string]string{ui.t("legacy.toggleRTK"): "1", ui.t("legacy.toggleHeadroom"): "2", ui.t("legacy.enableTunnel"): "3", ui.t("legacy.disableTunnel"): "4", ui.t("legacy.resetAuth"): "5", ui.t("legacy.resetPassword"): "6", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprintln(ui.Out, "1. Toggle RTK  2. Toggle Headroom  3. Tunnel ON  4. Tunnel OFF  5. Reset auth mode  6. Reset password  b. Back")
-			fmt.Fprint(ui.Out, "Select action: ")
+			fmt.Fprintf(ui.Out, "1. %s  2. %s  3. %s  4. %s  5. %s  6. %s  b. %s\n", ui.t("legacy.toggleRTK"), ui.t("legacy.toggleHeadroom"), ui.t("legacy.tunnelOn"), ui.t("legacy.tunnelOff"), ui.t("legacy.resetAuth"), ui.t("legacy.resetPassword"), ui.t("oauth.back"))
+			fmt.Fprint(ui.Out, ui.t("legacy.selectAction")+": ")
 			line, err = reader.ReadString('\n')
 			if err != nil && len(line) == 0 {
 				return err
@@ -653,7 +654,7 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 				return err
 			}
 		case "4":
-			ok, confirmErr := ui.huhConfirm("Disable the tunnel?", false)
+			ok, confirmErr := ui.huhConfirm(ui.t("legacy.disableTunnelConfirm"), false)
 			if confirmErr != nil {
 				return confirmErr
 			}
@@ -664,7 +665,7 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 				return err
 			}
 		case "5":
-			ok, confirmErr := ui.huhConfirm("Switch authentication to password mode?", false)
+			ok, confirmErr := ui.huhConfirm(ui.t("legacy.authConfirm"), false)
 			if confirmErr != nil {
 				return confirmErr
 			}
@@ -675,7 +676,7 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 				return err
 			}
 		case "6":
-			ok, confirmErr := ui.huhConfirm("Reset the admin password?", false)
+			ok, confirmErr := ui.huhConfirm(ui.t("legacy.passwordConfirm"), false)
 			if confirmErr != nil {
 				return confirmErr
 			}
@@ -686,7 +687,7 @@ func (ui *UI) settings(reader *bufio.Reader) error {
 				return err
 			}
 		default:
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidSelection"))
 		}
 	}
 }
