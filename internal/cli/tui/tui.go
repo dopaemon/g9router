@@ -814,23 +814,24 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			return err
 		}
 		items := response.Connections
-		fmt.Fprintln(ui.Out, "\nProviders")
+		fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.providers"))
 		for i, item := range items {
 			fmt.Fprintf(ui.Out, "%d. %s (%s) [%s]\n", i+1, item.ID, item.BaseURL, map[bool]string{true: "enabled", false: "disabled"}[item.Enabled])
 		}
 		if !ui.huhMode() {
-			fmt.Fprintln(ui.Out, "a. Add API provider  e. Edit  d. Delete  t. Test  b. Back")
+			fmt.Fprintf(ui.Out, "a. %s  e. %s  d. %s  t. %s  b. %s\n", ui.t("legacy.addProvider"), ui.t("legacy.edit"), ui.t("legacy.delete"), ui.t("legacy.testProvider"), ui.t("oauth.back"))
 		}
 		var line string
 		var err error
 		if ui.huhMode() {
-			choice, err := ui.huhChoice("Provider action", []string{"Add provider", "Edit provider", "Delete provider", "Test provider", "Back"})
+			choices := []string{ui.t("legacy.addProvider"), ui.t("legacy.edit"), ui.t("legacy.deleteProvider"), ui.t("legacy.testProvider"), ui.t("oauth.back")}
+			choice, err := ui.huhChoice(ui.t("legacy.providerAction"), choices)
 			if err != nil {
 				return err
 			}
-			line = map[string]string{"Add provider": "a", "Edit provider": "e", "Delete provider": "d", "Test provider": "t", "Back": "b"}[choice]
+			line = map[string]string{ui.t("legacy.addProvider"): "a", ui.t("legacy.edit"): "e", ui.t("legacy.deleteProvider"): "d", ui.t("legacy.testProvider"): "t", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprint(ui.Out, "Select action: ")
+			fmt.Fprint(ui.Out, ui.t("legacy.selectAction")+": ")
 			value, err := reader.ReadString('\n')
 			if err != nil && len(value) == 0 {
 				return err
@@ -846,7 +847,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			}
 		case "d", "e", "t":
 			if len(items) == 0 {
-				fmt.Fprintln(ui.Out, "No providers found.")
+				fmt.Fprintln(ui.Out, ui.t("legacy.noProviders"))
 				continue
 			}
 			var index int
@@ -855,9 +856,9 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				for _, item := range items {
 					labels = append(labels, item.ID+" ("+item.BaseURL+")")
 				}
-				index, err = ui.huhNumber("Choose provider", labels)
+				index, err = ui.huhNumber(ui.t("legacy.chooseProvider"), labels)
 			} else {
-				fmt.Fprint(ui.Out, "Provider number: ")
+				fmt.Fprint(ui.Out, ui.t("legacy.providerNumber")+": ")
 				number, err := reader.ReadString('\n')
 				if err != nil {
 					return err
@@ -865,12 +866,12 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				index, err = strconv.Atoi(strings.TrimSpace(number))
 			}
 			if err != nil || index < 1 || index > len(items) {
-				fmt.Fprintln(ui.Out, "Invalid provider selection")
+				fmt.Fprintln(ui.Out, ui.t("legacy.invalidProvider"))
 				continue
 			}
 			item := items[index-1]
 			if strings.ToLower(strings.TrimSpace(line)) == "d" {
-				ok, confirmErr := ui.huhConfirm("Delete provider "+item.ID+"?", false)
+				ok, confirmErr := ui.huhConfirm(fmt.Sprintf(ui.t("legacy.deleteProviderConfirm"), item.ID), false)
 				if confirmErr != nil {
 					return confirmErr
 				}
@@ -890,7 +891,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				if ui.huhMode() {
 					return ui.promptProvider(&current, true)
 				}
-				fmt.Fprintf(ui.Out, "Base URL (Enter keeps %s): ", current.BaseURL)
+				fmt.Fprint(ui.Out, fmt.Sprintf(ui.t("legacy.baseURLKeep"), current.BaseURL)+": ")
 				value, err := reader.ReadString('\n')
 				if err != nil {
 					return err
@@ -898,7 +899,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				if strings.TrimSpace(value) != "" {
 					current.BaseURL = strings.TrimSpace(value)
 				}
-				fmt.Fprintf(ui.Out, "API key (Enter keeps current): ")
+				fmt.Fprint(ui.Out, ui.t("legacy.apiKeyKeep")+": ")
 				value, err = reader.ReadString('\n')
 				if err != nil {
 					return err
@@ -906,7 +907,7 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 				if strings.TrimSpace(value) != "" {
 					current.APIKey = strings.TrimSpace(value)
 				}
-				fmt.Fprintf(ui.Out, "Enabled [y/N]: ")
+				fmt.Fprint(ui.Out, ui.t("legacy.enabled")+": ")
 				value, err = reader.ReadString('\n')
 				if err != nil {
 					return err
@@ -921,16 +922,16 @@ func (ui *UI) providers(reader *bufio.Reader) error {
 			if err := ui.request(http.MethodPost, "/api/providers/"+item.ID+"/test", nil, &result); err != nil {
 				return err
 			}
-			fmt.Fprintln(ui.Out, "Test result:", result)
+			fmt.Fprintln(ui.Out, ui.t("legacy.testResult")+":", result)
 		default:
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidSelection"))
 		}
 	}
 }
 
 func (ui *UI) selectAuthMode(reader *bufio.Reader) (string, error) {
 	if ui.huhMode() {
-		choice, err := ui.huhChoice("Authentication", []string{"OAuth", "API key"})
+		choice, err := ui.huhChoice(ui.t("legacy.authentication"), []string{"OAuth", ui.t("legacy.apiKeyAuth")})
 		if err != nil {
 			return "", err
 		}
@@ -939,10 +940,10 @@ func (ui *UI) selectAuthMode(reader *bufio.Reader) (string, error) {
 		}
 		return "apikey", nil
 	}
-	fmt.Fprintln(ui.Out, "\nSelect authentication")
+	fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.selectAuthentication"))
 	fmt.Fprintln(ui.Out, "1. OAuth")
 	fmt.Fprintln(ui.Out, "2. API key")
-	fmt.Fprint(ui.Out, "Authentication: ")
+	fmt.Fprint(ui.Out, ui.t("legacy.authentication")+": ")
 	choice, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -953,7 +954,7 @@ func (ui *UI) selectAuthMode(reader *bufio.Reader) (string, error) {
 	case "2", "a", "api", "api-key", "apikey":
 		return "apikey", nil
 	default:
-		return "", fmt.Errorf("invalid authentication selection")
+		return "", errors.New(ui.t("legacy.invalidAuthentication"))
 	}
 }
 
@@ -965,13 +966,14 @@ func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
 	sort.Strings(ids)
 	if ui.huhMode() {
 		options := append([]string{}, ids...)
-		options = append(options, "Custom provider", "Back")
-		choice, err := ui.huhChoice("Provider", options)
-		if err != nil || choice == "Back" {
+		custom, back := ui.t("legacy.customProvider"), ui.t("oauth.back")
+		options = append(options, custom, back)
+		choice, err := ui.huhChoice(ui.t("legacy.providers"), options)
+		if err != nil || choice == back {
 			return err
 		}
-		if choice == "Custom provider" {
-			value, inputErr := ui.huhValue("Provider ID", "", false)
+		if choice == custom {
+			value, inputErr := ui.huhValue(ui.t("legacy.providerID"), "", false)
 			if inputErr != nil {
 				return inputErr
 			}
@@ -985,11 +987,11 @@ func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
 		item.APIType = descriptor.Format
 		return nil
 	}
-	fmt.Fprintln(ui.Out, "\nSelect provider (0. Custom provider)")
+	fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.selectProvider"))
 	for index, id := range ids {
 		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, id)
 	}
-	fmt.Fprint(ui.Out, "Provider: ")
+	fmt.Fprint(ui.Out, ui.t("legacy.providers")+": ")
 	choice, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -1005,7 +1007,7 @@ func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
 		return nil
 	}
 	if choice == "0" {
-		fmt.Fprint(ui.Out, "Provider ID: ")
+		fmt.Fprint(ui.Out, ui.t("legacy.providerID")+": ")
 		value, readErr := reader.ReadString('\n')
 		if readErr != nil {
 			return readErr
@@ -1013,7 +1015,7 @@ func (ui *UI) selectProvider(reader *bufio.Reader, item *provider) error {
 		item.ID = strings.TrimSpace(value)
 		return nil
 	}
-	return fmt.Errorf("invalid provider selection")
+	return errors.New(ui.t("legacy.invalidProviderSelection"))
 }
 
 func (ui *UI) apiKeys(reader *bufio.Reader) error {
@@ -1024,21 +1026,22 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 		if err := ui.request(http.MethodGet, "/api/keys", nil, &payload); err != nil {
 			return err
 		}
-		fmt.Fprintln(ui.Out, "\nAPI Keys")
+		fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.apiKeys"))
 		for i, key := range payload.Keys {
 			fmt.Fprintf(ui.Out, "%d. %s [%s] %s\n", i+1, key.Name, map[bool]string{true: "active", false: "inactive"}[key.IsActive], maskSecret(key.Key))
 		}
 		var line string
 		var err error
 		if ui.huhMode() {
-			choice, choiceErr := ui.huhChoice("API key action", []string{"Create", "View full", "Copy", "Delete", "Toggle", "Back"})
+			choices := []string{ui.t("legacy.create"), ui.t("legacy.viewFull"), ui.t("legacy.copy"), ui.t("legacy.delete"), ui.t("legacy.toggle"), ui.t("oauth.back")}
+			choice, choiceErr := ui.huhChoice(ui.t("legacy.apiKeyAction"), choices)
 			if choiceErr != nil {
 				return choiceErr
 			}
-			line = map[string]string{"Create": "a", "View full": "v", "Copy": "c", "Delete": "d", "Toggle": "t", "Back": "b"}[choice]
+			line = map[string]string{ui.t("legacy.create"): "a", ui.t("legacy.viewFull"): "v", ui.t("legacy.copy"): "c", ui.t("legacy.delete"): "d", ui.t("legacy.toggle"): "t", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprintln(ui.Out, "a. Create  v. View full  c. Copy  d. Delete  t. Toggle  b. Back")
-			fmt.Fprint(ui.Out, "Select action: ")
+			fmt.Fprintf(ui.Out, "a. %s  v. %s  c. %s  d. %s  t. %s  b. %s\n", ui.t("legacy.create"), ui.t("legacy.viewFull"), ui.t("legacy.copy"), ui.t("legacy.delete"), ui.t("legacy.toggle"), ui.t("oauth.back"))
+			fmt.Fprint(ui.Out, ui.t("legacy.selectAction")+": ")
 			line, err = reader.ReadString('\n')
 			if err != nil && len(line) == 0 {
 				return err
@@ -1052,10 +1055,10 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(ui.Out, "API key created. Use View full to show it.")
+			fmt.Fprintln(ui.Out, ui.t("keys.created"))
 		case "c", "d", "t", "v":
 			if len(payload.Keys) == 0 {
-				fmt.Fprintln(ui.Out, "No API keys found.")
+				fmt.Fprintln(ui.Out, ui.t("keys.none"))
 				continue
 			}
 			var index int
@@ -1064,9 +1067,9 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				for _, key := range payload.Keys {
 					labels = append(labels, key.Name)
 				}
-				index, err = ui.huhNumber("Choose API key", labels)
+				index, err = ui.huhNumber(ui.t("legacy.chooseAPIKey"), labels)
 			} else {
-				fmt.Fprint(ui.Out, "Key number: ")
+				fmt.Fprint(ui.Out, ui.t("legacy.keyNumber")+": ")
 				number, readErr := reader.ReadString('\n')
 				if readErr != nil {
 					return readErr
@@ -1077,12 +1080,12 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				return err
 			}
 			if err != nil || index < 1 || index > len(payload.Keys) {
-				fmt.Fprintln(ui.Out, "Invalid key number")
+				fmt.Fprintln(ui.Out, ui.t("legacy.invalidKeyNumber"))
 				continue
 			}
 			key := payload.Keys[index-1]
 			if strings.ToLower(strings.TrimSpace(line)) == "v" {
-				ok, confirmErr := ui.huhConfirm("Reveal this API key in terminal output?", false)
+				ok, confirmErr := ui.huhConfirm(ui.t("legacy.revealConfirm"), false)
 				if confirmErr != nil {
 					return confirmErr
 				}
@@ -1095,20 +1098,20 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				if err := ui.request(http.MethodGet, "/api/keys/"+key.ID, nil, &detail); err != nil {
 					return err
 				}
-				fmt.Fprintf(ui.Out, "Name: %s\nID: %s\nKey: %s\n", detail.Key.Name, detail.Key.ID, detail.Key.Key)
+				fmt.Fprintf(ui.Out, ui.t("legacy.apiKeyDetail"), detail.Key.Name, detail.Key.ID, detail.Key.Key)
 				continue
 			}
 			if strings.ToLower(strings.TrimSpace(line)) == "c" {
 				if err := copyClipboard(key.Key); err != nil {
-					fmt.Fprintln(ui.Out, "Clipboard unavailable:", err)
+					fmt.Fprintln(ui.Out, ui.t("legacy.clipboardUnavailable")+":", err)
 				} else {
-					fmt.Fprintln(ui.Out, "Key copied to clipboard")
+					fmt.Fprintln(ui.Out, ui.t("legacy.keyCopied"))
 				}
 				continue
 			}
 			method, path, body := http.MethodDelete, "/api/keys/"+key.ID, any(nil)
 			if strings.ToLower(strings.TrimSpace(line)) == "d" && ui.huhMode() {
-				ok, confirmErr := ui.huhConfirm("Delete this API key?", false)
+				ok, confirmErr := ui.huhConfirm(ui.t("legacy.deleteAPIKeyConfirm"), false)
 				if confirmErr != nil {
 					return confirmErr
 				}
@@ -1123,7 +1126,7 @@ func (ui *UI) apiKeys(reader *bufio.Reader) error {
 				return err
 			}
 		default:
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidSelection"))
 		}
 	}
 }
