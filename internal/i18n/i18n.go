@@ -9,13 +9,14 @@ const (
 
 var translations = map[string]map[string]string{
 	English: {
-		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.disableTailscale": "Disable Tailscale?", "form.chooseKey": "Choose API key",
+		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.quota": "Quota Tracking", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.chooseKey": "Choose API key", "quota.requests": "Requests", "quota.errors": "Errors", "quota.input": "Input tokens", "quota.output": "Output tokens", "quota.noProviders": "No providers found.", "quota.unavailable": "Quota data unavailable",
 	},
 	Vietnamese: {
 		"menu.endpoint":           "Endpoint & Key",
 		"menu.providers":          "Nhà cung cấp",
 		"menu.combos":             "Combo",
 		"menu.statistics":         "Thống kê",
+		"menu.quota":              "Theo Dõi Hạn Mức",
 		"menu.cliTools":           "Công cụ CLI",
 		"menu.logs":               "Nhật ký",
 		"menu.settings":           "Cài đặt",
@@ -65,6 +66,12 @@ var translations = map[string]map[string]string{
 		"form.disableTunnel":      "Tắt Tunnel?",
 		"form.disableTailscale":   "Tắt Tailscale?",
 		"form.chooseKey":          "Chọn API key",
+		"quota.requests":          "Requests",
+		"quota.errors":            "Lỗi",
+		"quota.input":             "Token vào",
+		"quota.output":            "Token ra",
+		"quota.noProviders":       "Chưa có provider.",
+		"quota.unavailable":       "Chưa có dữ liệu hạn mức",
 	},
 }
 

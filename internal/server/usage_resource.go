@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"g9router/internal/providers"
 )
@@ -59,7 +60,11 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	connectionID := parts[0]
 	providerName := ""
 	var selected providers.Provider
-	for _, provider := range s.store.List() {
+	for _, visible := range s.store.List() {
+		provider, found := s.store.Find(visible.ID)
+		if !found {
+			continue
+		}
 		if provider.ID == connectionID {
 			providerName = provider.ID
 			selected = provider
@@ -80,7 +85,7 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
 	}
-	if selected.OAuthID == "" && !usageAPIKeyProviders[providerName] {
+	if selected.OAuthID == "" && !usageAPIKeyProviders[providerName] && providerName != "codex" {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "Usage not available for this connection"})
 		return
 	}
@@ -88,6 +93,10 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	selected, err = s.credentialProvider(r.Context(), selected, true)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Credential refresh failed: " + err.Error()})
+		return
+	}
+	if selected.ID == "codex" {
+		s.codexUsageAPI(w, r, selected)
 		return
 	}
 	logs := s.usage.Recent(1000)
@@ -106,8 +115,139 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"connectionId": connectionID, "provider": providerName, "requests": requests, "errors": errors, "inputTokens": input, "outputTokens": output, "source": "g9router usage log"})
 }
 
+func (s *Server) codexUsageAPI(w http.ResponseWriter, r *http.Request, provider providers.Provider) {
+	token := provider.APIKey
+	if token == "" {
+		for _, account := range provider.Accounts {
+			if account.APIKey != "" {
+				token = account.APIKey
+				break
+			}
+		}
+	}
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Codex token unavailable"})
+		return
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://chatgpt.com/backend-api/wham/usage", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("originator", "codex_cli_rs")
+	request.Header.Set("User-Agent", "codex_cli_rs/0.136.0")
+	request.Header.Set("OpenAI-Beta", "codex-1")
+	if accountID := codexUsageAccountID(provider, token); accountID != "" {
+		request.Header.Set("ChatGPT-Account-ID", accountID)
+	}
+	response, err := s.client.Do(request)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeJSON(w, response.StatusCode, map[string]string{"error": "Codex quota API returned " + response.Status})
+		return
+	}
+	var payload map[string]any
+	if json.Unmarshal(data, &payload) != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid Codex quota response"})
+		return
+	}
+	rateLimit := mapValue(payload, "rate_limit")
+	if len(rateLimit) == 0 {
+		rateLimit = mapValue(payload, "rate_limits")
+	}
+	if len(rateLimit) == 0 {
+		rateLimit = mapValue(mapValue(payload, "rate_limits_by_limit_id"), "codex")
+	}
+	quotas := map[string]any{}
+	for _, window := range []struct {
+		name string
+		key  string
+	}{{"session", "primary_window"}, {"weekly", "secondary_window"}} {
+		value := mapValue(rateLimit, window.key)
+		if len(value) == 0 {
+			continue
+		}
+		used := numberValue(value["used_percent"])
+		if used == 0 {
+			used = numberValue(value["percent_used"])
+		}
+		resetAt := codexResetTime(value["reset_at"])
+		if resetAt == "" {
+			resetAt = codexResetTime(value["resets_at"])
+		}
+		quotas[window.name] = map[string]any{"used": used, "total": 100, "remaining": 100 - used, "resetAt": resetAt}
+	}
+	plan := payload["plan_type"]
+	if plan == nil {
+		if summary := mapValue(payload, "summary"); summary != nil {
+			plan = summary["plan"]
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"provider": "codex", "plan": plan, "quotas": quotas})
+}
+
+func codexUsageAccountID(provider providers.Provider, token string) string {
+	for _, key := range []string{"workspaceId", "accountId", "chatgptAccountId"} {
+		if value, ok := provider.ProviderSpecificData[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	for _, account := range provider.Accounts {
+		if account.Workspace != "" {
+			return account.Workspace
+		}
+	}
+	return codexAccount(token, "").Workspace
+}
+
+func mapValue(value map[string]any, key string) map[string]any {
+	result, _ := value[key].(map[string]any)
+	return result
+}
+
+func numberValue(value any) float64 {
+	switch value := value.(type) {
+	case float64:
+		return max(0, min(100, value))
+	case int:
+		return max(0, min(100, float64(value)))
+	case json.Number:
+		parsed, _ := value.Float64()
+		return max(0, min(100, parsed))
+	default:
+		return 0
+	}
+}
+
+func codexResetTime(value any) string {
+	seconds := 0.0
+	switch value := value.(type) {
+	case float64:
+		seconds = value
+	case int:
+		seconds = float64(value)
+	case json.Number:
+		seconds, _ = value.Float64()
+	}
+	if seconds == 0 {
+		return ""
+	}
+	return time.Unix(int64(seconds), 0).UTC().Format(time.RFC3339)
+}
+
 func (s *Server) codexConnection(id string) (providers.Provider, string, bool) {
-	for _, provider := range s.store.List() {
+	for _, visible := range s.store.List() {
+		provider, found := s.store.Find(visible.ID)
+		if !found {
+			continue
+		}
 		if provider.ID == id {
 			if provider.APIKey != "" {
 				return provider, provider.APIKey, true

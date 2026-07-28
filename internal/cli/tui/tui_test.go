@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"g9router/internal/i18n"
 	tea "github.com/charmbracelet/bubbletea"
@@ -540,6 +541,9 @@ func TestLiveViewsRespectShortTerminalHeight(t *testing.T) {
 		{"statistics", func() string {
 			return (&statisticsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
 		}},
+		{"quota", func() string {
+			return (&quotaModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
 		{"settings", func() string {
 			return (&settingsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
 		}},
@@ -597,6 +601,19 @@ func TestOAuthProviderShowsEmail(t *testing.T) {
 	name := oauthProviderDisplayName(provider{Name: "Gemini CLI", ProviderSpecificData: map[string]any{"email": "user@example.com"}})
 	if name != "Gemini CLI user@example.com" {
 		t.Fatalf("display name = %q", name)
+	}
+}
+
+func TestQuotaBarShowsRemainingPercentage(t *testing.T) {
+	bar := quotaBar("session", quotaWindow{Used: 25, Total: 100, Remaining: 75}, 80)
+	if !strings.Contains(bar, "75%") || !strings.Contains(bar, "█") {
+		t.Fatalf("quota bar = %q", bar)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	if got := formatDuration(3*24*time.Hour + 5*time.Hour + 12*time.Minute); got != "3d 5h 12m" {
+		t.Fatalf("duration = %q", got)
 	}
 }
 
