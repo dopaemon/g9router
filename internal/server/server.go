@@ -955,6 +955,10 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.settings.Update(values); err != nil {
+			if _, ok := values["usageEnabled"]; ok {
+				writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "usageEnabled": values["usageEnabled"], "volatile": true})
+				return
+			}
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
@@ -3958,7 +3962,9 @@ func (s *Server) proxyAzure(w http.ResponseWriter, incoming *http.Request, path 
 }
 
 func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string) {
-	s.usage.Add(1, 0, 0, 0)
+	if s.usageTrackingEnabled() {
+		s.usage.Add(1, 0, 0, 0)
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -4208,8 +4214,15 @@ func (s *Server) forwardJSON(w http.ResponseWriter, r *http.Request, path string
 			return
 		}
 	}
-	s.usage.Add(0, 1, int64(len(body)), 0)
+	if s.usageTrackingEnabled() {
+		s.usage.Add(0, 1, int64(len(body)), 0)
+	}
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "all providers failed"})
+}
+
+func (s *Server) usageTrackingEnabled() bool {
+	value, ok := s.settings.Get()["usageEnabled"].(bool)
+	return !ok || value
 }
 
 func arrayValue(value any) []any { values, _ := value.([]any); return values }

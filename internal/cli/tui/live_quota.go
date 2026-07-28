@@ -15,20 +15,24 @@ import (
 type quotaRefreshMsg struct{}
 
 type quotaModel struct {
-	ui          *UI
-	items       []quotaItem
-	cursor      int
-	loading     bool
-	err         error
-	itemsTop    int
-	itemsLeft   int
-	itemsWidth  int
-	itemsHeight int
+	ui           *UI
+	items        []quotaItem
+	cursor       int
+	usageEnabled bool
+	loading      bool
+	err          error
+	detail       int
+	detailCursor int
+	itemsTop     int
+	itemsLeft    int
+	itemsWidth   int
+	itemsHeight  int
 }
 
 type quotaItem struct {
 	ID           string
 	Name         string
+	Email        string
 	Requests     int64
 	Errors       int64
 	InputTokens  int64
@@ -47,7 +51,7 @@ type quotaWindow struct {
 
 func (ui *UI) liveQuota() error {
 	EnableColors(ui.Out)
-	return ui.runTea(&quotaModel{ui: ui, loading: true})
+	return ui.runTea(&quotaModel{ui: ui, loading: true, usageEnabled: true, detail: -1})
 }
 
 func (model *quotaModel) Init() tea.Cmd {
@@ -57,6 +61,42 @@ func (model *quotaModel) Init() tea.Cmd {
 func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.detail >= 0 {
+			switch message.String() {
+			case "q", "esc":
+				model.detail = -1
+			case "up", "k":
+				model.detailCursor = moveIndex(model.detailCursor, 3, -1)
+			case "down", "j":
+				model.detailCursor = moveIndex(model.detailCursor, 3, 1)
+			case "enter", " ":
+				switch model.detailCursor {
+				case 0:
+					model.loading = true
+					return model, quotaRefresh()
+				case 1:
+					if err := model.toggleUsage(); err != nil {
+						model.err = err
+						return model, nil
+					}
+					model.loading = true
+					return model, quotaRefresh()
+				case 2:
+					model.detail = -1
+				}
+			case "r":
+				model.loading = true
+				return model, quotaRefresh()
+			case "u":
+				if err := model.toggleUsage(); err != nil {
+					model.err = err
+					return model, nil
+				}
+				model.loading = true
+				return model, quotaRefresh()
+			}
+			return model, nil
+		}
 		switch message.String() {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
@@ -68,7 +108,11 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if model.cursor+1 < len(model.items) {
 				model.cursor++
 			}
-		case "r", "enter", " ":
+		case "enter", " ":
+			if len(model.items) > 0 {
+				model.detail = model.cursor
+			}
+		case "r":
 			model.loading = true
 			return model, quotaRefresh()
 		}
@@ -79,12 +123,20 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return model, nil
 }
 
+func (model *quotaModel) toggleUsage() error {
+	model.usageEnabled = !model.usageEnabled
+	return model.ui.request(http.MethodPut, "/api/settings", map[string]bool{"usageEnabled": model.usageEnabled}, nil)
+}
+
 func (model *quotaModel) View() string {
 	if model.loading {
 		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
 	}
 	if model.err != nil {
 		return model.ui.errorView(model.ui.t("menu.quota"), model.err)
+	}
+	if model.detail >= 0 && model.detail < len(model.items) {
+		return model.detailView(model.items[model.detail])
 	}
 	rows := make([]string, 0, len(model.items))
 	for index, item := range model.items {
@@ -109,12 +161,68 @@ func (model *quotaModel) View() string {
 		rows = append(rows, mutedStyle.Render(model.ui.t("quota.noProviders")))
 	}
 	content := cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota"))+"\n"+strings.Join(rows, "\n"))
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n↑↓/jk move  r refresh  q back")
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n↑↓/jk move  Enter select  r refresh  q back")
 	return model.ui.outerStyle().Render(content + "\n\n" + controls)
+}
+
+func (model *quotaModel) detailView(item quotaItem) string {
+	info := []string{
+		"Provider: " + item.Name,
+		"ID: " + item.ID,
+		"Email: " + valueOrDash(item.Email),
+		"Plan: " + valueOrDash(item.Plan),
+		"Usage: " + model.ui.t(map[bool]string{true: "quota.usageOn", false: "quota.usageOff"}[model.usageEnabled]),
+		model.ui.t("quota.requests") + ": " + formatInt(item.Requests),
+		model.ui.t("quota.errors") + ": " + formatInt(item.Errors),
+		model.ui.t("quota.input") + ": " + formatInt(item.InputTokens),
+		model.ui.t("quota.output") + ": " + formatInt(item.OutputTokens),
+	}
+	if item.Message != "" {
+		info = append(info, errorStyle.Render(item.Message))
+	}
+	infoCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("quota.info")) + "\n" + strings.Join(info, "\n"))
+	quotaRows := []string{}
+	if len(item.Quotas) == 0 {
+		quotaRows = append(quotaRows, model.ui.t("quota.requests")+": "+formatInt(item.Requests), model.ui.t("quota.errors")+": "+formatInt(item.Errors))
+		quotaRows = append(quotaRows, model.ui.t("quota.input")+": "+formatInt(item.InputTokens), model.ui.t("quota.output")+": "+formatInt(item.OutputTokens))
+	}
+	for name, quota := range item.Quotas {
+		quotaRows = append(quotaRows, quotaBar(name, quota, model.ui.innerWidth()))
+	}
+	quotaCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n" + strings.Join(quotaRows, "\n"))
+	usageStatus := model.ui.t("quota.usageOff")
+	if model.usageEnabled {
+		usageStatus = model.ui.t("quota.usageOn")
+	}
+	actions := []string{model.ui.t("common.refresh"), model.ui.t("quota.toggleUsage") + " (" + usageStatus + ")", model.ui.t("common.back")}
+	menuRows := make([]string, 0, len(actions))
+	for index, action := range actions {
+		menuRows = append(menuRows, providerMenuItem(index, action, index == model.detailCursor))
+	}
+	menuCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("quota.functions")) + "\n" + strings.Join(menuRows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select"))
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + infoCard + "\n\n" + quotaCard + "\n\n" + menuCard)
+}
+
+func quotaProviderEmail(item provider) string {
+	if len(item.Accounts) > 0 && item.Accounts[0].Email != "" {
+		return item.Accounts[0].Email
+	}
+	for _, key := range []string{"email", "userEmail", "githubEmail"} {
+		if email, ok := item.ProviderSpecificData[key].(string); ok && email != "" {
+			return email
+		}
+	}
+	return ""
 }
 
 func (model *quotaModel) refresh() {
 	defer func() { model.loading = false }()
+	var settings map[string]any
+	if err := model.ui.request(http.MethodGet, "/api/settings", nil, &settings); err == nil {
+		if _, ok := settings["usageEnabled"]; ok {
+			model.usageEnabled = settingsEnabled(settings, "usageEnabled")
+		}
+	}
 	var response providersResponse
 	if err := model.ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
 		model.err = err
@@ -122,7 +230,7 @@ func (model *quotaModel) refresh() {
 	}
 	items := make([]quotaItem, 0, len(response.Connections))
 	for _, provider := range response.Connections {
-		item := quotaItem{ID: provider.ID, Name: provider.Name}
+		item := quotaItem{ID: provider.ID, Name: provider.Name, Email: quotaProviderEmail(provider)}
 		if item.Name == "" {
 			item.Name = provider.ID
 		}
@@ -134,6 +242,11 @@ func (model *quotaModel) refresh() {
 			Message      string                 `json:"message"`
 			Plan         string                 `json:"plan"`
 			Quotas       map[string]quotaWindow `json:"quotas"`
+		}
+		if !model.usageEnabled {
+			item.Message = model.ui.t("quota.usageOff")
+			items = append(items, item)
+			continue
 		}
 		if err := model.ui.request(http.MethodGet, "/api/usage/"+url.PathEscape(provider.ID), nil, &usage); err != nil {
 			usage.Message = model.ui.t("quota.unavailable")

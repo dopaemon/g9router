@@ -9,7 +9,7 @@ const (
 
 var translations = map[string]map[string]string{
 	English: {
-		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.quota": "Quota Tracking", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.chooseKey": "Choose API key", "quota.requests": "Requests", "quota.errors": "Errors", "quota.input": "Input tokens", "quota.output": "Output tokens", "quota.noProviders": "No providers found.", "quota.unavailable": "Quota data unavailable",
+		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.quota": "Quota Tracking", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.chooseKey": "Choose API key", "quota.requests": "Requests", "quota.errors": "Errors", "quota.input": "Input tokens", "quota.output": "Output tokens", "quota.noProviders": "No providers found.", "quota.unavailable": "Quota data unavailable", "quota.usage": "Usage", "quota.usageOn": "Usage ON", "quota.usageOff": "Usage OFF", "quota.toggleUsage": "u toggle usage", "quota.functions": "Usage functions", "quota.refresh": "r refresh", "quota.back": "q back",
 	},
 	Vietnamese: {
 		"menu.endpoint":           "Endpoint & Key",
@@ -72,6 +72,13 @@ var translations = map[string]map[string]string{
 		"quota.output":            "Token ra",
 		"quota.noProviders":       "Chưa có provider.",
 		"quota.unavailable":       "Chưa có dữ liệu hạn mức",
+		"quota.usage":             "Usage",
+		"quota.usageOn":           "Usage BẬT",
+		"quota.usageOff":          "Usage TẮT",
+		"quota.toggleUsage":       "u bật/tắt usage",
+		"quota.functions":         "Chức năng Usage",
+		"quota.refresh":           "r làm mới",
+		"quota.back":              "q quay lại",
 	},
 }
 
@@ -84,6 +91,8 @@ func init() {
 	translations[Vietnamese]["common.loading"] = "Đang tải…"
 	translations[English]["common.retryPrompt"] = "Retry %s?"
 	translations[Vietnamese]["common.retryPrompt"] = "Thử lại %s?"
+	translations[English]["quota.info"] = "Information"
+	translations[Vietnamese]["quota.info"] = "Thông tin"
 	translations[English]["form.required"] = "%s is required"
 	translations[Vietnamese]["form.required"] = "%s là bắt buộc"
 	translations[English]["form.selectOption"] = "Select at least one option"
