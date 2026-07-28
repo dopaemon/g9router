@@ -701,21 +701,22 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 		if err := ui.request(http.MethodGet, "/api/combos", nil, &payload); err != nil {
 			return err
 		}
-		fmt.Fprintln(ui.Out, "\nCombos")
+		fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.combos"))
 		for i, item := range payload.Combos {
 			fmt.Fprintf(ui.Out, "%d. %s: %v\n", i+1, item.Name, item.Models)
 		}
 		var action string
 		var err error
 		if ui.huhMode() {
-			choice, choiceErr := ui.huhChoice("Combo action", []string{"Create", "Edit", "Delete", "Back"})
+			choices := []string{ui.t("legacy.create"), ui.t("legacy.edit"), ui.t("legacy.delete"), ui.t("oauth.back")}
+			choice, choiceErr := ui.huhChoice(ui.t("legacy.comboAction"), choices)
 			if choiceErr != nil {
 				return choiceErr
 			}
-			action = map[string]string{"Create": "a", "Edit": "e", "Delete": "d", "Back": "b"}[choice]
+			action = map[string]string{ui.t("legacy.create"): "a", ui.t("legacy.edit"): "e", ui.t("legacy.delete"): "d", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprintln(ui.Out, "a. Create  e. Edit  d. Delete  b. Back")
-			fmt.Fprint(ui.Out, "Select action: ")
+			fmt.Fprintf(ui.Out, "a. %s  e. %s  d. %s  b. %s\n", ui.t("legacy.create"), ui.t("legacy.edit"), ui.t("legacy.delete"), ui.t("oauth.back"))
+			fmt.Fprint(ui.Out, ui.t("legacy.selectAction")+": ")
 			line, readErr := reader.ReadString('\n')
 			if readErr != nil && len(line) == 0 {
 				return readErr
@@ -741,9 +742,9 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			for _, item := range payload.Combos {
 				labels = append(labels, item.Name)
 			}
-			index, err = ui.huhNumber("Choose combo", labels)
+			index, err = ui.huhNumber(ui.t("legacy.chooseCombo"), labels)
 		} else {
-			fmt.Fprint(ui.Out, "Combo number: ")
+			fmt.Fprint(ui.Out, ui.t("legacy.comboNumber")+": ")
 			value, readErr := reader.ReadString('\n')
 			if readErr != nil {
 				return readErr
@@ -754,13 +755,13 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			return err
 		}
 		if err != nil || index < 1 || index > len(payload.Combos) {
-			fmt.Fprintln(ui.Out, "Invalid combo number")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidComboNumber"))
 			continue
 		}
 		item := payload.Combos[index-1]
 		if action == "d" {
 			if ui.huhMode() {
-				ok, confirmErr := ui.huhConfirm("Delete this combo?", false)
+				ok, confirmErr := ui.huhConfirm(ui.t("legacy.deleteComboConfirm"), false)
 				if confirmErr != nil {
 					return confirmErr
 				}
@@ -778,7 +779,7 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 				return err
 			}
 		} else {
-			fmt.Fprintf(ui.Out, "New name (Enter keeps %s): ", item.Name)
+			fmt.Fprint(ui.Out, ui.t("legacy.newName")+" ("+fmt.Sprintf(ui.t("legacy.keepEnter"), item.Name)+"): ")
 			value, readErr := reader.ReadString('\n')
 			if readErr != nil {
 				return readErr
@@ -786,7 +787,7 @@ func (ui *UI) combos(reader *bufio.Reader) error {
 			if strings.TrimSpace(value) != "" {
 				item.Name = strings.TrimSpace(value)
 			}
-			fmt.Fprint(ui.Out, "Models (comma-separated, Enter keeps current): ")
+			fmt.Fprint(ui.Out, ui.t("legacy.modelsKeep")+": ")
 			value, readErr = reader.ReadString('\n')
 			if readErr != nil {
 				return readErr
