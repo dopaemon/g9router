@@ -14,7 +14,7 @@ func TestCodexAccountDecodesUnpaddedJWTClaims(t *testing.T) {
 	})
 	token := "header." + strings.TrimRight(base64.RawURLEncoding.EncodeToString(payload), "=") + ".signature"
 	account := codexAccount(token, "")
-	if account.Email != "user@example.com" || account.Workspace != "workspace" || account.Plan != "pro" {
+	if account.Email != "user@example.com" || account.Name != "Codex user@example.com" || account.Workspace != "workspace" || account.Plan != "pro" {
 		t.Fatalf("account=%+v", account)
 	}
 }

@@ -119,8 +119,8 @@ func codexAccount(token, name string) providers.Account {
 	account.Email = codexString(profile["email"], claims["email"], claims["preferred_username"])
 	account.Workspace = codexString(auth["chatgpt_account_id"])
 	account.Plan = codexString(auth["chatgpt_plan_type"])
-	if account.Email != "" && strings.TrimSpace(name) == "" {
-		account.Name = account.Email
+	if account.Email != "" {
+		account.Name = "Codex " + account.Email
 	}
 	return account
 }

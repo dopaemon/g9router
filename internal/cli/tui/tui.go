@@ -102,13 +102,19 @@ type apiKey struct {
 }
 
 type provider struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	BaseURL string `json:"baseURL"`
-	APIKey  string `json:"apiKey"`
-	APIType string `json:"apiType"`
-	OAuthID string `json:"oauthId"`
-	Enabled bool   `json:"enabled"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	BaseURL  string            `json:"baseURL"`
+	APIKey   string            `json:"apiKey"`
+	APIType  string            `json:"apiType"`
+	OAuthID  string            `json:"oauthId"`
+	Enabled  bool              `json:"enabled"`
+	Accounts []providerAccount `json:"accounts"`
+}
+
+type providerAccount struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 type providersResponse struct {
@@ -267,7 +273,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 }
 
 func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
-	providers := []string{"claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
+	providers := oauthProviderNames()
 	if ui.huhMode() {
 		back := ui.t("oauth.back")
 		providers = append(providers, back)
@@ -275,7 +281,7 @@ func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
 		if err != nil || choice == back {
 			return err
 		}
-		return ui.loginBrowserOAuth(reader, choice)
+		return ui.loginSelectedOAuthProvider(reader, choice)
 	}
 	fmt.Fprintln(ui.Out, "\n"+ui.t("oauth.provider"))
 	for index, provider := range providers {
@@ -293,7 +299,18 @@ func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
 	if index < 1 || index > len(providers) {
 		return errors.New(ui.t("oauth.invalidProvider"))
 	}
-	return ui.loginBrowserOAuth(reader, providers[index-1])
+	return ui.loginSelectedOAuthProvider(reader, providers[index-1])
+}
+
+func oauthProviderNames() []string {
+	return []string{"codex", "claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
+}
+
+func (ui *UI) loginSelectedOAuthProvider(reader *bufio.Reader, provider string) error {
+	if provider == "codex" {
+		return ui.loginCodex()
+	}
+	return ui.loginBrowserOAuth(reader, provider)
 }
 
 func (ui *UI) loginBrowserOAuth(reader *bufio.Reader, provider string) error {

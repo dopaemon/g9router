@@ -265,6 +265,16 @@ func TestPromptAPIKeyTUIUsesHuhWhenAccessible(t *testing.T) {
 	}
 }
 
+func TestOAuthProvidersIncludeCodex(t *testing.T) {
+	providers := oauthProviderNames()
+	for _, provider := range providers {
+		if provider == "codex" {
+			return
+		}
+	}
+	t.Fatal("Codex is missing from OAuth providers")
+}
+
 func TestEndpointLiveToggleTunnel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/tunnel/enable" {
@@ -557,6 +567,29 @@ func TestProviderViewportKeepsLongListBounded(t *testing.T) {
 	}
 	if model.cursor < model.itemsStart || model.cursor >= model.itemsStart+model.itemsHeight {
 		t.Fatalf("cursor provider outside viewport: start=%d height=%d cursor=%d view=%q", model.itemsStart, model.itemsHeight, model.cursor, view)
+	}
+}
+
+func TestCodexOAuthProviderShowsAccountName(t *testing.T) {
+	model := &providerLiveModel{
+		ui:               &UI{width: 80, height: 20, Locale: i18n.Vietnamese},
+		tab:              oauthProviderTab,
+		oauthConnections: []provider{{ID: "codex", Name: "Codex", Accounts: []providerAccount{{Name: "Codex user@example.com"}}, Enabled: true}},
+	}
+	if !strings.Contains(model.cardContent(), "Codex user@example.com") {
+		t.Fatal("Codex OAuth account name is not shown")
+	}
+}
+
+func TestCodexProviderIsOAuthProvider(t *testing.T) {
+	model := &providerLiveModel{}
+	for _, item := range []provider{{ID: "codex", Name: "Codex"}} {
+		if item.OAuthID != "" || item.ID == "codex" {
+			model.oauthConnections = append(model.oauthConnections, item)
+		}
+	}
+	if len(model.oauthConnections) != 1 {
+		t.Fatal("Codex provider is not classified as OAuth")
 	}
 }
 

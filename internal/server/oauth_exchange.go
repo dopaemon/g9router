@@ -20,10 +20,10 @@ func (s *Server) genericOAuthExchangeAPI(w http.ResponseWriter, r *http.Request)
 	}
 	provider := parts[0]
 	var input struct {
-		Code string `json:"code"`
-		RedirectURI string `json:"redirect_uri"`
+		Code         string `json:"code"`
+		RedirectURI  string `json:"redirect_uri"`
 		CodeVerifier string `json:"code_verifier"`
-		State string `json:"state"`
+		State        string `json:"state"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Code == "" || input.RedirectURI == "" || input.CodeVerifier == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing required fields"})
@@ -64,22 +64,37 @@ func (s *Server) genericOAuthExchangeAPI(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Token exchange failed"})
 		return
 	}
-	var token struct { AccessToken string `json:"access_token"`; RefreshToken string `json:"refresh_token"`; ExpiresIn int64 `json:"expires_in"`; Scope string `json:"scope"` }
+	var token struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		IDToken      string `json:"id_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Scope        string `json:"scope"`
+	}
 	if json.Unmarshal(data, &token) != nil || token.AccessToken == "" {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Invalid token response"})
 		return
 	}
-	if token.ExpiresIn <= 0 { token.ExpiresIn = 3600 }
+	if token.ExpiresIn <= 0 {
+		token.ExpiresIn = 3600
+	}
 	credentialID := provider + "-oauth"
 	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: provider, AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenURL: tokenURL, ClientID: clientID, ExpiresAt: time.Now().Add(time.Duration(token.ExpiresIn) * time.Second).UnixMilli(), Scope: token.Scope}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	baseURL, apiType := "https://api.anthropic.com/v1/messages", "anthropic"
-	if provider == "codex" { baseURL, apiType = "https://chatgpt.com/backend-api/codex", "openai-responses" }
-	if err := s.store.Upsert(providers.Provider{ID: provider, Name: provider, BaseURL: baseURL, APIKey: token.AccessToken, APIType: apiType, OAuthID: credentialID, Enabled: true, TestStatus: "active"}); err != nil {
+	name, email := provider, ""
+	if provider == "codex" {
+		baseURL, apiType = "https://chatgpt.com/backend-api/codex", "openai-responses"
+		email = codexAccount(token.IDToken, "").Email
+		if email != "" {
+			name = "Codex " + email
+		}
+	}
+	if err := s.store.Upsert(providers.Provider{ID: provider, Name: name, BaseURL: baseURL, APIKey: token.AccessToken, APIType: apiType, OAuthID: credentialID, Enabled: true, TestStatus: "active"}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "connection": map[string]any{"provider": provider, "id": credentialID}})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "connection": map[string]any{"provider": provider, "id": credentialID, "email": email, "name": name}})
 }

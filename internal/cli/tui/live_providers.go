@@ -229,6 +229,14 @@ func (model *providerLiveModel) cardContent() string {
 		rows = []string{model.ui.t("provider.addOAuth")}
 		for _, item := range model.oauthConnections {
 			name := item.Name
+			if item.ID == "codex" && len(item.Accounts) > 0 {
+				account := item.Accounts[0]
+				if account.Name != "" {
+					name = account.Name
+				} else if account.Email != "" {
+					name = "Codex " + account.Email
+				}
+			}
 			if name == "" {
 				name = item.ID
 			}
@@ -428,7 +436,7 @@ func (model *providerLiveModel) refresh() {
 	}
 	model.custom, model.oauthConnections, model.apiKeys = nil, nil, nil
 	for _, item := range response.Connections {
-		if item.OAuthID != "" {
+		if item.OAuthID != "" || item.ID == "codex" {
 			model.oauthConnections = append(model.oauthConnections, item)
 			continue
 		}
