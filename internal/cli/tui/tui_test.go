@@ -439,6 +439,17 @@ func TestLogsControlsListPauseAction(t *testing.T) {
 	}
 }
 
+func TestMouseHintRequiresTerminalSize(t *testing.T) {
+	ui := &UI{Locale: i18n.English}
+	if ui.mouseHint() != "" {
+		t.Fatal("mouse hint should stay hidden before terminal sizing")
+	}
+	ui.width = 80
+	if !strings.Contains(ui.mouseHint(), "mouse") {
+		t.Fatalf("mouse hint = %q", ui.mouseHint())
+	}
+}
+
 func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {

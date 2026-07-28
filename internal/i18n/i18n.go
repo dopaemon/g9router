@@ -227,6 +227,7 @@ func init() {
 		"controls.tokenCursor":            {"↑↓/jk token cursor", "↑↓/jk cursor token"},
 		"controls.refresh":                {"r refresh", "r làm mới"},
 		"controls.back":                   {"q back", "q quay lại"},
+		"controls.mouse":                  {"mouse click selects", "click chuột để chọn"},
 		"stats.requests":                  {"Requests", "Request"},
 		"stats.promptTokens":              {"Prompt tokens", "Token prompt"},
 		"stats.completionTokens":          {"Completion tokens", "Token completion"},

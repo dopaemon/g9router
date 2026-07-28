@@ -162,6 +162,9 @@ func (model *logsModel) View() string {
 		actionHint{"p", "logs.pause"},
 		actionHint{"q", "logs.back"},
 	))
+	if hint := model.ui.mouseHint(); hint != "" {
+		controlsText += "\n" + mutedStyle.Render(hint)
+	}
 	if model.paused {
 		controlsText += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
 	}

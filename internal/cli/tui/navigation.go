@@ -13,6 +13,13 @@ func (ui *UI) actionHints(hints ...actionHint) string {
 	return joinLines(items...)
 }
 
+func (ui *UI) mouseHint() string {
+	if ui.width <= 0 {
+		return ""
+	}
+	return ui.t("controls.mouse")
+}
+
 func moveIndex(index, count, delta int) int {
 	if count <= 0 {
 		return 0

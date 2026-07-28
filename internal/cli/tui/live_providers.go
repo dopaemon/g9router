@@ -171,6 +171,9 @@ func (model *providerLiveModel) View() string {
 		column.Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
 	}
 	controls := strings.Join(controlRows, "\n")
+	if hint := model.ui.mouseHint(); hint != "" {
+		controls += "\n" + mutedStyle.Render(hint)
+	}
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
