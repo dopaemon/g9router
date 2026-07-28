@@ -428,6 +428,17 @@ func TestStatisticsPeriodsStackInCompactLayout(t *testing.T) {
 	}
 }
 
+func TestLogsControlsListPauseAction(t *testing.T) {
+	ui := &UI{Locale: i18n.English}
+	controls := ui.actionHints(
+		actionHint{"p", "logs.pause"},
+		actionHint{"q", "logs.back"},
+	)
+	if !strings.Contains(controls, "p pause/resume") || !strings.Contains(controls, "q back") {
+		t.Fatalf("controls = %q", controls)
+	}
+}
+
 func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {

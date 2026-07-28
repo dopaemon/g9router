@@ -1,5 +1,18 @@
 package tui
 
+type actionHint struct {
+	keys  string
+	label string
+}
+
+func (ui *UI) actionHints(hints ...actionHint) string {
+	items := make([]string, 0, len(hints))
+	for _, hint := range hints {
+		items = append(items, hint.keys+" "+ui.t(hint.label))
+	}
+	return joinLines(items...)
+}
+
 func moveIndex(index, count, delta int) int {
 	if count <= 0 {
 		return 0

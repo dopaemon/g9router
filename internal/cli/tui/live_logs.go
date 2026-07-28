@@ -155,7 +155,13 @@ func (model *logsModel) View() string {
 	}
 	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
-	controlsText := mutedStyle.Render(model.ui.t("logs.controls"))
+	controlsText := mutedStyle.Render(model.ui.actionHints(
+		actionHint{"↑↓/jk", "logs.scroll"},
+		actionHint{"Tab", "logs.switch"},
+		actionHint{"r", "logs.refresh"},
+		actionHint{"p", "logs.pause"},
+		actionHint{"q", "logs.back"},
+	))
 	if model.paused {
 		controlsText += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
 	}
