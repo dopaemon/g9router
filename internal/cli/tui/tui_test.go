@@ -417,6 +417,17 @@ func TestLogsRowsKeepTenLineViewport(t *testing.T) {
 	}
 }
 
+func TestStatisticsPeriodsStackInCompactLayout(t *testing.T) {
+	model := &statisticsModel{ui: &UI{width: 42, Locale: i18n.Vietnamese}, period: 2}
+	view := model.View()
+	if lipgloss.Height(view) < len(statisticsPeriods) {
+		t.Fatalf("statistics view is too short: %d", lipgloss.Height(view))
+	}
+	if !strings.Contains(view, "7 ngày") {
+		t.Fatalf("Vietnamese period label missing: %q", view)
+	}
+}
+
 func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {

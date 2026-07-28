@@ -131,7 +131,11 @@ func (model *statisticsModel) View() string {
 		breakdowns = lipgloss.JoinVertical(lipgloss.Left, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
 		activity = lipgloss.JoinVertical(lipgloss.Left, model.chartCard(), model.recentCard())
 	}
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, periods...) + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
+	periodView := lipgloss.JoinHorizontal(lipgloss.Top, periods...)
+	if model.ui.compact() {
+		periodView = lipgloss.JoinVertical(lipgloss.Left, periods...)
+	}
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + periodView + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls)
 }
 
 func (model *statisticsModel) overviewCard() string {
