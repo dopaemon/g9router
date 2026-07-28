@@ -23,6 +23,7 @@ type logsModel struct {
 	httpErr     error
 	detail      string
 	paused      bool
+	followTail  bool
 	tabRegions  []tuiRegion
 	itemsRegion tuiRegion
 }
@@ -37,7 +38,7 @@ type apiLogEntry struct {
 }
 
 func (ui *UI) liveLogs() error {
-	model := logsModel{ui: ui}
+	model := logsModel{ui: ui, followTail: true}
 	model.refresh()
 	return ui.runTea(&model)
 }
@@ -54,11 +55,13 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if region.contains(message.X, message.Y) {
 				model.tab = index
 				model.cursor = 0
+				model.followTail = true
 				return model, nil
 			}
 		}
 		if model.itemsRegion.contains(message.X, message.Y) {
 			model.cursor = model.logIndexAtY(message.Y)
+			model.followTail = model.cursor == model.rowCount()-1
 			if (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft && model.rowCount() > 0 {
 				model.detail = model.detailForCursor()
 			}
@@ -77,17 +80,21 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab", "right", "l":
 			model.tab = cycleIndex(model.tab, 2, 1)
 			model.cursor = 0
+			model.followTail = true
 		case "shift+tab", "left", "h":
 			model.tab = cycleIndex(model.tab, 2, -1)
 			model.cursor = 0
+			model.followTail = true
 		case "up", "k":
 			if model.cursor > 0 {
 				model.cursor--
 			}
+			model.followTail = false
 		case "down", "j":
 			if model.cursor+1 < model.rowCount() {
 				model.cursor++
 			}
+			model.followTail = model.cursor == model.rowCount()-1
 		case "r", "enter", " ":
 			if message.String() == "enter" && model.rowCount() > 0 {
 				model.detail = model.detailForCursor()
@@ -267,7 +274,9 @@ func (model *logsModel) refresh() {
 		model.httpLog = payload.Logs
 	}
 	model.apiErr, model.httpErr = apiErr, httpErr
-	if model.cursor >= model.rowCount() {
+	if model.followTail {
+		model.cursor = max(0, model.rowCount()-1)
+	} else if model.cursor >= model.rowCount() {
 		model.cursor = model.rowCount() - 1
 		if model.cursor < 0 {
 			model.cursor = 0

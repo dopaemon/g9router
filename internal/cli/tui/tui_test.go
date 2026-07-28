@@ -496,6 +496,37 @@ func TestLogsMouseUsesVisibleViewport(t *testing.T) {
 	}
 }
 
+func TestLogsFollowNewestUntilUserMovesUp(t *testing.T) {
+	logs := []string{"one", "two", "three"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/translator/console-logs" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"logs": logs})
+			return
+		}
+		if r.URL.Path == "/api/usage/logs" {
+			_ = json.NewEncoder(w).Encode([]apiLogEntry{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	model := &logsModel{ui: &UI{BaseURL: server.URL, Client: server.Client()}, tab: 1, followTail: true}
+	model.refresh()
+	if model.cursor != 2 {
+		t.Fatalf("initial tail cursor = %d, want 2", model.cursor)
+	}
+	model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if model.followTail || model.cursor != 1 {
+		t.Fatalf("manual history cursor = %d, followTail=%v", model.cursor, model.followTail)
+	}
+	logs = append(logs, "four")
+	model.refresh()
+	if model.cursor != 1 {
+		t.Fatalf("refresh moved history cursor to %d", model.cursor)
+	}
+}
+
 func TestAPIKeyDetailUsesLocale(t *testing.T) {
 	ui := &UI{Locale: "vi"}
 	if got := fmt.Sprintf(ui.t("keys.value"), "sk-test"); got != "API key: sk-test" {
