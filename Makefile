@@ -4,7 +4,7 @@ test:
 	go test ./...
 
 build:
-	go build -v ./cmd/g9router
+	CGO_ENABLED=0 go build -v ./cmd/g9router
 
 run:
 	go run ./cmd/g9router
