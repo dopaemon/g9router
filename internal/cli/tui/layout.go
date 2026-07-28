@@ -35,7 +35,7 @@ func (model sizedModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return model, command
 }
 
-func (model sizedModel) View() string { return model.model.View() }
+func (model sizedModel) View() string { return model.ui.fitView(model.model.View()) }
 
 func (ui *UI) cardWidth() int {
 	width := ui.width - 4
@@ -68,6 +68,19 @@ func (ui *UI) viewportHeight(reserved, fallback int) int {
 		return fallback
 	}
 	return max(1, ui.height-reserved)
+}
+
+func (ui *UI) fitView(view string) string {
+	if ui.height <= 0 {
+		return view
+	}
+	lines := strings.Split(view, "\n")
+	if len(lines) <= ui.height {
+		return view
+	}
+	keep := max(1, ui.height-1)
+	start := len(lines) - keep
+	return strings.Join(append([]string{lines[0]}, lines[start:]...), "\n")
 }
 
 func viewportWindow(cursor, total, visible int) (int, int) {

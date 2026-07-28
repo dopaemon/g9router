@@ -450,6 +450,43 @@ func TestMouseHintRequiresTerminalSize(t *testing.T) {
 	}
 }
 
+func TestLiveViewsRespectShortTerminalHeight(t *testing.T) {
+	const height = 12
+	models := []struct {
+		name string
+		view func() string
+	}{
+		{"endpoint", func() string {
+			return (&endpointLiveModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"providers", func() string {
+			return (&providerLiveModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"combos", func() string {
+			return (&comboLiveModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"cli-tools", func() string {
+			return (&cliToolsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"logs", func() string { return (&logsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View() }},
+		{"statistics", func() string {
+			return (&statisticsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"settings", func() string {
+			return (&settingsModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+		{"language", func() string {
+			return (&languageModel{ui: &UI{width: 40, height: height, Locale: i18n.Vietnamese}}).View()
+		}},
+	}
+	for _, model := range models {
+		view := (&UI{height: height}).fitView(model.view())
+		if got := lipgloss.Height(view); got > height {
+			t.Errorf("%s view height = %d, want <= %d", model.name, got, height)
+		}
+	}
+}
+
 func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {
