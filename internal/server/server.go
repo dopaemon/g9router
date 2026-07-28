@@ -91,6 +91,14 @@ func New(options Options) *Server {
 	if options.DatabasePath == "" {
 		options.DatabasePath = "g9router.db"
 	}
+	if options.DatabasePath == "g9router.db" {
+		if data, err := os.ReadFile(options.DatabasePath); err == nil {
+			trimmed := bytes.TrimSpace(data)
+			if len(trimmed) > 0 && (trimmed[0] == '[' || trimmed[0] == '{') {
+				options.DatabasePath = "g9router.sqlite"
+			}
+		}
+	}
 	if options.ProviderNodesPath == "" {
 		options.ProviderNodesPath = "provider-nodes.json"
 	}

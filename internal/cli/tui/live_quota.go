@@ -17,6 +17,11 @@ import (
 
 type quotaRefreshMsg struct{}
 type quotaActionDoneMsg struct{ err error }
+type quotaDataMsg struct {
+	items        []quotaItem
+	usageEnabled bool
+	err          error
+}
 
 type quotaModel struct {
 	ui           *UI
@@ -67,6 +72,15 @@ func (model *quotaModel) Init() tea.Cmd {
 
 func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case quotaDataMsg:
+		model.items = message.items
+		model.usageEnabled = message.usageEnabled
+		model.err = message.err
+		model.loading = false
+		if model.cursor >= len(model.items) {
+			model.cursor = 0
+		}
+		return model, nil
 	case quotaActionDoneMsg:
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
@@ -74,7 +88,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.err = message.err
 		if model.err == nil {
 			model.loading = true
-			return model, quotaRefresh()
+			return model, model.refreshCmd()
 		}
 		return model, nil
 	case tea.KeyMsg:
@@ -91,14 +105,14 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				switch model.detailCursor {
 				case 0:
 					model.loading = true
-					return model, quotaRefresh()
+					return model, model.refreshCmd()
 				case 1:
 					if err := model.toggleUsage(); err != nil {
 						model.err = err
 						return model, nil
 					}
 					model.loading = true
-					return model, quotaRefresh()
+					return model, model.refreshCmd()
 				case 2:
 					if item.ID == "codex" {
 						if item.ResetCreditsKnown && item.ResetCredits > 0 {
@@ -112,14 +126,14 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "r":
 				model.loading = true
-				return model, quotaRefresh()
+				return model, model.refreshCmd()
 			case "u":
 				if err := model.toggleUsage(); err != nil {
 					model.err = err
 					return model, nil
 				}
 				model.loading = true
-				return model, quotaRefresh()
+				return model, model.refreshCmd()
 			}
 			return model, nil
 		}
@@ -140,7 +154,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			model.loading = true
-			return model, quotaRefresh()
+			return model, model.refreshCmd()
 		case "a":
 			model.autoRefresh = !model.autoRefresh
 			if model.autoRefresh {
@@ -151,8 +165,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if !model.autoRefresh {
 			return model, nil
 		}
-		model.refresh()
-		return model, quotaRefresh()
+		return model, tea.Batch(model.refreshCmd(), quotaRefresh())
 	}
 	return model, nil
 }
@@ -286,18 +299,21 @@ func quotaProviderEmail(item provider) string {
 	return ""
 }
 
-func (model *quotaModel) refresh() {
-	defer func() { model.loading = false }()
+func (model *quotaModel) refreshCmd() tea.Cmd {
+	ui, usageEnabled := model.ui, model.usageEnabled
+	return func() tea.Msg { return loadQuota(ui, usageEnabled) }
+}
+
+func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
 	var settings map[string]any
-	if err := model.ui.request(http.MethodGet, "/api/settings", nil, &settings); err == nil {
+	if err := ui.request(http.MethodGet, "/api/settings", nil, &settings); err == nil {
 		if _, ok := settings["usageEnabled"]; ok {
-			model.usageEnabled = settingsEnabled(settings, "usageEnabled")
+			usageEnabled = settingsEnabled(settings, "usageEnabled")
 		}
 	}
 	var response providersResponse
-	if err := model.ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
-		model.err = err
-		return
+	if err := ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
+		return quotaDataMsg{usageEnabled: usageEnabled, err: err}
 	}
 	items := make([]quotaItem, 0, len(response.Connections))
 	for _, provider := range response.Connections {
@@ -317,13 +333,13 @@ func (model *quotaModel) refresh() {
 				AvailableCount int `json:"availableCount"`
 			} `json:"resetCredits"`
 		}
-		if !model.usageEnabled {
-			item.Message = model.ui.t("quota.usageOff")
+		if !usageEnabled {
+			item.Message = ui.t("quota.usageOff")
 			items = append(items, item)
 			continue
 		}
-		if err := model.ui.request(http.MethodGet, "/api/usage/"+url.PathEscape(provider.ID), nil, &usage); err != nil {
-			usage.Message = model.ui.t("quota.unavailable")
+		if err := ui.request(http.MethodGet, "/api/usage/"+url.PathEscape(provider.ID), nil, &usage); err != nil {
+			usage.Message = ui.t("quota.unavailable")
 		}
 		item.Requests, item.Errors = usage.Requests, usage.Errors
 		item.InputTokens, item.OutputTokens = usage.InputTokens, usage.OutputTokens
@@ -334,10 +350,7 @@ func (model *quotaModel) refresh() {
 		}
 		items = append(items, item)
 	}
-	model.items, model.err = items, nil
-	if model.cursor >= len(model.items) {
-		model.cursor = 0
-	}
+	return quotaDataMsg{items: items, usageEnabled: usageEnabled}
 }
 
 func quotaBar(name string, quota quotaWindow, width int) string {
