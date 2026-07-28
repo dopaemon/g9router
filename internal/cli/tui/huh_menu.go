@@ -193,10 +193,13 @@ func (ui *UI) selectLanguage() error {
 	if err != nil {
 		return err
 	}
+	locale := i18n.English
 	if choice == ui.t("language.vietnamese") {
-		ui.Locale = i18n.Vietnamese
-	} else {
-		ui.Locale = i18n.English
+		locale = i18n.Vietnamese
 	}
+	if err := ui.saveLocale(locale); err != nil {
+		return err
+	}
+	ui.Locale = locale
 	return nil
 }

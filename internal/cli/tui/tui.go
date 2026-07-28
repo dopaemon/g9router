@@ -33,9 +33,27 @@ type UI struct {
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
 	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, Locale: i18n.Normalize(os.Getenv("G9ROUTER_LOCALE")), forceHuh: true}
+	ui.loadStoredLocale()
 	EnableColors(out)
 	reader := bufio.NewReader(in)
 	return ui.huhMenu(reader)
+}
+
+func (ui *UI) loadStoredLocale() {
+	if strings.TrimSpace(os.Getenv("G9ROUTER_LOCALE")) != "" {
+		return
+	}
+	var settings map[string]any
+	if err := ui.request(http.MethodGet, "/api/settings", nil, &settings); err != nil {
+		return
+	}
+	if locale, ok := settings["locale"].(string); ok {
+		ui.Locale = i18n.Normalize(locale)
+	}
+}
+
+func (ui *UI) saveLocale(locale string) error {
+	return ui.request(http.MethodPatch, "/api/settings", map[string]string{"locale": i18n.Normalize(locale)}, nil)
 }
 
 func (ui *UI) t(key string) string { return i18n.T(ui.Locale, key) }

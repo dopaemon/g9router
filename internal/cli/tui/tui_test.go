@@ -192,6 +192,47 @@ func TestAccessibleMode(t *testing.T) {
 	}
 }
 
+func TestLocalePersistsThroughSettingsAPI(t *testing.T) {
+	var saved string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = io.WriteString(w, `{"locale":"vi"}`)
+		case http.MethodPatch:
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			saved = body["locale"]
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, Client: server.Client(), Locale: i18n.English}
+	ui.loadStoredLocale()
+	if ui.Locale != i18n.Vietnamese {
+		t.Fatalf("loaded locale = %q", ui.Locale)
+	}
+	if err := ui.saveLocale(i18n.English); err != nil {
+		t.Fatal(err)
+	}
+	if saved != i18n.English {
+		t.Fatalf("saved locale = %q", saved)
+	}
+}
+
+func TestLocaleEnvironmentOverridesStoredLocale(t *testing.T) {
+	t.Setenv("G9ROUTER_LOCALE", i18n.English)
+	ui := &UI{In: strings.NewReader(""), Locale: i18n.English}
+	ui.loadStoredLocale()
+	if ui.Locale != i18n.English {
+		t.Fatalf("environment locale = %q", ui.Locale)
+	}
+}
+
 func TestLiveModeAvoidsBubbleTeaForAccessibleInput(t *testing.T) {
 	t.Setenv("G9ROUTER_ACCESSIBLE", "1")
 	ui := &UI{In: os.Stdin, forceHuh: true}

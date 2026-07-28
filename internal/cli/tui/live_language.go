@@ -11,6 +11,7 @@ import (
 type languageModel struct {
 	ui            *UI
 	cursor        int
+	err           error
 	cardsTopValue int
 	cardRegions   []tuiRegion
 }
@@ -56,15 +57,22 @@ func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *languageModel) selectLanguage() tea.Cmd {
+	locale := i18n.English
 	if model.cursor == 1 {
-		model.ui.Locale = i18n.Vietnamese
-	} else {
-		model.ui.Locale = i18n.English
+		locale = i18n.Vietnamese
 	}
+	if err := model.ui.saveLocale(locale); err != nil {
+		model.err = err
+		return nil
+	}
+	model.ui.Locale = locale
 	return tea.Quit
 }
 
 func (model *languageModel) View() string {
+	if model.err != nil {
+		return model.ui.errorView(model.ui.t("language.title"), model.err)
+	}
 	english := languageCard(model.ui.columnWidth(2), 0, model.ui.t("language.english"), model.cursor == 0)
 	vietnamese := languageCard(model.ui.columnWidth(2), 1, model.ui.t("language.vietnamese"), model.cursor == 1)
 	model.cardRegions = nil
