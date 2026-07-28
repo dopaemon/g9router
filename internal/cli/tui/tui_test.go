@@ -487,6 +487,30 @@ func TestLiveViewsRespectShortTerminalHeight(t *testing.T) {
 	}
 }
 
+func TestProviderViewportKeepsLongListBounded(t *testing.T) {
+	items := make([]provider, 20)
+	for index := range items {
+		items[index] = provider{ID: fmt.Sprintf("provider-%d", index), Name: fmt.Sprintf("Provider %d", index)}
+	}
+	model := &providerLiveModel{ui: &UI{width: 60, height: 16, Locale: i18n.Vietnamese}, custom: items, cursor: 15, tab: customProviderTab}
+	view := model.cardContent()
+	if model.itemsHeight > model.ui.viewportHeight(14, 10) {
+		t.Fatalf("visible providers = %d", model.itemsHeight)
+	}
+	if model.cursor < model.itemsStart || model.cursor >= model.itemsStart+model.itemsHeight {
+		t.Fatalf("cursor provider outside viewport: start=%d height=%d cursor=%d view=%q", model.itemsStart, model.itemsHeight, model.cursor, view)
+	}
+}
+
+func TestLegacyTranslationsCoverVisibleGroups(t *testing.T) {
+	ui := &UI{Locale: i18n.Vietnamese}
+	for _, key := range []string{"oauth.title", "legacy.settings", "legacy.cliTools", "legacy.combos", "legacy.providers", "legacy.apiKeys", "legacy.invalidSelection"} {
+		if value := ui.t(key); value == key || value == "" {
+			t.Fatalf("missing translation for %s: %q", key, value)
+		}
+	}
+}
+
 func TestLogsRowsFitNarrowTerminal(t *testing.T) {
 	model := &logsModel{ui: &UI{width: 42}, apiLogs: []apiLogEntry{{Timestamp: "12:00:00", Status: "ok", Provider: "provider-name", Model: "a-very-long-model-name", Input: 1234, Output: 5678}}}
 	if got := len([]rune(model.formatAPILog("12:00:00", "ok", model.apiLogs[0]))); got > model.ui.innerWidth()-2 {
