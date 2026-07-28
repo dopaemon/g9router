@@ -97,6 +97,8 @@ func New(options Options) *Server {
 	var database *sql.DB
 	if opened, err := db.Open(options.DatabasePath); err == nil {
 		database = opened
+	} else {
+		log.Warn("database unavailable", "path", options.DatabasePath, "error", err)
 	}
 	return &Server{options: options, client: &http.Client{Timeout: 10 * time.Minute}, store: providers.New(options.ProviderPath), usage: usage.New(options.DatabasePath), oauth: oauth.New(options.OAuthPath), settings: settings.New(database), sessions: auth.NewSessions(), oidcConfig: oidc.ConfigFromEnv(os.Getenv), mcpBridge: mcp.New(), headroomManager: headroom.New(os.Getenv("G9ROUTER_HEADROOM_COMMAND")), keys: keyStore.New("keys.json"), combos: comboStore.New("combos.json"), providerNodes: providerNodeStore.New(options.ProviderNodesPath), proxyPools: proxypools.New("proxy-pools.json"), tunnelManager: tunnel.New(), pxpipeManager: pxpipe.New(), mitmManager: mitm.New(), database: database}
 }

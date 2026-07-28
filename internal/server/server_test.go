@@ -21,6 +21,16 @@ func TestNewUsesConfiguredDatabasePath(t *testing.T) {
 	}
 }
 
+func TestNewSurvivesUnavailableDatabase(t *testing.T) {
+	app := New(Options{DatabasePath: t.TempDir() + "/missing/state.db"})
+	if app.settings == nil {
+		t.Fatal("settings store is nil")
+	}
+	if _, ok := app.settings.Secret("password"); ok {
+		t.Fatal("unexpected password")
+	}
+}
+
 func TestHandlerServesWebUIOnlyWhenEnabled(t *testing.T) {
 	for _, test := range []struct {
 		name string

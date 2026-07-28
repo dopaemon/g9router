@@ -3,6 +3,7 @@ package settings
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"sync"
 )
 
@@ -51,6 +52,9 @@ func (s *Store) Update(values map[string]any) error {
 	payload, err := json.Marshal(s.values)
 	if err != nil {
 		return err
+	}
+	if s.database == nil {
+		return errors.New("database unavailable")
 	}
 	_, err = s.database.Exec(`INSERT INTO settings(id,payload,updated_at) VALUES(1,?,unixepoch()) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, string(payload))
 	return err
@@ -192,10 +196,16 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
+	if s.database == nil {
+		return errors.New("database unavailable")
+	}
 	_, err = s.database.Exec(`INSERT INTO settings(id,payload,updated_at) VALUES(1,?,unixepoch()) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, string(payload))
 	return err
 }
 func (s *Store) load() {
+	if s.database == nil {
+		return
+	}
 	var payload string
 	if s.database.QueryRow(`SELECT payload FROM settings WHERE id=1`).Scan(&payload) == nil {
 		_ = json.Unmarshal([]byte(payload), &s.values)
