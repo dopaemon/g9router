@@ -128,7 +128,15 @@ func (model *comboLiveModel) View() string {
 		return model.ui.errorView(model.ui.t("menu.combos"), model.err)
 	}
 	cards := []string{model.createCard()}
-	for index, item := range model.combos {
+	visible := max(1, model.ui.viewportHeight(14, 15)/5)
+	start, end := 0, len(model.combos)
+	if len(model.combos) > visible && model.cursor >= 2 {
+		start, end = viewportWindow((model.cursor-2)/2, len(model.combos), visible)
+	} else if len(model.combos) > visible {
+		_, end = viewportWindow(0, len(model.combos), visible)
+	}
+	for index := start; index < end; index++ {
+		item := model.combos[index]
 		cards = append(cards, model.comboCard(index, item))
 	}
 	controls := lipgloss.JoinVertical(lipgloss.Left,

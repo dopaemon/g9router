@@ -63,6 +63,28 @@ func (ui *UI) columnWidth(columns int) int {
 
 func (ui *UI) compact() bool { return ui.innerWidth() < 56 }
 
+func (ui *UI) viewportHeight(reserved, fallback int) int {
+	if ui.height <= 0 {
+		return fallback
+	}
+	return max(1, ui.height-reserved)
+}
+
+func viewportWindow(cursor, total, visible int) (int, int) {
+	if total <= 0 {
+		return 0, 0
+	}
+	visible = max(1, min(visible, total))
+	start := cursor - visible + 1
+	if start < 0 {
+		start = 0
+	}
+	if start+visible > total {
+		start = total - visible
+	}
+	return start, start + visible
+}
+
 func (ui *UI) outerStyle() lipgloss.Style {
 	return outerCardStyle.Width(ui.cardWidth())
 }

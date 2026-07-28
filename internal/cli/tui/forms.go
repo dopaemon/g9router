@@ -276,19 +276,11 @@ func (model *tuiForm) multiSelectRows(field *tuiField) string {
 
 func (model *tuiForm) multiSelectWindow(field *tuiField) (int, int) {
 	start, end := 0, len(field.options)
-	if end <= 10 {
+	visible := model.ui.viewportHeight(9, 10)
+	if end <= visible {
 		return start, end
 	}
-	start = field.choice - 9
-	if start < 0 {
-		start = 0
-	}
-	end = start + 10
-	if end > len(field.options) {
-		end = len(field.options)
-		start = end - 10
-	}
-	return start, end
+	return viewportWindow(field.choice, len(field.options), visible)
 }
 
 func (model *tuiForm) fieldValue(field *tuiField) string {

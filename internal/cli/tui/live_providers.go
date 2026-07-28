@@ -52,6 +52,8 @@ type providerLiveModel struct {
 	itemsTop         int
 	itemsLeft        int
 	itemsWidth       int
+	itemsStart       int
+	itemsHeight      int
 	tabRegions       []tuiRegion
 }
 
@@ -141,10 +143,10 @@ func (model *providerLiveModel) providerMouseTab(x, y int) (providerTab, bool) {
 }
 
 func (model *providerLiveModel) providerMouseIndex(x, y int) int {
-	if x < model.itemsLeft || x >= model.itemsLeft+model.itemsWidth || y < model.itemsTop {
+	if x < model.itemsLeft || x >= model.itemsLeft+model.itemsWidth || y < model.itemsTop || model.itemsHeight > 0 && y >= model.itemsTop+model.itemsHeight {
 		return -1
 	}
-	return y - model.itemsTop
+	return model.itemsStart + y - model.itemsTop
 }
 
 func (model *providerLiveModel) View() string {
@@ -234,9 +236,11 @@ func (model *providerLiveModel) cardContent() string {
 	if len(rows) == 0 {
 		rows = []string{model.ui.t("screen.noProviders")}
 	}
-	items := make([]string, len(rows))
-	for index, row := range rows {
-		items[index] = providerMenuItem(index, row, index == model.cursor)
+	start, end := viewportWindow(model.cursor, len(rows), model.ui.viewportHeight(14, 10))
+	model.itemsStart, model.itemsHeight = start, end-start
+	items := make([]string, 0, end-start)
+	for index := start; index < end; index++ {
+		items = append(items, providerMenuItem(index, rows[index], index == model.cursor))
 	}
 	return model.ui.innerStyle().Render(cardTitleStyle.Render(title) + "\n" + strings.Join(items, "\n"))
 }

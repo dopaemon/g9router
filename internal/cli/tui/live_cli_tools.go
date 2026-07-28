@@ -131,30 +131,17 @@ func (model *cliToolsModel) View() string {
 	}
 	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
 	if model.ui.compact() {
-		start := model.cursor - 2
-		if start < 0 {
-			start = 0
-		}
-		if start+5 > len(cliToolOrder) {
-			start = max(0, len(cliToolOrder)-5)
-		}
-		for index := start; index < len(cliToolOrder) && index < start+5; index++ {
+		visible := max(1, min(5, model.ui.viewportHeight(8, 10)/2))
+		start, end := viewportWindow(model.cursor, len(cliToolOrder), visible)
+		for index := start; index < end; index++ {
 			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 		}
 	} else {
 		column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
 		rowCount := (len(cliToolOrder) + 1) / 2
-		startRow := model.cursor / 2
-		if startRow > 2 {
-			startRow -= 2
-		}
-		if startRow+3 > rowCount {
-			startRow = rowCount - 3
-		}
-		if startRow < 0 {
-			startRow = 0
-		}
-		for row := startRow; row < rowCount && row < startRow+3; row++ {
+		visibleRows := max(1, min(3, model.ui.viewportHeight(8, 6)/2))
+		startRow, endRow := viewportWindow(model.cursor/2, rowCount, visibleRows)
+		for row := startRow; row < endRow; row++ {
 			index := row * 2
 			left := cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
 			right := ""

@@ -117,13 +117,11 @@ func (model *logsModel) logIndexAtY(y int) int {
 	if model.rowCount() == 0 {
 		return 0
 	}
-	start := model.cursor - 9
-	if start < 0 {
-		start = 0
+	visible := model.itemsRegion.height
+	if visible <= 0 {
+		visible = model.ui.viewportHeight(14, 10)
 	}
-	if start+10 > model.rowCount() {
-		start = max(0, model.rowCount()-10)
-	}
+	start, _ := viewportWindow(model.cursor, model.rowCount(), visible)
 	return moveIndex(start+y-model.itemsRegion.top, model.rowCount(), 0)
 }
 
@@ -151,7 +149,11 @@ func (model *logsModel) View() string {
 			left += 2
 		}
 	}
-	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: 10}
+	visible := model.ui.viewportHeight(14, 10)
+	if model.paused {
+		visible = max(1, visible-1)
+	}
+	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	if model.paused {
 		content += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
@@ -197,20 +199,11 @@ func (model *logsModel) rows() string {
 		return mutedStyle.Render(model.ui.t("logs.empty"))
 	}
 	rows := model.currentRows()
-	start := model.cursor - 9
-	if start < 0 {
-		start = 0
+	visible := model.itemsRegion.height
+	if visible <= 0 {
+		visible = model.ui.viewportHeight(14, 10)
 	}
-	if start+10 > len(rows) {
-		start = len(rows) - 10
-		if start < 0 {
-			start = 0
-		}
-	}
-	end := start + 10
-	if end > len(rows) {
-		end = len(rows)
-	}
+	start, end := viewportWindow(model.cursor, len(rows), visible)
 	return strings.Join(rows[start:end], "\n")
 }
 
