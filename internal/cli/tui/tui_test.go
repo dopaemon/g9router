@@ -192,6 +192,18 @@ func TestAccessibleMode(t *testing.T) {
 	}
 }
 
+func TestLiveModeAvoidsBubbleTeaForAccessibleInput(t *testing.T) {
+	t.Setenv("G9ROUTER_ACCESSIBLE", "1")
+	ui := &UI{In: os.Stdin, forceHuh: true}
+	if ui.liveMode() {
+		t.Fatal("accessible input should not use live Bubble Tea screens")
+	}
+	ui.In = strings.NewReader("")
+	if ui.liveMode() {
+		t.Fatal("non-terminal input should not use live Bubble Tea screens")
+	}
+}
+
 func TestPromptAPIKeyTUIUsesHuhWhenAccessible(t *testing.T) {
 	t.Setenv("G9ROUTER_ACCESSIBLE", "1")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

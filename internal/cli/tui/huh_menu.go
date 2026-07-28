@@ -21,6 +21,10 @@ func (ui *UI) huhMode() bool {
 	return ok && IsTerminal(file)
 }
 
+func (ui *UI) liveMode() bool {
+	return ui.huhMode() && !accessibleMode(ui.In)
+}
+
 func (ui *UI) huhChoice(title string, options []string) (string, error) {
 	return ui.huhChoiceIO(title, options, ui.In, ui.Out)
 }
@@ -114,7 +118,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		language := ui.t("menu.language")
 		exit := ui.t("menu.exit")
 		choice, err := ui.mainMenuChoice([]string{endpoint, providers, combos, statistics, cliTools, logs, settings, language, exit})
-		if !isInteractiveWriter(ui.Out) {
+		if !isInteractiveWriter(ui.Out) || accessibleMode(ui.In) {
 			choice, err = ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, statistics, cliTools, logs, settings, language, exit})
 		}
 		if err != nil {
@@ -136,7 +140,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		switch choice {
 		case providers:
 			run(providers, func() error {
-				if ui.huhMode() {
+				if ui.liveMode() {
 					return ui.liveProviders()
 				}
 				return ui.providers(reader)
@@ -145,7 +149,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			run(endpoint, func() error { return ui.liveEndpoint() })
 		case combos:
 			run(combos, func() error {
-				if ui.huhMode() {
+				if ui.liveMode() {
 					return ui.liveCombos()
 				}
 				return ui.combos(reader)
@@ -154,7 +158,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			run(statistics, func() error { return ui.liveStatistics() })
 		case cliTools:
 			run(cliTools, func() error {
-				if ui.huhMode() {
+				if ui.liveMode() {
 					return ui.liveCLITools()
 				}
 				return ui.cliTools(reader)
@@ -163,13 +167,13 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			run(logs, func() error { return ui.liveLogs() })
 		case settings:
 			run(settings, func() error {
-				if ui.huhMode() {
+				if ui.liveMode() {
 					return ui.liveSettings()
 				}
 				return ui.settings(reader)
 			})
 		case language:
-			if ui.huhMode() {
+			if ui.liveMode() {
 				if err := ui.liveLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 					return err
 				}
