@@ -421,7 +421,7 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		if err := ui.request(http.MethodGet, "/api/cli-tools/all-statuses", nil, &statuses); err != nil {
 			return err
 		}
-		fmt.Fprintln(ui.Out, "\nCLI Tools")
+		fmt.Fprintln(ui.Out, "\n"+ui.t("legacy.cliTools"))
 		keys := make([]string, 0, len(statuses))
 		for name := range statuses {
 			keys = append(keys, name)
@@ -433,14 +433,15 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 		var line string
 		var err error
 		if ui.huhMode() {
-			choice, choiceErr := ui.huhChoice("CLI Tools action", []string{"Quick setup", "Claude model", "Show settings", "Apply JSON", "Reset", "Back"})
+			choices := []string{ui.t("legacy.quickSetup"), ui.t("legacy.claudeModel"), ui.t("legacy.showSettings"), ui.t("legacy.applyJSON"), ui.t("legacy.reset"), ui.t("oauth.back")}
+			choice, choiceErr := ui.huhChoice(ui.t("legacy.cliAction"), choices)
 			if choiceErr != nil {
 				return choiceErr
 			}
-			line = map[string]string{"Quick setup": "q", "Claude model": "m", "Show settings": "s", "Apply JSON": "a", "Reset": "r", "Back": "b"}[choice]
+			line = map[string]string{ui.t("legacy.quickSetup"): "q", ui.t("legacy.claudeModel"): "m", ui.t("legacy.showSettings"): "s", ui.t("legacy.applyJSON"): "a", ui.t("legacy.reset"): "r", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprintln(ui.Out, "q. Quick setup  m. Claude model  s. Show settings  a. Apply JSON  r. Reset  b. Back")
-			fmt.Fprint(ui.Out, "Select action: ")
+			fmt.Fprintf(ui.Out, "q. %s  m. %s  s. %s  a. %s  r. %s  b. %s\n", ui.t("legacy.quickSetup"), ui.t("legacy.claudeModel"), ui.t("legacy.showSettings"), ui.t("legacy.applyJSON"), ui.t("legacy.reset"), ui.t("oauth.back"))
+			fmt.Fprint(ui.Out, ui.t("legacy.selectAction")+": ")
 			line, err = reader.ReadString('\n')
 			if err != nil && len(line) == 0 {
 				return err
@@ -463,14 +464,14 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			continue
 		}
 		if action != "s" && action != "a" && action != "r" {
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidSelection"))
 			continue
 		}
 		var index int
 		if ui.huhMode() {
-			index, err = ui.huhNumber("Choose CLI tool", keys)
+			index, err = ui.huhNumber(ui.t("legacy.chooseTool"), keys)
 		} else {
-			fmt.Fprint(ui.Out, "Tool number: ")
+			fmt.Fprint(ui.Out, ui.t("legacy.toolNumber")+": ")
 			line, err = reader.ReadString('\n')
 			if err == nil {
 				index, err = strconv.Atoi(strings.TrimSpace(line))
@@ -480,12 +481,12 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			return err
 		}
 		if err != nil || index < 1 || index > len(keys) {
-			fmt.Fprintln(ui.Out, "Invalid tool number")
+			fmt.Fprintln(ui.Out, ui.t("legacy.invalidToolNumber"))
 			continue
 		}
 		path := paths[keys[index-1]]
 		if path == "" {
-			fmt.Fprintln(ui.Out, "Tool settings are not available")
+			fmt.Fprintln(ui.Out, ui.t("legacy.toolUnavailable"))
 			continue
 		}
 		if action == "s" {
@@ -509,14 +510,14 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 			}
 			continue
 		}
-		fmt.Fprint(ui.Out, "JSON body: ")
+		fmt.Fprint(ui.Out, ui.t("legacy.jsonBody")+": ")
 		body, err := reader.ReadString('\n')
 		if err != nil {
 			return err
 		}
 		var payload any
 		if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &payload); err != nil {
-			fmt.Fprintln(ui.Out, "Invalid JSON")
+			fmt.Fprintln(ui.Out, ui.t("oauth.invalidJSON"))
 			continue
 		}
 		if err := ui.request(http.MethodPost, path, payload, nil); err != nil {
@@ -526,7 +527,7 @@ func (ui *UI) cliTools(reader *bufio.Reader) error {
 }
 
 func (ui *UI) selectClaudeModel(reader *bufio.Reader) error {
-	fmt.Fprint(ui.Out, "Model type (sonnet/opus/haiku): ")
+	fmt.Fprint(ui.Out, ui.t("legacy.modelType")+": ")
 	typeLine, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -538,10 +539,10 @@ func (ui *UI) selectClaudeModel(reader *bufio.Reader) error {
 		"haiku":  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
 	}[modelType]
 	if envKey == "" {
-		fmt.Fprintln(ui.Out, "Invalid model type")
+		fmt.Fprintln(ui.Out, ui.t("legacy.invalidModelType"))
 		return nil
 	}
-	fmt.Fprint(ui.Out, "Model: ")
+	fmt.Fprint(ui.Out, ui.t("legacy.model")+": ")
 	model, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -561,10 +562,10 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		return err
 	}
 	if len(payload.Keys) == 0 || strings.TrimSpace(payload.Keys[0].Key) == "" {
-		fmt.Fprintln(ui.Out, "No API keys found. Create one in API Keys menu first.")
+		fmt.Fprintln(ui.Out, ui.t("legacy.noAPIKeys"))
 		return nil
 	}
-	fmt.Fprint(ui.Out, "Tool (claude/codex/opencode/copilot/droid/openclaw/hermes/cline/kilo/deepseek-tui/grok-build/jcode/cowork): ")
+	fmt.Fprint(ui.Out, ui.t("legacy.quickTool")+": ")
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -584,7 +585,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 			},
 		}, nil)
 	case "codex", "droid", "openclaw", "hermes", "copilot", "cline", "kilo", "deepseek-tui", "grok-build", "jcode", "cowork":
-		fmt.Fprint(ui.Out, "Model: ")
+		fmt.Fprint(ui.Out, ui.t("legacy.model")+": ")
 		model, err := reader.ReadString('\n')
 		if err != nil {
 			return err
@@ -596,7 +597,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		path := "/api/cli-tools/" + tool + "-settings"
 		return ui.request(http.MethodPost, path, map[string]any{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "model": model, "models": []string{model}, "activeModel": model}, nil)
 	case "opencode":
-		fmt.Fprint(ui.Out, "Model: ")
+		fmt.Fprint(ui.Out, ui.t("legacy.model")+": ")
 		model, err := reader.ReadString('\n')
 		if err != nil {
 			return err
@@ -607,7 +608,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 		}
 		return ui.request(http.MethodPost, "/api/cli-tools/opencode-settings", map[string]any{"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1", "apiKey": key, "models": []string{model}, "activeModel": model, "subagentModel": model}, nil)
 	default:
-		fmt.Fprintln(ui.Out, "Tool does not support quick setup.")
+		fmt.Fprintln(ui.Out, ui.t("legacy.unsupportedQuick"))
 		return nil
 	}
 }
