@@ -125,12 +125,12 @@ func (model *endpointLiveModel) View() string {
 		keys += formatLiveKey(index+1, key, model.ui.Locale)
 	}
 	keysCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.card")) + "\n" + keys + "\n\n" + mutedStyle.Render(model.ui.t("keys.selectShow")))
-	controlsCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controlGrid(model))
-	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
+	controls := controlGrid(model) + "\n" + mutedStyle.Render(model.ui.t("keys.autoRefresh"))
 	if model.notice != "" {
-		view += "\n" + successStyle.Render(model.notice) + "\n"
+		controls += "\n" + successStyle.Render(model.notice)
 	}
-	view += "\n" + mutedStyle.Render(model.ui.t("keys.autoRefresh")) + "\n"
+	controlsCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controls)
+	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
 	return view
 }
 

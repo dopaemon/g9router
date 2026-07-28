@@ -155,10 +155,11 @@ func (model *logsModel) View() string {
 	}
 	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
+	controlsText := mutedStyle.Render(model.ui.t("logs.controls"))
 	if model.paused {
-		content += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
+		controlsText += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + mutedStyle.Render(model.ui.t("logs.controls")))
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controlsText)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
 }
 

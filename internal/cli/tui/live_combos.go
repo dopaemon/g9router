@@ -144,11 +144,11 @@ func (model *comboLiveModel) View() string {
 		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboCreateAdd"))), model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboEdit")))),
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
 	)
+	if model.notice != "" {
+		controls += "\n" + successStyle.Render(model.notice)
+	}
 	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)
-	if model.notice != "" {
-		content += "\n" + successStyle.Render(model.notice)
-	}
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + content + "\n\n" + controlCard)
 }
 

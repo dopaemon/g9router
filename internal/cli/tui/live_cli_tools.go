@@ -151,13 +151,14 @@ func (model *cliToolsModel) View() string {
 			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 		}
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
+	controlsText := lipgloss.JoinHorizontal(lipgloss.Top,
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
 		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsShowResetBack"))),
-	))
+	)
 	if model.notice != "" {
-		controls += "\n" + successStyle.Render(model.notice)
+		controlsText += "\n" + successStyle.Render(model.notice)
 	}
+	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controlsText)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
 }
 
