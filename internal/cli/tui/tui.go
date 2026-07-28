@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -141,19 +142,20 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		if err := ui.request(http.MethodGet, "/api/oauth", nil, &credentials); err != nil {
 			return err
 		}
-		fmt.Fprintln(ui.Out, "\nOAuth credentials")
+		fmt.Fprintln(ui.Out, "\n"+ui.t("oauth.title"))
 		pretty, _ := json.MarshalIndent(redactSecrets(credentials), "", "  ")
 		fmt.Fprintln(ui.Out, string(pretty))
 		var line string
 		var err error
 		if ui.huhMode() {
-			choice, choiceErr := ui.huhChoice("OAuth action", []string{"Login OAuth", "Login Codex", "Import Codex token", "Import JSON", "Delete credential", "Back"})
+			choices := []string{ui.t("oauth.login"), ui.t("oauth.loginCodex"), ui.t("oauth.importToken"), ui.t("oauth.importJSON"), ui.t("oauth.delete"), ui.t("oauth.back")}
+			choice, choiceErr := ui.huhChoice(ui.t("oauth.action"), choices)
 			if choiceErr != nil {
 				return choiceErr
 			}
-			line = map[string]string{"Login OAuth": "1", "Login Codex": "l", "Import Codex token": "c", "Import JSON": "i", "Delete credential": "d", "Back": "b"}[choice]
+			line = map[string]string{ui.t("oauth.login"): "1", ui.t("oauth.loginCodex"): "l", ui.t("oauth.importToken"): "c", ui.t("oauth.importJSON"): "i", ui.t("oauth.delete"): "d", ui.t("oauth.back"): "b"}[choice]
 		} else {
-			fmt.Fprintln(ui.Out, "1. Login OAuth  l. Login Codex  c. Import Codex token  i. Import JSON  d. Delete credential  b. Back")
+			fmt.Fprintf(ui.Out, "1. %s  l. %s  c. %s  i. %s  d. %s  b. %s\n", ui.t("oauth.login"), ui.t("oauth.loginCodex"), ui.t("oauth.importToken"), ui.t("oauth.importJSON"), ui.t("oauth.delete"), ui.t("oauth.back"))
 			fmt.Fprint(ui.Out, "Select action: ")
 			line, err = reader.ReadString('\n')
 			if err != nil && len(line) == 0 {
@@ -166,16 +168,16 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		case "d":
 			id := ""
 			if ui.huhMode() {
-				id, err = ui.huhValue("Credential ID", "", false)
+				id, err = ui.huhValue(ui.t("oauth.credentialID"), "", false)
 			} else {
-				fmt.Fprint(ui.Out, "Credential ID: ")
+				fmt.Fprint(ui.Out, ui.t("oauth.credentialID")+": ")
 				id, err = reader.ReadString('\n')
 			}
 			if err != nil {
 				return err
 			}
 			if ui.huhMode() {
-				ok, confirmErr := ui.huhConfirm("Delete this credential?", false)
+				ok, confirmErr := ui.huhConfirm(ui.t("oauth.deleteConfirm"), false)
 				if confirmErr != nil {
 					return confirmErr
 				}
@@ -189,15 +191,15 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 		case "c":
 			var token, name string
 			if ui.huhMode() {
-				token, err = ui.huhValue("ChatGPT access token", "", true)
+				token, err = ui.huhValue(ui.t("oauth.accessToken"), "", true)
 				if err == nil {
-					name, err = ui.huhValue("Connection name (optional)", "", false)
+					name, err = ui.huhValue(ui.t("oauth.connectionName"), "", false)
 				}
 			} else {
-				fmt.Fprint(ui.Out, "ChatGPT access token: ")
+				fmt.Fprint(ui.Out, ui.t("oauth.accessToken")+": ")
 				token, err = reader.ReadString('\n')
 				if err == nil {
-					fmt.Fprint(ui.Out, "Connection name (optional): ")
+					fmt.Fprint(ui.Out, ui.t("oauth.connectionName")+": ")
 					name, err = reader.ReadString('\n')
 				}
 			}
@@ -219,19 +221,19 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 				return err
 			}
 		case "i":
-			fmt.Fprint(ui.Out, "Import endpoint: ")
+			fmt.Fprint(ui.Out, ui.t("oauth.importEndpoint")+": ")
 			path, err := reader.ReadString('\n')
 			if err != nil {
 				return err
 			}
-			fmt.Fprint(ui.Out, "JSON body: ")
+			fmt.Fprint(ui.Out, ui.t("oauth.jsonBody")+": ")
 			body, err := reader.ReadString('\n')
 			if err != nil {
 				return err
 			}
 			var payload any
 			if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &payload); err != nil {
-				fmt.Fprintln(ui.Out, "Invalid JSON")
+				fmt.Fprintln(ui.Out, ui.t("oauth.invalidJSON"))
 				continue
 			}
 			var result any
@@ -241,7 +243,7 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 			pretty, _ := json.MarshalIndent(redactSecrets(result), "", "  ")
 			fmt.Fprintln(ui.Out, string(pretty))
 		default:
-			fmt.Fprintln(ui.Out, "Invalid selection")
+			fmt.Fprintln(ui.Out, ui.t("oauth.invalidSelection"))
 		}
 	}
 }
@@ -249,18 +251,19 @@ func (ui *UI) oauth(reader *bufio.Reader) error {
 func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
 	providers := []string{"claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow"}
 	if ui.huhMode() {
-		providers = append(providers, "Back")
-		choice, err := ui.huhChoice("OAuth provider", providers)
-		if err != nil || choice == "Back" {
+		back := ui.t("oauth.back")
+		providers = append(providers, back)
+		choice, err := ui.huhChoice(ui.t("oauth.provider"), providers)
+		if err != nil || choice == back {
 			return err
 		}
 		return ui.loginBrowserOAuth(reader, choice)
 	}
-	fmt.Fprintln(ui.Out, "\nOAuth providers")
+	fmt.Fprintln(ui.Out, "\n"+ui.t("oauth.provider"))
 	for index, provider := range providers {
 		fmt.Fprintf(ui.Out, "%d. %s\n", index+1, provider)
 	}
-	fmt.Fprint(ui.Out, "Provider (0. Back): ")
+	fmt.Fprint(ui.Out, ui.t("oauth.providerBack")+": ")
 	value, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -270,7 +273,7 @@ func (ui *UI) loginOAuthProvider(reader *bufio.Reader) error {
 		return nil
 	}
 	if index < 1 || index > len(providers) {
-		return fmt.Errorf("invalid OAuth provider selection")
+		return errors.New(ui.t("oauth.invalidProvider"))
 	}
 	return ui.loginBrowserOAuth(reader, providers[index-1])
 }
