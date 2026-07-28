@@ -29,6 +29,11 @@ func (s *Server) modelTestAPI(w http.ResponseWriter, r *http.Request) {
 	path := "/v1/chat/completions"
 	payload := map[string]any{"model": input.Model, "max_tokens": 16, "stream": false, "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
 	handler := s.chatCompletions
+	if strings.HasPrefix(input.Model, "cx/") {
+		path = "/v1/responses"
+		payload = map[string]any{"model": input.Model, "max_output_tokens": 16, "input": "Reply with exactly: pong"}
+		handler = s.responses
+	}
 	if input.Kind == "embedding" {
 		path = "/v1/embeddings"
 		payload = map[string]any{"model": input.Model, "input": "test"}
@@ -43,6 +48,10 @@ func (s *Server) modelTestAPI(w http.ResponseWriter, r *http.Request) {
 	latency := time.Since(started).Milliseconds()
 	if recorder.Code < 200 || recorder.Code >= 300 {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "latencyMs": latency, "status": recorder.Code, "error": compactProbeError(recorder.Body.String())})
+		return
+	}
+	if input.Kind == "llm" && strings.HasPrefix(input.Model, "cx/") {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "latencyMs": latency, "status": recorder.Code, "error": nil})
 		return
 	}
 	var result map[string]any

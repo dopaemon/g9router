@@ -114,6 +114,8 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model, model.runAction()
 		case "e":
 			return model, model.action(model.edit)
+		case "t":
+			return model, model.action(model.testModel)
 		case "d":
 			return model, model.action(model.delete)
 		case "a":
@@ -164,9 +166,9 @@ func (model *providerLiveModel) View() string {
 	}
 	content := model.cardContent()
 	column := model.ui.controlStyle()
-	actions := model.ui.t("controls.providerEditDelete")
+	actions := model.ui.t("controls.providerEditDelete") + "  " + model.ui.t("controls.providerTest")
 	if model.tab == customProviderTab {
-		actions = model.ui.t("controls.providerCustomActions")
+		actions = model.ui.t("controls.providerCustomActions") + "  " + model.ui.t("controls.providerTest")
 	}
 	controlRows := []string{
 		column.Render(mutedStyle.Render(model.ui.t("controls.moveSwitch"))),
@@ -382,6 +384,72 @@ func (model *providerLiveModel) editProvider(item provider, input io.Reader, out
 		return "", err
 	}
 	return model.ui.t("notice.providerUpdated"), model.ui.promptProviderTUI(&current.Connection, true, input, output)
+}
+
+func (model *providerLiveModel) testModel(input io.Reader, output io.Writer) (string, error) {
+	item, ok := model.selectedProvider()
+	if !ok {
+		return "", nil
+	}
+	var available struct {
+		Models []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := model.ui.request(http.MethodGet, "/api/providers/"+url.PathEscape(item.ID)+"/test-models", nil, &available); err != nil {
+		return "", err
+	}
+	if len(available.Models) == 0 {
+		return "", errors.New(model.ui.t("form.noTestModels"))
+	}
+	options := make([]huh.Option[string], 0, len(available.Models))
+	modelName := available.Models[0].ID
+	for _, availableModel := range available.Models {
+		label := availableModel.Name
+		if label == "" {
+			label = availableModel.ID
+		}
+		options = append(options, huh.NewOption(label, availableModel.ID))
+	}
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().Title(model.ui.t("form.testModel")).Options(options...).Value(&modelName),
+	))
+	if err := model.ui.runHuhIO(form, input, output); err != nil {
+		return "", err
+	}
+	var result struct {
+		OK        bool   `json:"ok"`
+		LatencyMs int64  `json:"latencyMs"`
+		Error     string `json:"error"`
+	}
+	if err := model.ui.request(http.MethodPost, "/api/models/test", map[string]string{"model": strings.TrimSpace(modelName)}, &result); err != nil {
+		return "", err
+	}
+	if !result.OK {
+		return "", errors.New(result.Error)
+	}
+	return fmt.Sprintf("%s (%dms)", model.ui.t("notice.modelTestPassed"), result.LatencyMs), nil
+}
+
+func (model *providerLiveModel) selectedProvider() (provider, bool) {
+	var items []provider
+	start := 0
+	switch model.tab {
+	case customProviderTab:
+		items, start = model.custom, 2
+	case oauthProviderTab:
+		items, start = model.oauthConnections, 1
+	case freeProviderTab:
+		items = model.free
+	case apiKeyProviderTab:
+		items = model.apiKeys
+	}
+	index := model.cursor - start
+	if index < 0 || index >= len(items) {
+		return provider{}, false
+	}
+	return items[index], true
 }
 
 func (model *providerLiveModel) delete(input io.Reader, output io.Writer) (string, error) {

@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Server) providerTestModelsAPI(w http.ResponseWriter, r *http.Request, id string) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
@@ -44,6 +44,18 @@ func (s *Server) providerTestModelsAPI(w http.ResponseWriter, r *http.Request, i
 	alias := provider.ID
 	if ok && descriptor.Alias != "" {
 		alias = descriptor.Alias
+	}
+	if r.Method == http.MethodGet {
+		result := make([]map[string]any, 0, len(models))
+		for _, model := range models {
+			kind := model.Kind
+			if kind == "" {
+				kind = "llm"
+			}
+			result = append(result, map[string]any{"id": alias + "/" + model.ID, "name": model.Name, "kind": kind})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"provider": provider.ID, "models": result})
+		return
 	}
 	results := make([]map[string]any, 0, len(models))
 	for _, model := range models {
