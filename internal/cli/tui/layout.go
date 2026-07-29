@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type sizedModel struct {
@@ -40,6 +41,9 @@ func (model sizedModel) View() string { return model.ui.fitView(model.model.View
 func (ui *UI) cardWidth() int {
 	width := ui.width - 4
 	if width <= 0 {
+		if ui.width > 0 {
+			return 1
+		}
 		return 76
 	}
 	return max(1, min(width, 78))
@@ -71,12 +75,26 @@ func (ui *UI) viewportHeight(reserved, fallback int) int {
 }
 
 func (ui *UI) fitView(view string) string {
+	ui.viewClipped = false
 	if ui.height <= 0 {
-		return view
+		if ui.width <= 0 {
+			return view
+		}
+		lines := strings.Split(view, "\n")
+		for index := range lines {
+			lines[index] = ansi.Truncate(lines[index], ui.width, "")
+		}
+		return strings.Join(lines, "\n")
 	}
 	lines := strings.Split(view, "\n")
+	ui.viewClipped = ui.height > 0 && len(lines) > ui.height
+	if ui.width > 0 {
+		for index := range lines {
+			lines[index] = ansi.Truncate(lines[index], ui.width, "")
+		}
+	}
 	if len(lines) <= ui.height {
-		return view
+		return strings.Join(lines, "\n")
 	}
 	if ui.height == 1 {
 		return lines[0]
@@ -115,6 +133,33 @@ func (ui *UI) innerStyle(width ...int) lipgloss.Style {
 
 func (ui *UI) controlStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Width(ui.columnWidth(2))
+}
+
+func (ui *UI) controlCard(title, body string) string {
+	return ui.innerStyle().Padding(0, 2).Render(cardTitleStyle.Render(title) + "\n" + body)
+}
+
+func (ui *UI) controlColumns(items ...string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if ui.compact() {
+		rows := make([]string, 0, len(items))
+		for _, item := range items {
+			rows = append(rows, ui.controlStyle().Render(mutedStyle.Render(item)))
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	}
+	rows := make([]string, 0, (len(items)+1)/2)
+	for index := 0; index < len(items); index += 2 {
+		left := ui.controlStyle().Render(mutedStyle.Render(items[index]))
+		right := ""
+		if index+1 < len(items) {
+			right = ui.controlStyle().Render(mutedStyle.Render(items[index+1]))
+		}
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, right))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
 func (ui *UI) runTeaIO(model tea.Model, input io.Reader, output io.Writer) error {

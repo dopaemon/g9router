@@ -20,14 +20,21 @@ type comboActionDoneMsg struct {
 	notice string
 	err    error
 }
+type comboDataMsg struct {
+	combos []combo
+	err    error
+}
 
 type comboLiveModel struct {
-	ui     *UI
-	draft  combo
-	combos []combo
-	cursor int
-	notice string
-	err    error
+	ui            *UI
+	draft         combo
+	combos        []combo
+	cursor        int
+	notice        string
+	err           error
+	loading       bool
+	refreshing    bool
+	actionRunning bool
 }
 
 type comboModelResponse struct {
@@ -68,22 +75,26 @@ func (ui *UI) comboModelOptions() ([]huh.Option[string], error) {
 
 func (ui *UI) liveCombos() error {
 	EnableColors(ui.Out)
-	model := comboLiveModel{ui: ui}
-	model.refresh()
+	model := comboLiveModel{ui: ui, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *comboLiveModel) Init() tea.Cmd { return comboRefresh() }
+func (model *comboLiveModel) Init() tea.Cmd {
+	return model.refreshCmd()
+}
 
 func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
 		if model.err != nil && message.String() == "r" {
 			model.err = nil
-			model.refresh()
-			return model, comboRefresh()
+			model.loading = true
+			return model, model.refreshCmd()
 		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= model.itemCount() {
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			model.cursor = index - 1
 			return model, model.runAction()
 		}
@@ -95,28 +106,61 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			model.cursor = moveIndex(model.cursor, model.itemCount(), 1)
 		case "enter", " ":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.runAction()
 		case "c":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			model.cursor = 0
 			return model, model.action(model.create)
 		case "a":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			model.cursor = 1
 			return model, model.action(model.addModel)
 		case "e":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.action(model.edit)
 		case "d":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.action(model.delete)
 		}
 	case comboRefreshMsg:
-		model.refresh()
+		if model.actionRunning {
+			return model, comboRefresh()
+		}
+		if model.loading || model.refreshing {
+			return model, comboRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
+	case comboDataMsg:
+		if message.err == nil {
+			model.combos = message.combos
+			if model.cursor >= model.itemCount() {
+				model.cursor = 0
+			}
+		}
+		model.err, model.loading, model.refreshing = message.err, false, false
 		return model, comboRefresh()
 	case comboActionDoneMsg:
+		model.actionRunning = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
+			message.notice = ""
 		}
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
-			model.refresh()
+			model.refreshing = true
+			return model, model.refreshCmd()
 		}
 		return model, comboRefresh()
 	}
@@ -124,7 +168,10 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *comboLiveModel) View() string {
-	if model.err != nil {
+	if model.loading || model.actionRunning {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+	}
+	if model.err != nil && len(model.combos) == 0 && model.draft.Name == "" && len(model.draft.Models) == 0 {
 		return model.ui.errorView(model.ui.t("menu.combos"), model.err)
 	}
 	cards := []string{model.createCard()}
@@ -139,15 +186,14 @@ func (model *comboLiveModel) View() string {
 		item := model.combos[index]
 		cards = append(cards, model.comboCard(index, item))
 	}
-	controls := lipgloss.JoinVertical(lipgloss.Left,
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboMoveSelect"))),
-		lipgloss.JoinHorizontal(lipgloss.Top, model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboCreateAdd"))), model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.comboEdit")))),
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
+	controls := model.ui.controlColumns(
+		model.ui.t("controls.comboMoveSelect"), model.ui.t("controls.comboCreateAdd"),
+		model.ui.t("controls.comboEdit"), model.ui.t("controls.deleteBack"),
 	)
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
-	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
+	controlCard := model.ui.controlCard(model.ui.t("common.controls"), controls)
 	content := lipgloss.JoinVertical(lipgloss.Center, cards...)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + content + "\n\n" + controlCard)
 }
@@ -199,6 +245,7 @@ func (model *comboLiveModel) runAction() tea.Cmd {
 }
 
 func (model *comboLiveModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
+	model.actionRunning = true
 	var notice string
 	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error
@@ -281,6 +328,19 @@ func (model *comboLiveModel) refresh() {
 	model.combos, model.err = payload.Combos, nil
 	if model.cursor >= model.itemCount() {
 		model.cursor = 0
+	}
+}
+
+func (model *comboLiveModel) refreshCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg {
+		var payload struct {
+			Combos []combo `json:"combos"`
+		}
+		if err := ui.request(http.MethodGet, "/api/combos", nil, &payload); err != nil {
+			return comboDataMsg{err: err}
+		}
+		return comboDataMsg{combos: payload.Combos}
 	}
 }
 

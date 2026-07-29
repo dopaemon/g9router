@@ -21,14 +21,15 @@ import (
 )
 
 type UI struct {
-	BaseURL  string
-	In       io.Reader
-	Out      io.Writer
-	Client   *http.Client
-	Locale   string
-	width    int
-	height   int
-	forceHuh bool
+	BaseURL     string
+	In          io.Reader
+	Out         io.Writer
+	Client      *http.Client
+	Locale      string
+	width       int
+	height      int
+	viewClipped bool
+	forceHuh    bool
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {

@@ -121,13 +121,10 @@ func (model *statisticsModel) View() string {
 		}
 		periods[index] = style.Render(model.ui.t(periodLabel(period)))
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls"))+"\n"+lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.period"))),
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.tokenCursor")))),
-		lipgloss.JoinHorizontal(lipgloss.Top,
-			model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.refresh"))),
-			model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.back"))),
-		))
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		model.ui.t("controls.period"), model.ui.t("controls.tokenCursor"),
+		model.ui.t("controls.refresh"), model.ui.t("controls.back"),
+	))
 	breakdowns := lipgloss.JoinHorizontal(lipgloss.Top, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
 	activity := lipgloss.JoinHorizontal(lipgloss.Top, model.chartCard(), model.recentCard())
 	if model.ui.compact() {
@@ -167,7 +164,12 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 	for key := range values {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(left, right int) bool { return values[keys[left]] > values[keys[right]] })
+	sort.Slice(keys, func(left, right int) bool {
+		if values[keys[left]] == values[keys[right]] {
+			return keys[left] < keys[right]
+		}
+		return values[keys[left]] > values[keys[right]]
+	})
 	rows := make([]string, 0, len(keys))
 	for _, key := range keys {
 		rows = append(rows, truncateText(key, 24)+": "+formatInt(int64(values[key])))

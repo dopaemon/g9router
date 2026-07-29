@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type quotaModel struct {
 	usageEnabled bool
 	autoRefresh  bool
 	loading      bool
+	refreshing   bool
 	err          error
 	detail       int
 	detailCursor int
@@ -73,26 +75,39 @@ func (model *quotaModel) Init() tea.Cmd {
 func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case quotaDataMsg:
-		model.items = message.items
+		if message.err == nil {
+			model.items = message.items
+		}
 		model.usageEnabled = message.usageEnabled
 		model.err = message.err
 		model.loading = false
+		model.refreshing = false
 		if model.cursor >= len(model.items) {
 			model.cursor = 0
 		}
+		if model.detail >= len(model.items) {
+			model.detail = -1
+			model.detailCursor = 0
+		}
 		return model, nil
 	case quotaActionDoneMsg:
+		model.refreshing = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
-			message.err = nil
+			model.err = nil
+			return model, nil
 		}
 		model.err = message.err
 		if model.err == nil {
-			model.loading = true
+			model.refreshing = true
 			return model, model.refreshCmd()
 		}
 		return model, nil
 	case tea.KeyMsg:
 		if model.detail >= 0 {
+			if model.detail >= len(model.items) {
+				model.detail = -1
+				return model, nil
+			}
 			item := model.items[model.detail]
 			switch message.String() {
 			case "q", "esc":
@@ -102,20 +117,24 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			case "down", "j":
 				model.detailCursor = moveIndex(model.detailCursor, model.detailActionCount(item), 1)
 			case "enter", " ":
+				if model.refreshing {
+					return model, nil
+				}
 				switch model.detailCursor {
 				case 0:
-					model.loading = true
+					model.refreshing = true
 					return model, model.refreshCmd()
 				case 1:
 					if err := model.toggleUsage(); err != nil {
 						model.err = err
 						return model, nil
 					}
-					model.loading = true
+					model.refreshing = true
 					return model, model.refreshCmd()
 				case 2:
 					if item.ID == "codex" {
 						if item.ResetCreditsKnown && item.ResetCredits > 0 {
+							model.refreshing = true
 							return model, model.resetCodexLimit(item)
 						}
 						return model, nil
@@ -125,14 +144,20 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					model.detail = -1
 				}
 			case "r":
-				model.loading = true
+				if model.refreshing {
+					return model, nil
+				}
+				model.refreshing = true
 				return model, model.refreshCmd()
 			case "u":
+				if model.refreshing {
+					return model, nil
+				}
 				if err := model.toggleUsage(); err != nil {
 					model.err = err
 					return model, nil
 				}
-				model.loading = true
+				model.refreshing = true
 				return model, model.refreshCmd()
 			}
 			return model, nil
@@ -149,22 +174,30 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				model.cursor++
 			}
 		case "enter", " ":
-			if len(model.items) > 0 {
+			if !model.refreshing && len(model.items) > 0 {
 				model.detail = model.cursor
 			}
 		case "r":
-			model.loading = true
+			if model.refreshing {
+				return model, nil
+			}
+			model.refreshing = true
 			return model, model.refreshCmd()
 		case "a":
 			model.autoRefresh = !model.autoRefresh
 			if model.autoRefresh {
-				return model, quotaRefresh()
+				model.refreshing = true
+				return model, tea.Batch(model.refreshCmd(), quotaRefresh())
 			}
 		}
 	case quotaRefreshMsg:
 		if !model.autoRefresh {
 			return model, nil
 		}
+		if model.refreshing {
+			return model, quotaRefresh()
+		}
+		model.refreshing = true
 		return model, tea.Batch(model.refreshCmd(), quotaRefresh())
 	}
 	return model, nil
@@ -196,7 +229,7 @@ func (model *quotaModel) View() string {
 	if model.loading {
 		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
 	}
-	if model.err != nil {
+	if model.err != nil && len(model.items) == 0 {
 		return model.ui.errorView(model.ui.t("menu.quota"), model.err)
 	}
 	if model.detail >= 0 && model.detail < len(model.items) {
@@ -217,7 +250,8 @@ func (model *quotaModel) View() string {
 			rows = append(rows, "   "+model.ui.t("quota.requests")+": "+formatInt(item.Requests)+"  "+model.ui.t("quota.errors")+": "+formatInt(item.Errors))
 			continue
 		}
-		for name, quota := range item.Quotas {
+		for _, name := range sortedQuotaNames(item.Quotas) {
+			quota := item.Quotas[name]
 			rows = append(rows, "   "+quotaBar(name, quota, model.ui.innerWidth()))
 		}
 	}
@@ -229,7 +263,9 @@ func (model *quotaModel) View() string {
 	if model.autoRefresh {
 		autoRefresh = "ON"
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n↑↓/jk move  Enter select  r refresh  a auto-refresh (" + autoRefresh + ")  q back")
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		"↑↓/jk move", "Enter select", "r refresh", "a auto-refresh ("+autoRefresh+")", "q back",
+	))
 	return model.ui.outerStyle().Render(content + "\n\n" + controls)
 }
 
@@ -261,7 +297,8 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		quotaRows = append(quotaRows, model.ui.t("quota.requests")+": "+formatInt(item.Requests), model.ui.t("quota.errors")+": "+formatInt(item.Errors))
 		quotaRows = append(quotaRows, model.ui.t("quota.input")+": "+formatInt(item.InputTokens), model.ui.t("quota.output")+": "+formatInt(item.OutputTokens))
 	}
-	for name, quota := range item.Quotas {
+	for _, name := range sortedQuotaNames(item.Quotas) {
+		quota := item.Quotas[name]
 		quotaRows = append(quotaRows, quotaBar(name, quota, model.ui.innerWidth()))
 	}
 	quotaCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n" + strings.Join(quotaRows, "\n"))
@@ -285,6 +322,15 @@ func (model *quotaModel) detailView(item quotaItem) string {
 	}
 	menuCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("quota.functions")) + "\n" + strings.Join(menuRows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select"))
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + infoCard + "\n\n" + quotaCard + "\n\n" + menuCard)
+}
+
+func sortedQuotaNames(quotas map[string]quotaWindow) []string {
+	names := make([]string, 0, len(quotas))
+	for name := range quotas {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func quotaProviderEmail(item provider) string {

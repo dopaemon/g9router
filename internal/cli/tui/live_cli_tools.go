@@ -19,6 +19,10 @@ type cliToolsActionDoneMsg struct {
 	notice string
 	err    error
 }
+type cliToolsDataMsg struct {
+	statuses map[string]cliToolStatus
+	err      error
+}
 
 type cliToolStatus struct {
 	Installed  bool `json:"installed"`
@@ -27,11 +31,14 @@ type cliToolStatus struct {
 }
 
 type cliToolsModel struct {
-	ui       *UI
-	cursor   int
-	statuses map[string]cliToolStatus
-	notice   string
-	err      error
+	ui            *UI
+	cursor        int
+	statuses      map[string]cliToolStatus
+	notice        string
+	err           error
+	loading       bool
+	refreshing    bool
+	actionRunning bool
 }
 
 var cliToolOrder = []string{"claude", "codex", "opencode", "droid", "openclaw", "hermes", "cowork", "copilot", "cline", "kilo", "deepseek-tui", "jcode", "grok-build"}
@@ -58,22 +65,26 @@ var cliToolPaths = map[string]string{
 
 func (ui *UI) liveCLITools() error {
 	EnableColors(ui.Out)
-	model := cliToolsModel{ui: ui}
-	model.refresh()
+	model := cliToolsModel{ui: ui, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *cliToolsModel) Init() tea.Cmd { return cliToolsRefresh() }
+func (model *cliToolsModel) Init() tea.Cmd {
+	return model.refreshCmd()
+}
 
 func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
 		if model.err != nil && message.String() == "r" {
 			model.err = nil
-			model.refresh()
-			return model, cliToolsRefresh()
+			model.loading = true
+			return model, model.refreshCmd()
 		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= len(cliToolOrder) {
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			model.cursor = index - 1
 			return model, model.action(model.show)
 		}
@@ -105,20 +116,41 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				model.cursor++
 			}
 		case "enter", " ", "s":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.action(model.show)
 		case "r":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.action(model.reset)
 		}
 	case cliToolsRefreshMsg:
-		model.refresh()
+		if model.actionRunning {
+			return model, cliToolsRefresh()
+		}
+		if model.loading || model.refreshing {
+			return model, cliToolsRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
+	case cliToolsDataMsg:
+		if message.err == nil {
+			model.statuses = message.statuses
+		}
+		model.err, model.loading, model.refreshing = message.err, false, false
 		return model, cliToolsRefresh()
 	case cliToolsActionDoneMsg:
+		model.actionRunning = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
+			message.notice = ""
 		}
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
-			model.refresh()
+			model.refreshing = true
+			return model, model.refreshCmd()
 		}
 		return model, cliToolsRefresh()
 	}
@@ -126,7 +158,10 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *cliToolsModel) View() string {
-	if model.err != nil {
+	if model.loading || model.actionRunning {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+	}
+	if model.err != nil && len(model.statuses) == 0 {
 		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)
 	}
 	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
@@ -151,14 +186,11 @@ func (model *cliToolsModel) View() string {
 			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
 		}
 	}
-	controlsText := lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsShowResetBack"))),
-	)
+	controlsText := model.ui.controlColumns(model.ui.t("controls.toolsMoveSwitch"), model.ui.t("controls.toolsShowResetBack"))
 	if model.notice != "" {
 		controlsText += "\n" + successStyle.Render(model.notice)
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controlsText)
+	controls := model.ui.controlCard(model.ui.t("common.controls"), controlsText)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
 }
 
@@ -182,6 +214,7 @@ func cliToolCard(ui *UI, index int, id string, status cliToolStatus, selected bo
 }
 
 func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
+	model.actionRunning = true
 	var notice string
 	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error
@@ -218,6 +251,17 @@ func (model *cliToolsModel) refresh() {
 		return
 	}
 	model.statuses, model.err = statuses, nil
+}
+
+func (model *cliToolsModel) refreshCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg {
+		var statuses map[string]cliToolStatus
+		if err := ui.request(http.MethodGet, "/api/cli-tools/all-statuses", nil, &statuses); err != nil {
+			return cliToolsDataMsg{err: err}
+		}
+		return cliToolsDataMsg{statuses: statuses}
+	}
 }
 
 func cliToolsRefresh() tea.Cmd {

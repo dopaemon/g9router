@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 )
 
 type providerRefreshMsg struct{}
+type providerNumberMsg struct{ value string }
 type providerActionDoneMsg struct {
 	notice string
 	err    error
@@ -49,6 +51,10 @@ type providerLiveModel struct {
 	notice           string
 	err              error
 	loading          bool
+	refreshing       bool
+	testing          bool
+	lastAction       string
+	numberInput      string
 	tabsTop          int
 	itemsTop         int
 	itemsLeft        int
@@ -56,6 +62,15 @@ type providerLiveModel struct {
 	itemsStart       int
 	itemsHeight      int
 	tabRegions       []tuiRegion
+}
+
+type providerDataMsg struct {
+	custom           []provider
+	oauth            []oauthProvider
+	oauthConnections []provider
+	free             []provider
+	apiKeys          []provider
+	err              error
 }
 
 var freeProviderNames = []string{"mimo-free"}
@@ -67,35 +82,79 @@ func (ui *UI) liveProviders() error {
 }
 
 func (model *providerLiveModel) Init() tea.Cmd {
-	return tea.Batch(func() tea.Msg { return providerRefreshMsg{} }, providerRefresh())
+	model.refreshing = true
+	return model.refreshCmd()
 }
 
 func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
+	case providerDataMsg:
+		if message.err == nil {
+			model.custom, model.oauth, model.oauthConnections = message.custom, message.oauth, message.oauthConnections
+			model.free, model.apiKeys = message.free, message.apiKeys
+		}
+		model.err, model.loading, model.refreshing = message.err, false, false
+		if model.cursor >= model.itemCount() {
+			model.cursor = max(0, model.itemCount()-1)
+		}
+		return model, providerRefresh()
+	case providerNumberMsg:
+		if message.value != model.numberInput {
+			return model, nil
+		}
+		model.numberInput = ""
+		index, err := strconv.Atoi(message.value)
+		if err != nil || index < 1 || index > model.itemCount() || model.loading || model.testing {
+			return model, nil
+		}
+		model.cursor = index - 1
+		return model, model.runAction()
 	case tea.MouseMsg:
+		if model.testing {
+			return model, nil
+		}
 		if tab, ok := model.providerMouseTab(message.X, message.Y); ok && (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft {
 			model.tab, model.cursor = tab, 0
 			return model, nil
 		}
+		if model.loading {
+			return model, nil
+		}
 		if index := model.providerMouseIndex(message.X, message.Y); index >= 0 && index < model.itemCount() {
 			model.cursor = index
-			if (message.Action == tea.MouseActionPress || message.Action == tea.MouseActionRelease) && message.Button == tea.MouseButtonLeft {
+			if message.Action == tea.MouseActionPress && message.Button == tea.MouseButtonLeft {
 				return model, model.runAction()
 			}
 		}
 	case tea.KeyMsg:
-		if model.err != nil && message.String() == "r" {
-			model.err = nil
-			model.refresh()
-			return model, providerRefresh()
+		key := message.String()
+		if key == "q" || key == "esc" || key == "ctrl+c" {
+			return model, tea.Quit
 		}
-		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= model.itemCount() {
-			model.cursor = index - 1
-			return model, model.runAction()
+		if model.testing {
+			return model, nil
+		}
+		if len(key) != 1 || key[0] < '0' || key[0] > '9' {
+			model.numberInput = ""
+		}
+		if model.err != nil && message.String() == "r" {
+			if model.lastAction == "test" {
+				return model, model.testAction()
+			}
+			model.err = nil
+			model.loading = true
+			model.refreshing = true
+			return model, model.refreshCmd()
+		}
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+			if len(model.numberInput) < 2 {
+				model.numberInput += key
+				value := model.numberInput
+				return model, tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg { return providerNumberMsg{value: value} })
+			}
+			return model, nil
 		}
 		switch message.String() {
-		case "q", "esc", "ctrl+c":
-			return model, tea.Quit
 		case "tab", "right", "l":
 			model.tab = providerTab(cycleIndex(int(model.tab), 4, 1))
 			model.cursor = 0
@@ -111,26 +170,44 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				model.cursor++
 			}
 		case "enter", " ":
-			return model, model.runAction()
+			if !model.loading {
+				return model, model.runAction()
+			}
 		case "e":
-			return model, model.action(model.edit)
+			if !model.loading && model.canEdit() {
+				return model, model.action(model.edit)
+			}
 		case "t":
-			return model, model.action(model.testModel)
+			if !model.loading && model.canTest() {
+				return model, model.testAction()
+			}
 		case "d":
-			return model, model.action(model.delete)
+			if !model.loading && model.canDelete() {
+				return model, model.action(model.delete)
+			}
 		case "a":
-			return model, model.action(model.add)
+			if !model.loading && model.canAdd() {
+				return model, model.action(model.add)
+			}
 		}
 	case providerRefreshMsg:
-		model.refresh()
-		return model, providerRefresh()
+		if model.refreshing {
+			return model, providerRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
 	case providerActionDoneMsg:
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
+			message.notice = ""
 		}
+		model.testing = false
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
-			model.refresh()
+			model.lastAction = ""
+			model.loading = true
+			model.refreshing = true
+			return model, model.refreshCmd()
 		}
 		return model, providerRefresh()
 	}
@@ -138,6 +215,9 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *providerLiveModel) providerMouseTab(x, y int) (providerTab, bool) {
+	if model.ui != nil && model.ui.viewClipped {
+		return 0, false
+	}
 	for index, region := range model.tabRegions {
 		if region.contains(x, y) {
 			return providerTab(index), true
@@ -147,6 +227,9 @@ func (model *providerLiveModel) providerMouseTab(x, y int) (providerTab, bool) {
 }
 
 func (model *providerLiveModel) providerMouseIndex(x, y int) int {
+	if model.ui != nil && model.ui.viewClipped {
+		return -1
+	}
 	if x < model.itemsLeft || x >= model.itemsLeft+model.itemsWidth || y < model.itemsTop || model.itemsHeight > 0 && y >= model.itemsTop+model.itemsHeight {
 		return -1
 	}
@@ -157,36 +240,46 @@ func (model *providerLiveModel) View() string {
 	model.tabRegions = nil
 	tabs := []string{model.ui.t("tab.custom"), model.ui.t("tab.oauth"), model.ui.t("tab.free"), model.ui.t("tab.apiKey")}
 	tabLine := make([]string, len(tabs))
-	for index, tab := range tabs {
+	for index := range tabs {
 		style := mutedStyle.Padding(0, 1)
+		label := "  " + tabs[index]
 		if providerTab(index) == model.tab {
 			style = focusStyle
+			label = "› " + tabs[index]
 		}
-		tabLine[index] = style.Render(tab)
+		tabLine[index] = style.Render(label)
 	}
 	content := model.cardContent()
-	column := model.ui.controlStyle()
-	actions := model.ui.t("controls.providerEditDelete") + "  " + model.ui.t("controls.providerTest")
-	if model.tab == customProviderTab {
-		actions = model.ui.t("controls.providerCustomActions") + "  " + model.ui.t("controls.providerTest")
+	controlItems := []string{model.ui.t("controls.moveSwitch")}
+	busy := model.loading
+	if !busy {
+		if _, ok := model.selectedProvider(); ok {
+			controlItems = append(controlItems, model.providerActions())
+			switch model.tab {
+			case oauthProviderTab:
+				controlItems = append(controlItems, model.ui.t("controls.providerOAuthSelect"), model.ui.t("controls.deleteBack"))
+			case freeProviderTab:
+				controlItems = append(controlItems, model.ui.t("controls.providerFreeSelect"))
+			default:
+				controlItems = append(controlItems, model.ui.t("controls.selectEdit"), model.ui.t("controls.deleteBack"))
+			}
+		} else if model.canAdd() {
+			controlItems = append(controlItems, model.ui.t("controls.providerAdd"))
+		}
+	} else {
+		controlItems = append(controlItems, model.ui.t("common.loading"))
 	}
-	controlRows := []string{
-		column.Render(mutedStyle.Render(model.ui.t("controls.moveSwitch"))),
-		column.Render(mutedStyle.Render(model.ui.t("controls.selectEdit"))),
-		column.Render(mutedStyle.Render(actions)),
-		column.Render(mutedStyle.Render(model.ui.t("controls.deleteBack"))),
-	}
-	controls := strings.Join(controlRows, "\n")
+	controls := model.ui.controlColumns(controlItems...)
 	if hint := model.ui.mouseHint(); hint != "" {
 		controls += "\n" + mutedStyle.Render(hint)
 	}
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
-	if model.err != nil {
-		controls += "\n" + errorStyle.Render("ERROR: "+model.ui.errorSummary(model.err))
+	if model.testing {
+		controls += "\n" + mutedStyle.Render(model.ui.t("notice.modelTestRunning"))
 	}
-	controlCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controls)
+	controlCard := model.ui.controlCard(model.ui.t("common.controls"), controls)
 	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
 	tabView := lipgloss.JoinHorizontal(lipgloss.Top, tabLine...)
 	if model.ui.compact() {
@@ -198,13 +291,10 @@ func (model *providerLiveModel) View() string {
 		}
 	} else {
 		left := 1 + 2
-		for index, tab := range tabLine {
+		for _, tab := range tabLine {
 			width := lipgloss.Width(tab)
 			model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: model.tabsTop, width: width, height: 1})
 			left += width
-			if index+1 < len(tabLine) {
-				left += 2
-			}
 		}
 	}
 	model.itemsTop = model.tabsTop + lipgloss.Height(tabView) + 2 + 2 + 1
@@ -234,9 +324,8 @@ func (model *providerLiveModel) cardContent() string {
 		}
 	case freeProviderTab:
 		title = model.ui.t("screen.freeProviders")
-		for _, name := range freeProviderNames {
-			item := model.find(model.free, name)
-			rows = append(rows, name+" ["+statusTextLocale(item != nil && item.Enabled, model.ui.Locale)+"]")
+		for _, item := range model.free {
+			rows = append(rows, item.Name+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
 		}
 	case apiKeyProviderTab:
 		title = model.ui.t("screen.apiKeyProviders")
@@ -245,15 +334,30 @@ func (model *providerLiveModel) cardContent() string {
 		}
 	}
 	if len(rows) == 0 {
-		rows = []string{model.ui.t("screen.noProviders")}
+		model.itemsStart, model.itemsHeight = 0, 0
+		return model.ui.innerStyle().Render(model.providerContent(title, mutedStyle.Render(model.ui.t("screen.noProviders"))))
 	}
 	start, end := viewportWindow(model.cursor, len(rows), model.ui.viewportHeight(14, 10))
 	model.itemsStart, model.itemsHeight = start, end-start
 	items := make([]string, 0, end-start)
 	for index := start; index < end; index++ {
-		items = append(items, providerMenuItem(index, rows[index], index == model.cursor))
+		items = append(items, fitProviderMenuItem(index, rows[index], index == model.cursor, model.ui.innerWidth()))
 	}
-	return model.ui.innerStyle().Render(cardTitleStyle.Render(title) + "\n" + strings.Join(items, "\n"))
+	return model.ui.innerStyle().Render(model.providerContent(title, strings.Join(items, "\n")))
+}
+
+func (model *providerLiveModel) providerContent(title, body string) string {
+	if model.err != nil {
+		body = errorStyle.Render(model.ui.t("common.error")+": "+model.ui.errorSummary(model.err)) + "\n" + mutedStyle.Render(model.ui.t("controls.refresh")) + "\n" + body
+	}
+	return cardTitleStyle.Render(title) + "\n" + body
+}
+
+func fitProviderMenuItem(index int, label string, selected bool, width int) string {
+	prefixWidth := lipgloss.Width(providerMenuItem(index, "", selected))
+	labelWidth := max(0, width-prefixWidth)
+	row := providerMenuItem(index, truncateText(label, labelWidth), selected)
+	return truncateText(row, max(0, width))
 }
 
 func oauthProviderDisplayName(item provider) string {
@@ -283,7 +387,11 @@ func oauthProviderDisplayName(item provider) string {
 }
 
 func providerMenuItem(index int, label string, selected bool) string {
-	text := string(rune('1'+index)) + "  " + label
+	marker := " "
+	if selected {
+		marker = "›"
+	}
+	text := fmt.Sprintf("%s %2d  %s", marker, index+1, label)
 	if selected {
 		return focusStyle.Render(text)
 	}
@@ -297,9 +405,39 @@ func (model *providerLiveModel) itemCount() int {
 	case oauthProviderTab:
 		return 1 + len(model.oauthConnections)
 	case freeProviderTab:
-		return len(freeProviderNames)
+		return len(model.free)
 	default:
 		return len(model.apiKeys)
+	}
+}
+
+func (model *providerLiveModel) canAdd() bool {
+	return model.tab == customProviderTab && model.cursor < 2 || model.tab == oauthProviderTab && model.cursor == 0
+}
+
+func (model *providerLiveModel) canEdit() bool {
+	_, selected := model.selectedProvider()
+	return selected && model.tab != freeProviderTab
+}
+
+func (model *providerLiveModel) canTest() bool {
+	_, selected := model.selectedProvider()
+	return selected
+}
+
+func (model *providerLiveModel) canDelete() bool {
+	_, selected := model.selectedProvider()
+	return selected && model.tab != freeProviderTab
+}
+
+func (model *providerLiveModel) providerActions() string {
+	switch model.tab {
+	case oauthProviderTab:
+		return model.ui.t("controls.providerOAuthActions")
+	case freeProviderTab:
+		return model.ui.t("controls.providerFreeActions")
+	default:
+		return model.ui.t("controls.providerEditDelete") + "  " + model.ui.t("controls.providerTest")
 	}
 }
 
@@ -310,10 +448,14 @@ func (model *providerLiveModel) runAction() tea.Cmd {
 	if model.tab == oauthProviderTab && model.cursor == 0 {
 		return model.action(model.addOAuth)
 	}
+	if model.tab == freeProviderTab {
+		return model.testAction()
+	}
 	return model.action(model.edit)
 }
 
 func (model *providerLiveModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
+	model.lastAction = ""
 	var notice string
 	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error
@@ -398,7 +540,7 @@ func (model *providerLiveModel) testModel(input io.Reader, output io.Writer) (st
 		} `json:"models"`
 	}
 	if err := model.ui.request(http.MethodGet, "/api/providers/"+url.PathEscape(item.ID)+"/test-models", nil, &available); err != nil {
-		return "", err
+		return "", fmt.Errorf("%s: %w", item.Name, err)
 	}
 	if len(available.Models) == 0 {
 		return "", errors.New(model.ui.t("form.noTestModels"))
@@ -424,12 +566,24 @@ func (model *providerLiveModel) testModel(input io.Reader, output io.Writer) (st
 		Error     string `json:"error"`
 	}
 	if err := model.ui.request(http.MethodPost, "/api/models/test", map[string]string{"model": strings.TrimSpace(modelName)}, &result); err != nil {
-		return "", err
+		return "", fmt.Errorf("%s · %s: %w", item.Name, modelName, err)
 	}
 	if !result.OK {
-		return "", errors.New(result.Error)
+		message := result.Error
+		if message == "" {
+			message = model.ui.t("notice.modelTestFailed")
+		}
+		return "", fmt.Errorf("%s · %s: %s", item.Name, modelName, message)
 	}
-	return fmt.Sprintf("%s (%dms)", model.ui.t("notice.modelTestPassed"), result.LatencyMs), nil
+	return fmt.Sprintf("%s: %s · %s (%dms)", model.ui.t("notice.modelTestPassed"), item.Name, modelName, result.LatencyMs), nil
+}
+
+func (model *providerLiveModel) testAction() tea.Cmd {
+	model.testing = true
+	model.err = nil
+	command := model.action(model.testModel)
+	model.lastAction = "test"
+	return command
 }
 
 func (model *providerLiveModel) selectedProvider() (provider, bool) {
@@ -504,58 +658,51 @@ func (model *providerLiveModel) loginOAuth(input io.Reader, output io.Writer, na
 	return err
 }
 
-func (model *providerLiveModel) refresh() {
-	defer func() { model.loading = false }()
+func (model *providerLiveModel) refreshCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg { return loadProviders(ui) }
+}
+
+func loadProviders(ui *UI) providerDataMsg {
 	var response providersResponse
-	if err := model.ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
-		model.err = err
-		return
+	if err := ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
+		return providerDataMsg{err: err}
 	}
 	var credentials []oauthProvider
-	if err := model.ui.request(http.MethodGet, "/api/oauth", nil, &credentials); err != nil {
-		model.err = err
-		return
+	if err := ui.request(http.MethodGet, "/api/oauth", nil, &credentials); err != nil {
+		return providerDataMsg{err: err}
 	}
-	model.custom, model.oauthConnections, model.apiKeys = nil, nil, nil
+	custom, oauthConnections, apiKeys := []provider{}, []provider{}, []provider{}
 	for _, item := range response.Connections {
 		if item.OAuthID != "" || item.ID == "codex" {
-			model.oauthConnections = append(model.oauthConnections, item)
+			oauthConnections = append(oauthConnections, item)
 			continue
 		}
 		if item.APIType == "openai" || item.APIType == "anthropic" {
-			model.custom = append(model.custom, item)
+			custom = append(custom, item)
 		} else {
-			model.apiKeys = append(model.apiKeys, item)
+			apiKeys = append(apiKeys, item)
 		}
 	}
-	model.free = nil
+	free := []provider{}
 	for _, name := range freeProviderNames {
 		for _, item := range response.Connections {
 			if item.ID == name {
-				model.free = append(model.free, item)
+				free = append(free, item)
 			}
 		}
 	}
-	model.oauth = credentials
-	model.err = nil
-	if model.cursor >= model.itemCount() {
-		model.cursor = 0
-	}
+	sort.Slice(custom, func(left, right int) bool { return custom[left].ID < custom[right].ID })
+	sort.Slice(oauthConnections, func(left, right int) bool { return oauthConnections[left].ID < oauthConnections[right].ID })
+	sort.Slice(free, func(left, right int) bool { return free[left].ID < free[right].ID })
+	sort.Slice(apiKeys, func(left, right int) bool { return apiKeys[left].ID < apiKeys[right].ID })
+	return providerDataMsg{custom: custom, oauth: credentials, oauthConnections: oauthConnections, free: free, apiKeys: apiKeys}
 }
 
 func (model *providerLiveModel) oauthCredential(item provider) *oauthProvider {
 	for index := range model.oauth {
 		if model.oauth[index].ID == item.OAuthID || model.oauth[index].Provider == item.ID {
 			return &model.oauth[index]
-		}
-	}
-	return nil
-}
-
-func (model *providerLiveModel) find(items []provider, id string) *provider {
-	for index := range items {
-		if items[index].ID == id {
-			return &items[index]
 		}
 	}
 	return nil

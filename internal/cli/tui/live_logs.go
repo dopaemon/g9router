@@ -62,11 +62,14 @@ func (model *logsModel) Init() tea.Cmd {
 func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.MouseMsg:
+		if model.ui.viewClipped {
+			return model, nil
+		}
 		if model.detail != "" {
 			return model, nil
 		}
 		for index, region := range model.tabRegions {
-			if region.contains(message.X, message.Y) {
+			if region.contains(message.X, message.Y) && message.Action == tea.MouseActionPress && message.Button == tea.MouseButtonLeft {
 				model.tab = index
 				model.cursor = 0
 				model.followTail = true
@@ -169,20 +172,20 @@ func (model *logsModel) View() string {
 	}
 	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
-	controlsText := mutedStyle.Render(model.ui.actionHints(
-		actionDefinition{display: "↑↓/jk", label: "logs.scroll"},
-		actionDefinition{display: "Tab", label: "logs.switch"},
-		actionDefinition{display: "r", label: "logs.refresh"},
-		actionDefinition{display: "p", label: "logs.pause"},
-		actionDefinition{display: "q", label: "logs.back"},
-	))
+	controlsText := model.ui.controlColumns(
+		"↑↓/jk "+model.ui.t("logs.scroll"),
+		"Tab "+model.ui.t("logs.switch"),
+		"r "+model.ui.t("logs.refresh"),
+		"p "+model.ui.t("logs.pause"),
+		"q "+model.ui.t("logs.back"),
+	)
 	if hint := model.ui.mouseHint(); hint != "" {
 		controlsText += "\n" + mutedStyle.Render(hint)
 	}
 	if model.paused {
 		controlsText += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + controlsText)
+	controls := model.ui.controlCard(model.ui.t("common.controls"), controlsText)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
 }
 

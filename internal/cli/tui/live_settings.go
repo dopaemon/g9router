@@ -17,34 +17,45 @@ type settingsActionDoneMsg struct {
 	notice string
 	err    error
 }
+type settingsDataMsg struct {
+	values, tunnel map[string]any
+	err            error
+}
 
 type settingsModel struct {
-	ui     *UI
-	values map[string]any
-	tunnel map[string]any
-	cursor int
-	notice string
-	err    error
+	ui            *UI
+	values        map[string]any
+	tunnel        map[string]any
+	cursor        int
+	notice        string
+	err           error
+	loading       bool
+	refreshing    bool
+	actionRunning bool
 }
 
 func (ui *UI) liveSettings() error {
 	EnableColors(ui.Out)
-	model := settingsModel{ui: ui}
-	model.refresh()
+	model := settingsModel{ui: ui, loading: true}
 	return ui.runTea(&model)
 }
 
-func (model *settingsModel) Init() tea.Cmd { return settingsRefresh() }
+func (model *settingsModel) Init() tea.Cmd {
+	return model.refreshCmd()
+}
 
 func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
 		if model.err != nil && message.String() == "r" {
 			model.err = nil
-			model.refresh()
-			return model, settingsRefresh()
+			model.loading = true
+			return model, model.refreshCmd()
 		}
 		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= 6 {
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			model.cursor = index - 1
 			return model, model.action(model.runAction)
 		}
@@ -64,18 +75,36 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				model.cursor = 4
 			}
 		case "enter", " ":
+			if model.loading || model.actionRunning {
+				return model, nil
+			}
 			return model, model.action(model.runAction)
 		}
 	case settingsRefreshMsg:
-		model.refresh()
+		if model.actionRunning {
+			return model, settingsRefresh()
+		}
+		if model.loading || model.refreshing {
+			return model, settingsRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
+	case settingsDataMsg:
+		if message.err == nil {
+			model.values, model.tunnel = message.values, message.tunnel
+		}
+		model.err, model.loading, model.refreshing = message.err, false, false
 		return model, settingsRefresh()
 	case settingsActionDoneMsg:
+		model.actionRunning = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
+			message.notice = ""
 		}
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
-			model.refresh()
+			model.refreshing = true
+			return model, model.refreshCmd()
 		}
 		return model, settingsRefresh()
 	}
@@ -83,7 +112,10 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *settingsModel) View() string {
-	if model.err != nil {
+	if model.loading || model.actionRunning {
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+	}
+	if model.err != nil && len(model.values) == 0 && len(model.tunnel) == 0 {
 		return model.ui.errorView(model.ui.t("menu.settings"), model.err)
 	}
 	cardWidth := model.ui.columnWidth(2)
@@ -98,9 +130,8 @@ func (model *settingsModel) View() string {
 	securityCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.security")) + "\n" +
 		settingsActionItem(model.ui, 4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
 		settingsActionItem(model.ui, 5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.toolsMoveSwitch"))),
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		model.ui.t("controls.toolsMoveSwitch"), model.ui.t("controls.languageSelectBack"),
 	))
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
@@ -130,6 +161,7 @@ func settingsEnabled(values map[string]any, key string) bool {
 }
 
 func (model *settingsModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
+	model.actionRunning = true
 	var notice string
 	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error
@@ -180,6 +212,21 @@ func (model *settingsModel) refresh() {
 		return
 	}
 	model.values, model.tunnel, model.err = values, tunnel, nil
+}
+
+func (model *settingsModel) refreshCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg {
+		var values map[string]any
+		if err := ui.request(http.MethodGet, "/api/settings", nil, &values); err != nil {
+			return settingsDataMsg{err: err}
+		}
+		var tunnel map[string]any
+		if err := ui.request(http.MethodGet, "/api/tunnel/status", nil, &tunnel); err != nil {
+			return settingsDataMsg{err: err}
+		}
+		return settingsDataMsg{values: values, tunnel: tunnel}
+	}
 }
 
 func settingsRefresh() tea.Cmd {

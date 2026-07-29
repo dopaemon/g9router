@@ -29,6 +29,14 @@ func (ui *UI) liveLanguage() error {
 func (model *languageModel) Init() tea.Cmd { return nil }
 
 func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	if model.ui.viewClipped {
+		if key, ok := message.(tea.KeyMsg); ok && (key.String() == "q" || key.String() == "esc" || key.String() == "ctrl+c") {
+			return model, tea.Quit
+		}
+		if _, ok := message.(tea.MouseMsg); ok {
+			return model, nil
+		}
+	}
 	if mouse, ok := message.(tea.MouseMsg); ok && (mouse.Action == tea.MouseActionPress || mouse.Action == tea.MouseActionRelease) && mouse.Button == tea.MouseButtonLeft {
 		for index, region := range model.cardRegions {
 			if region.contains(mouse.X, mouse.Y) {
@@ -92,9 +100,8 @@ func (model *languageModel) View() string {
 			{left: cardLeft + cardWidth + 1, top: cardTop, width: cardWidth, height: cardHeight},
 		}
 	}
-	controls := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("common.controls")) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top,
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSwitch"))),
-		model.ui.controlStyle().Render(mutedStyle.Render(model.ui.t("controls.languageSelectBack"))),
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		model.ui.t("controls.languageSwitch"), model.ui.t("controls.languageSelectBack"),
 	))
 	model.cardsTopValue = cardTop
 	var cards string

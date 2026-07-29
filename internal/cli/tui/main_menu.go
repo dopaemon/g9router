@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type mainMenuModel struct {
@@ -76,7 +77,7 @@ func (model *mainMenuModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *mainMenuModel) mouseItem(x, y int) int {
-	if x < model.menuLeft || x >= model.menuLeft+model.menuWidth || y < model.menuTop {
+	if model.ui.viewClipped || x < model.menuLeft || x >= model.menuLeft+model.menuWidth || y < model.menuTop {
 		return -1
 	}
 	index := y - model.menuTop
@@ -103,7 +104,7 @@ func (model *mainMenuModel) View() string {
 }
 
 func (model *mainMenuModel) menuItem(index int) string {
-	label := fmt.Sprintf("%d  %s", index+1, model.items[index])
+	label := ansi.Truncate(fmt.Sprintf("%d  %s", index+1, model.items[index]), max(1, model.ui.innerWidth()-2), "…")
 	if index == model.cursor {
 		label = focusStyle.Render(label)
 	} else {

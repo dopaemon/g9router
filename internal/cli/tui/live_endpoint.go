@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,16 +20,26 @@ type endpointActionDoneMsg struct {
 	notice string
 	err    error
 }
-
-type endpointLiveModel struct {
-	ui        *UI
+type endpointDataMsg struct {
 	status    tunnelStatus
 	tailscale tailscaleStatus
 	keys      []apiKey
-	notice    string
 	err       error
-	loading   bool
-	cursor    int
+}
+
+type endpointLiveModel struct {
+	ui             *UI
+	status         tunnelStatus
+	tailscale      tailscaleStatus
+	keys           []apiKey
+	hasData        bool
+	notice         string
+	err            error
+	loading        bool
+	refreshing     bool
+	actionRunning  bool
+	controlRegions []tuiRegion
+	cursor         int
 }
 
 func (ui *UI) liveEndpoint() error {
@@ -38,24 +49,36 @@ func (ui *UI) liveEndpoint() error {
 }
 
 func (model *endpointLiveModel) Init() tea.Cmd {
-	return tea.Batch(func() tea.Msg { return endpointRefreshMsg{} }, endpointRefresh())
+	model.loading = true
+	return model.refreshCmd()
 }
 
 func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
-	case tea.KeyMsg:
-		if model.err != nil && message.String() == "r" {
-			model.err = nil
-			model.refresh()
-			return model, endpointRefresh()
+	case endpointDataMsg:
+		if message.err == nil {
+			model.status, model.tailscale, model.keys, model.hasData = message.status, message.tailscale, message.keys, true
 		}
-		if index, ok := endpointActionIndex(message.String()); ok {
+		model.err, model.loading, model.refreshing = message.err, false, false
+		return model, endpointRefresh()
+	case tea.KeyMsg:
+		key := message.String()
+		if key == "q" || key == "esc" || key == "ctrl+c" {
+			return model, tea.Quit
+		}
+		if model.loading || model.actionRunning {
+			return model, nil
+		}
+		if model.err != nil && key == "r" {
+			model.err = nil
+			model.loading = true
+			return model, model.refreshCmd()
+		}
+		if index, ok := endpointActionIndex(key); ok {
 			model.cursor = index
 			return model, model.runEndpointAction(index)
 		}
-		switch message.String() {
-		case "q", "esc", "ctrl+c":
-			return model, tea.Quit
+		switch key {
 		case "up", "k":
 			if model.cursor >= 2 {
 				model.cursor -= 2
@@ -89,16 +112,35 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "a":
 			return model, model.action(model.toggleKey)
 		}
+	case tea.MouseMsg:
+		if model.ui.viewClipped || model.loading || model.actionRunning {
+			return model, nil
+		}
+		for index, region := range model.controlRegions {
+			if region.contains(message.X, message.Y) {
+				model.cursor = index
+				if message.Action == tea.MouseActionPress && message.Button == tea.MouseButtonLeft {
+					return model, model.runEndpointAction(index)
+				}
+				return model, nil
+			}
+		}
 	case endpointRefreshMsg:
-		model.refresh()
-		return model, endpointRefresh()
+		if model.loading || model.refreshing {
+			return model, endpointRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
 	case endpointActionDoneMsg:
+		model.actionRunning = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
 			message.err = nil
+			message.notice = ""
 		}
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
-			model.refresh()
+			model.loading = true
+			return model, model.refreshCmd()
 		}
 		return model, endpointRefresh()
 	}
@@ -108,6 +150,9 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (model *endpointLiveModel) View() string {
 	if model.loading {
 		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+	}
+	if model.err != nil && !model.hasData {
+		return model.ui.errorView(model.ui.t("endpoint.title"), model.err)
 	}
 	endpointCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.card")) + "\n" +
 		endpointLine(model.ui, model.ui.t("endpoint.local"), mutedStyle.Render(apiEndpoint(model.ui.BaseURL))) + "\n" +
@@ -129,11 +174,33 @@ func (model *endpointLiveModel) View() string {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
 	if model.err != nil {
-		controls += "\n" + errorStyle.Render("ERROR: "+model.ui.errorSummary(model.err))
+		controls += "\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.ui.errorSummary(model.err))
 	}
-	controlsCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("keys.controls")) + "\n" + controls)
+	controlsCard := model.ui.controlCard(model.ui.t("keys.controls"), controls)
 	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
+	model.controlRegions = endpointControlRegions(view, model.ui.t("keys.controls"), len(strings.Split(controlGrid(model), "\n")), model.ui.width)
 	return view
+}
+
+func endpointControlRegions(view, title string, rows, width int) []tuiRegion {
+	if rows <= 0 {
+		return nil
+	}
+	top := -1
+	for index, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, title) {
+			top = index + 2
+			break
+		}
+	}
+	if top < 0 {
+		return nil
+	}
+	regions := make([]tuiRegion, rows)
+	for index := range regions {
+		regions[index] = tuiRegion{left: 0, top: top + index, width: max(1, width), height: 1}
+	}
+	return regions
 }
 
 func endpointLine(ui *UI, label, value string) string {
@@ -145,6 +212,9 @@ func endpointLine(ui *UI, label, value string) string {
 
 func controlGrid(model *endpointLiveModel) string {
 	items := []string{"t " + model.ui.t("keys.tunnelToggle"), "s " + model.ui.t("keys.tailscaleToggle"), "c " + model.ui.t("keys.create"), "r " + model.ui.t("keys.rename"), "a " + model.ui.t("keys.toggle"), "d " + model.ui.t("keys.delete"), "v " + model.ui.t("keys.show"), "q " + model.ui.t("keys.back")}
+	for index := range items {
+		items[index] = strconv.Itoa(index+1) + "  " + items[index]
+	}
 	column := model.ui.controlStyle()
 	if model.ui.compact() {
 		rows := make([]string, 0, len(items))
@@ -220,7 +290,29 @@ func (model *endpointLiveModel) refresh() {
 	model.status, model.tailscale, model.keys, model.err = status, tailscale, payload.Keys, nil
 }
 
+func (model *endpointLiveModel) refreshCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg {
+		var status tunnelStatus
+		if err := ui.request(http.MethodGet, "/api/tunnel/status", nil, &status); err != nil {
+			return endpointDataMsg{err: err}
+		}
+		var tailscale tailscaleStatus
+		if err := ui.request(http.MethodGet, "/api/tunnel/tailscale-check", nil, &tailscale); err != nil {
+			return endpointDataMsg{err: err}
+		}
+		var payload struct {
+			Keys []apiKey `json:"keys"`
+		}
+		if err := ui.request(http.MethodGet, "/api/keys", nil, &payload); err != nil {
+			return endpointDataMsg{err: err}
+		}
+		return endpointDataMsg{status: status, tailscale: tailscale, keys: payload.Keys}
+	}
+}
+
 func (model *endpointLiveModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
+	model.actionRunning = true
 	var notice string
 	command := &endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error

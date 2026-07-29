@@ -291,6 +291,71 @@ func TestEndpointLiveToggleTunnel(t *testing.T) {
 	}
 }
 
+func TestEndpointBlocksActionsWhileLoading(t *testing.T) {
+	model := &endpointLiveModel{ui: &UI{}, loading: true}
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if command != nil || updated.(*endpointLiveModel).actionRunning {
+		t.Fatal("endpoint action started while loading")
+	}
+}
+
+func TestLogsTabsIgnoreHover(t *testing.T) {
+	model := &logsModel{ui: &UI{}, tabRegions: []tuiRegion{{left: 1, top: 1, width: 5, height: 1}}}
+	updated, _ := model.Update(tea.MouseMsg{X: 2, Y: 1, Action: tea.MouseActionMotion})
+	if updated.(*logsModel).tab != 0 {
+		t.Fatal("logs tab changed on hover")
+	}
+}
+
+func TestTUIViewsFitTerminalMatrix(t *testing.T) {
+	constructors := []struct {
+		name string
+		make func(*UI) tea.Model
+	}{
+		{"main", func(ui *UI) tea.Model { return &mainMenuModel{ui: ui, items: []string{"Providers", "Settings"}} }},
+		{"endpoint", func(ui *UI) tea.Model { return &endpointLiveModel{ui: ui, loading: true} }},
+		{"providers", func(ui *UI) tea.Model { return &providerLiveModel{ui: ui, loading: true} }},
+		{"settings", func(ui *UI) tea.Model { return &settingsModel{ui: ui, loading: true} }},
+		{"cli-tools", func(ui *UI) tea.Model { return &cliToolsModel{ui: ui, loading: true} }},
+		{"combos", func(ui *UI) tea.Model { return &comboLiveModel{ui: ui, loading: true} }},
+		{"logs", func(ui *UI) tea.Model { return &logsModel{ui: ui, loading: true} }},
+		{"statistics", func(ui *UI) tea.Model { return &statisticsModel{ui: ui, loading: true} }},
+		{"quota", func(ui *UI) tea.Model { return &quotaModel{ui: ui, loading: true, detail: -1} }},
+		{"language", func(ui *UI) tea.Model { return &languageModel{ui: ui} }},
+	}
+	for _, width := range []int{20, 40, 80} {
+		for _, constructor := range constructors {
+			ui := &UI{width: width, height: 40, Locale: i18n.English}
+			view := sizedModel{ui: ui, model: constructor.make(ui)}.View()
+			for _, line := range strings.Split(view, "\n") {
+				if got := lipgloss.Width(line); got > width {
+					t.Fatalf("%s at width %d rendered %d columns", constructor.name, width, got)
+				}
+			}
+		}
+	}
+}
+
+func TestEndpointMouseStartsOnlyOnPress(t *testing.T) {
+	model := &endpointLiveModel{ui: &UI{width: 80}, controlRegions: []tuiRegion{{left: 0, top: 2, width: 80, height: 1}}}
+	updated, command := model.Update(tea.MouseMsg{X: 3, Y: 2, Action: tea.MouseActionMotion})
+	if command != nil || updated.(*endpointLiveModel).actionRunning {
+		t.Fatal("endpoint mouse hover started an action")
+	}
+	updated, command = model.Update(tea.MouseMsg{X: 3, Y: 2, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if command == nil || !updated.(*endpointLiveModel).actionRunning {
+		t.Fatal("endpoint click did not start an action")
+	}
+}
+
+func TestQuotaBlocksActionsDuringRefresh(t *testing.T) {
+	model := &quotaModel{ui: &UI{}, items: []quotaItem{{ID: "codex"}}, refreshing: true, detail: -1}
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if command != nil || updated.(*quotaModel).detail != -1 {
+		t.Fatal("quota entered detail while refreshing")
+	}
+}
+
 func TestAPIEndpoint(t *testing.T) {
 	for input, want := range map[string]string{
 		"http://127.0.0.1:20128":  "http://127.0.0.1:20128/v1",
@@ -330,7 +395,7 @@ func TestResponsiveLayoutAtTinySize(t *testing.T) {
 }
 
 func TestMainMenuMouseItemUsesRenderedBounds(t *testing.T) {
-	model := &mainMenuModel{items: []string{"one", "two"}, menuTop: 5, menuLeft: 4, menuWidth: 20}
+	model := &mainMenuModel{ui: &UI{}, items: []string{"one", "two"}, menuTop: 5, menuLeft: 4, menuWidth: 20}
 	if got := model.mouseItem(4, 5); got != 0 {
 		t.Fatalf("left edge item = %d, want 0", got)
 	}

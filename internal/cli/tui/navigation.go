@@ -24,7 +24,7 @@ func actionMatches(value string, action actionDefinition) bool {
 }
 
 func (ui *UI) mouseHint() string {
-	if ui.width <= 0 {
+	if ui.width <= 0 || ui.In != nil && accessibleMode(ui.In) {
 		return ""
 	}
 	return ui.t("controls.mouse")
