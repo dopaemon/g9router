@@ -602,7 +602,7 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 	if err := ui.request(http.MethodGet, "/api/keys", nil, &payload); err != nil {
 		return err
 	}
-	if len(payload.Keys) == 0 || strings.TrimSpace(payload.Keys[0].Key) == "" {
+	if len(payload.Keys) == 0 {
 		fmt.Fprintln(ui.Out, ui.t("legacy.noAPIKeys"))
 		return nil
 	}
@@ -613,6 +613,15 @@ func (ui *UI) quickSetup(reader *bufio.Reader) error {
 	}
 	tool := strings.ToLower(strings.TrimSpace(line))
 	key := payload.Keys[0].Key
+	if strings.TrimSpace(key) == "" {
+		var detail struct {
+			Key apiKey `json:"key"`
+		}
+		if err := ui.request(http.MethodGet, "/api/keys/"+url.PathEscape(payload.Keys[0].ID), nil, &detail); err != nil {
+			return err
+		}
+		key = detail.Key.Key
+	}
 	switch tool {
 	case "claude":
 		return ui.request(http.MethodPost, "/api/cli-tools/claude-settings", map[string]any{

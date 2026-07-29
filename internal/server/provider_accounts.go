@@ -39,6 +39,12 @@ func (s *Server) providerAccountsAPI(w http.ResponseWriter, r *http.Request, pro
 		if input.ID == "" {
 			input.ID = "account-" + time.Now().UTC().Format("20060102150405.000000000")
 		}
+		for _, account := range provider.Accounts {
+			if account.ID == input.ID {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "account ID already exists"})
+				return
+			}
+		}
 		enabled := true
 		if input.Enabled != nil {
 			enabled = *input.Enabled
@@ -80,7 +86,7 @@ func (s *Server) providerAccountsAPI(w http.ResponseWriter, r *http.Request, pro
 		filtered := provider.Accounts[:0]
 		removed := false
 		for _, account := range provider.Accounts {
-			if account.ID == accountID {
+			if account.ID == accountID && !removed {
 				removed = true
 				continue
 			}

@@ -2945,7 +2945,11 @@ func removeTOMLLine(content, target string) string {
 func (s *Server) oauthAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.oauth.List())
+		credentials := s.oauth.List()
+		for index := range credentials {
+			credentials[index] = safeOAuthCredential(credentials[index])
+		}
+		writeJSON(w, http.StatusOK, credentials)
 	case http.MethodPost:
 		var credential oauth.Credential
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&credential); err != nil || credential.ID == "" {
@@ -2985,8 +2989,7 @@ func (s *Server) oauthResourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		credential.AccessToken, credential.RefreshToken = "", ""
-		writeJSON(w, 200, credential)
+		writeJSON(w, 200, safeOAuthCredential(credential))
 	case http.MethodDelete:
 		if err := s.oauth.Delete(id); err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
@@ -2996,6 +2999,24 @@ func (s *Server) oauthResourceAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func safeOAuthCredential(credential oauth.Credential) oauth.Credential {
+	credential.AccessToken = ""
+	credential.RefreshToken = ""
+	if len(credential.ProviderSpecificData) == 0 {
+		return credential
+	}
+	data := make(map[string]any, len(credential.ProviderSpecificData))
+	for key, value := range credential.ProviderSpecificData {
+		lower := strings.ToLower(key)
+		if strings.Contains(lower, "secret") || strings.Contains(lower, "token") || strings.Contains(lower, "password") || strings.Contains(lower, "privatekey") {
+			continue
+		}
+		data[key] = value
+	}
+	credential.ProviderSpecificData = data
+	return credential
 }
 
 func (s *Server) usageAPI(w http.ResponseWriter, r *http.Request) {
@@ -3108,7 +3129,11 @@ func safeProviderConnection(provider providers.Provider) map[string]any {
 func (s *Server) keysAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{"keys": s.keys.List()})
+		keys := s.keys.List()
+		for index := range keys {
+			keys[index].Key = ""
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 	case http.MethodPost:
 		var input struct {
 			Name string `json:"name"`

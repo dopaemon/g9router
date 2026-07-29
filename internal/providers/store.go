@@ -49,10 +49,9 @@ func (s *Store) Resolve(model string) []Provider {
 		if !item.Enabled {
 			continue
 		}
-		selected := item
+		selected := cloneProvider(item)
 		if len(item.Accounts) > 0 {
 			selected.APIKey, selected.OAuthID = s.accountKeyLocked(index)
-			selected.Accounts = s.items[index].Accounts
 		}
 		alias := item.ID
 		if descriptor, ok := Registry[item.ID]; ok && descriptor.Alias != "" {
@@ -167,6 +166,7 @@ func (s *Store) accountKeyLocked(providerIndex int) (string, string) {
 func (s *Store) Upsert(provider Provider) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	provider = cloneProvider(provider)
 	for i := range s.items {
 		if s.items[i].ID == provider.ID {
 			s.items[i] = provider

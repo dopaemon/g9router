@@ -32,7 +32,7 @@ func (s *Server) codexImportTokenAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	provider.Enabled = true
-	provider.Accounts = append(provider.Accounts, account)
+	provider.Accounts = upsertCodexAccount(provider.Accounts, account)
 	if err := s.store.Upsert(provider); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -82,7 +82,7 @@ func (s *Server) codexBulkImportAPI(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		account := codexAccount(strings.TrimSpace(token), stringValue(item["name"]))
-		provider.Accounts = append(provider.Accounts, account)
+		provider.Accounts = upsertCodexAccount(provider.Accounts, account)
 		results = append(results, map[string]any{"index": index, "ok": true, "id": account.ID})
 		success++
 	}
@@ -91,6 +91,25 @@ func (s *Server) codexBulkImportAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": success, "failed": len(items) - success, "results": results})
+}
+
+func upsertCodexAccount(accounts []providers.Account, account providers.Account) []providers.Account {
+	updated := false
+	filtered := accounts[:0]
+	for index := range accounts {
+		if accounts[index].ID == account.ID {
+			if !updated {
+				filtered = append(filtered, account)
+				updated = true
+			}
+			continue
+		}
+		filtered = append(filtered, accounts[index])
+	}
+	if !updated {
+		filtered = append(filtered, account)
+	}
+	return filtered
 }
 
 func codexAccount(token, name string) providers.Account {

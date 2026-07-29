@@ -115,3 +115,22 @@ func TestProviderResourcePrefersCodexAccountIDOverProviderID(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestCodexImportReplacesExistingPlan(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "codex", Accounts: []providers.Account{{ID: "codex", APIKey: "old-1"}, {ID: "codex", APIKey: "old-2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{"first-token", "second-token"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/oauth/codex/import-token", strings.NewReader(`{"accessToken":"`+token+`"}`))
+		app.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
+	provider, ok := app.store.Find("codex")
+	if !ok || len(provider.Accounts) != 1 || provider.Accounts[0].APIKey != "second-token" {
+		t.Fatalf("accounts=%+v", provider.Accounts)
+	}
+}

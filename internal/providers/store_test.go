@@ -58,3 +58,22 @@ func TestEnabledKeepsCredentialsForInternalRequests(t *testing.T) {
 		t.Fatalf("enabled credentials = %+v", providers)
 	}
 }
+
+func TestProviderStoreDoesNotExposeMutableState(t *testing.T) {
+	store := New(t.TempDir() + "/providers.json")
+	input := Provider{ID: "demo", BaseURL: "http://demo", Enabled: true, Accounts: []Account{{ID: "one", APIKey: "secret", Enabled: true}}, ProviderSpecificData: map[string]any{"region": "ams"}, ModelLocks: map[string]int64{"model": 1}}
+	if err := store.Upsert(input); err != nil {
+		t.Fatal(err)
+	}
+	input.Accounts[0].APIKey = "changed"
+	input.ProviderSpecificData["region"] = "changed"
+	input.ModelLocks["model"] = 2
+	resolved := store.Resolve("demo/model")
+	resolved[0].Accounts[0].APIKey = "changed"
+	resolved[0].ProviderSpecificData["region"] = "changed"
+	resolved[0].ModelLocks["model"] = 2
+	provider, ok := store.Find("demo")
+	if !ok || provider.Accounts[0].APIKey != "secret" || provider.ProviderSpecificData["region"] != "ams" || provider.ModelLocks["model"] != 1 {
+		t.Fatalf("provider state leaked: %+v", provider)
+	}
+}

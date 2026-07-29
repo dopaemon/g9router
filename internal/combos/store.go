@@ -3,6 +3,8 @@ package combos
 import (
 	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 
 	"g9router/internal/db"
@@ -59,9 +61,20 @@ func (s *Store) Create(name string, models []any, kind string) (Combo, error) {
 			return Combo{}, fmt.Errorf("combo name already exists")
 		}
 	}
-	item := Combo{ID: fmt.Sprintf("combo-%d", len(s.items)+1), Name: name, Models: models, Kind: kind}
+	item := Combo{ID: fmt.Sprintf("combo-%d", s.nextID()), Name: name, Models: models, Kind: kind}
 	s.items = append(s.items, item)
 	return item, s.saveLocked()
+}
+
+func (s *Store) nextID() int {
+	next := 1
+	for _, item := range s.items {
+		value, err := strconv.Atoi(strings.TrimPrefix(item.ID, "combo-"))
+		if err == nil && value >= next {
+			next = value + 1
+		}
+	}
+	return next
 }
 func (s *Store) Update(id string, value Combo) (Combo, bool, error) {
 	if value.Name != "" && !validName.MatchString(value.Name) {
