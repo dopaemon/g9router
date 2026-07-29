@@ -365,13 +365,7 @@ func oauthProviderDisplayName(item provider) string {
 	if len(item.Accounts) > 0 {
 		accounts := make([]string, 0, len(item.Accounts))
 		for _, account := range item.Accounts {
-			label := strings.TrimSpace(account.Name)
-			if label == "" {
-				label = strings.TrimSpace(account.Email)
-			}
-			if label == "" {
-				label = name
-			}
+			label := oauthAccountBaseName(name, account)
 			if strings.HasPrefix(item.ID, "codex") && account.Plan != "" {
 				label += " · " + account.Plan
 			} else if account.Plan != "" && !strings.Contains(strings.ToLower(label), strings.ToLower(account.Plan)) {
@@ -396,6 +390,16 @@ func oauthProviderDisplayName(item provider) string {
 		name += " " + email
 	}
 	return name
+}
+
+func oauthAccountBaseName(providerName string, account providerAccount) string {
+	if name := strings.TrimSpace(account.Name); name != "" {
+		return name
+	}
+	if email := strings.TrimSpace(account.Email); email != "" {
+		return email
+	}
+	return providerName
 }
 
 func providerMenuItem(index int, label string, selected bool) string {

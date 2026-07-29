@@ -236,39 +236,47 @@ func (model *quotaModel) View() string {
 	if model.detail >= 0 && model.detail < len(model.items) {
 		return model.detailView(model.items[model.detail])
 	}
-	visible := max(1, min(3, model.ui.viewportHeight(14, 10)/4))
+	columns := max(1, min(len(model.items), (model.ui.innerWidth()+2)/42))
+	gap := 2
+	cardWidth := max(1, (model.ui.innerWidth()-gap*(columns-1))/columns)
+	visibleRows := max(1, min(3, model.ui.viewportHeight(14, 10)/4))
+	visible := max(1, min(len(model.items), visibleRows*columns))
 	start, end := viewportWindow(model.cursor, len(model.items), visible)
-	rows := make([]string, 0, end-start)
+	cards := make([]string, 0, end-start)
 	for index := start; index < end; index++ {
 		item := model.items[index]
 		label := item.Name
 		if !item.Codex {
 			label += " (" + item.ID + ")"
 		}
+		rows := []string{}
 		if item.Message != "" {
 			rows = append(rows, providerMenuItem(index, label+" — "+item.Message, index == model.cursor))
-			continue
+		} else {
+			if item.Plan != "" {
+				label += " · " + item.Plan
+			}
+			rows = append(rows, providerMenuItem(index, label, index == model.cursor))
+			if len(item.Quotas) == 0 {
+				rows = append(rows, "   "+model.ui.t("quota.requests")+": "+formatInt(item.Requests)+"  "+model.ui.t("quota.errors")+": "+formatInt(item.Errors))
+			} else {
+				for _, name := range sortedQuotaNames(item.Quotas) {
+					quota := item.Quotas[name]
+					rows = append(rows, "   "+quotaBar(name, quota, cardWidth))
+				}
+			}
 		}
-		if item.Plan != "" {
-			label += " · " + item.Plan
-		}
-		rows = append(rows, providerMenuItem(index, label, index == model.cursor))
-		if len(item.Quotas) == 0 {
-			rows = append(rows, "   "+model.ui.t("quota.requests")+": "+formatInt(item.Requests)+"  "+model.ui.t("quota.errors")+": "+formatInt(item.Errors))
-			continue
-		}
-		for _, name := range sortedQuotaNames(item.Quotas) {
-			quota := item.Quotas[name]
-			rows = append(rows, "   "+quotaBar(name, quota, model.ui.innerWidth()))
-		}
+		cards = append(cards, model.ui.innerStyle(cardWidth).Render(strings.Join(rows, "\n")))
 	}
-	if len(rows) > 10 {
-		rows = rows[:10]
+	if len(cards) == 0 {
+		cards = append(cards, model.ui.innerStyle().Render(mutedStyle.Render(model.ui.t("quota.noProviders"))))
 	}
-	if len(rows) == 0 {
-		rows = append(rows, mutedStyle.Render(model.ui.t("quota.noProviders")))
+	cardRows := make([]string, 0, (len(cards)+columns-1)/columns)
+	for index := 0; index < len(cards); index += columns {
+		end := min(index+columns, len(cards))
+		cardRows = append(cardRows, lipgloss.JoinHorizontal(lipgloss.Top, cards[index:end]...))
 	}
-	content := cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota"))+"\n"+strings.Join(rows, "\n"))
+	content := lipgloss.JoinVertical(lipgloss.Left, cardRows...)
 	autoRefresh := "OFF"
 	if model.autoRefresh {
 		autoRefresh = "ON"
@@ -276,7 +284,7 @@ func (model *quotaModel) View() string {
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
 		"↑↓/jk move", "Enter select", "r refresh", "a auto-refresh ("+autoRefresh+")", "q back",
 	))
-	return model.ui.outerStyle().Render(content + "\n\n" + controls)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + content + "\n\n" + controls)
 }
 
 func (model *quotaModel) loadingView() string {
@@ -391,7 +399,11 @@ func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
 	connections := splitOAuthAccounts(response.Connections)
 	items := make([]quotaItem, 0, len(connections))
 	for _, provider := range connections {
-		item := quotaItem{ID: provider.ID, Name: oauthProviderDisplayName(provider), Email: quotaProviderEmail(provider), Codex: provider.APIType == "codex" || strings.HasPrefix(provider.ID, "codex")}
+		name := provider.Name
+		if len(provider.Accounts) > 0 {
+			name = oauthAccountBaseName(provider.Name, provider.Accounts[0])
+		}
+		item := quotaItem{ID: provider.ID, Name: name, Email: quotaProviderEmail(provider), Codex: provider.APIType == "codex" || strings.HasPrefix(provider.ID, "codex")}
 		if item.Name == "" {
 			item.Name = provider.ID
 		}
