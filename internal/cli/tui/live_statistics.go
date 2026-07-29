@@ -177,6 +177,9 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 	if len(rows) == 0 {
 		rows = append(rows, model.ui.t("stats.noUsage"))
 	}
+	if len(rows) > 5 {
+		rows = rows[:5]
+	}
 	width := model.ui.columnWidth(2)
 	if model.ui.compact() {
 		width = model.ui.innerWidth()
@@ -238,6 +241,9 @@ func (model *statisticsModel) recentCard() string {
 			status = "ok"
 		}
 		rows = append(rows, fmt.Sprintf("%-5s %-10s %-7s %s/%s", status, truncateText(request.Model, 10), truncateText(request.Provider, 7), formatInt(request.PromptTokens), formatInt(request.CompletionTokens)))
+	}
+	if len(rows) > 5 {
+		rows = rows[:5]
 	}
 	if len(rows) == 0 {
 		rows = append(rows, model.ui.t("stats.noRequests"))

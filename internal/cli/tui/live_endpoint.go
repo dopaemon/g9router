@@ -162,7 +162,11 @@ func (model *endpointLiveModel) View() string {
 	if len(model.keys) == 0 {
 		keys = model.ui.t("keys.none")
 	}
-	for index, key := range model.keys {
+	visibleKeys := model.keys
+	if len(visibleKeys) > 10 {
+		visibleKeys = visibleKeys[:10]
+	}
+	for index, key := range visibleKeys {
 		if keys != "" {
 			keys += "\n"
 		}
@@ -176,14 +180,14 @@ func (model *endpointLiveModel) View() string {
 	if model.err != nil {
 		controls += "\n" + errorStyle.Render(model.ui.t("common.error")+": "+model.ui.errorSummary(model.err))
 	}
-	controlsCard := model.ui.controlCard(model.ui.t("keys.controls"), controls)
+	controlsCard := model.ui.controlCard(model.ui.t("common.controls"), controls)
 	view := model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Center, endpointCard, keysCard, controlsCard))
-	model.controlRegions = endpointControlRegions(view, model.ui.t("keys.controls"), len(strings.Split(controlGrid(model), "\n")), model.ui.width)
+	model.controlRegions = endpointControlRegions(view, model.ui.t("common.controls"), len(endpointControlItems(model.ui)), model.ui.width, model.ui.compact())
 	return view
 }
 
-func endpointControlRegions(view, title string, rows, width int) []tuiRegion {
-	if rows <= 0 {
+func endpointControlRegions(view, title string, items, width int, compact bool) []tuiRegion {
+	if items <= 0 {
 		return nil
 	}
 	top := -1
@@ -196,9 +200,19 @@ func endpointControlRegions(view, title string, rows, width int) []tuiRegion {
 	if top < 0 {
 		return nil
 	}
-	regions := make([]tuiRegion, rows)
+	regions := make([]tuiRegion, items)
+	columnWidth := max(1, width/2)
 	for index := range regions {
-		regions[index] = tuiRegion{left: 0, top: top + index, width: max(1, width), height: 1}
+		row, column := index, 0
+		if !compact {
+			row, column = index/2, index%2
+		}
+		regions[index] = tuiRegion{left: column * columnWidth, top: top + row, width: func() int {
+			if compact {
+				return max(1, width)
+			}
+			return columnWidth
+		}(), height: 1}
 	}
 	return regions
 }
@@ -211,31 +225,21 @@ func endpointLine(ui *UI, label, value string) string {
 }
 
 func controlGrid(model *endpointLiveModel) string {
-	items := []string{"t " + model.ui.t("keys.tunnelToggle"), "s " + model.ui.t("keys.tailscaleToggle"), "c " + model.ui.t("keys.create"), "r " + model.ui.t("keys.rename"), "a " + model.ui.t("keys.toggle"), "d " + model.ui.t("keys.delete"), "v " + model.ui.t("keys.show"), "q " + model.ui.t("keys.back")}
-	for index := range items {
-		items[index] = strconv.Itoa(index+1) + "  " + items[index]
-	}
-	column := model.ui.controlStyle()
-	if model.ui.compact() {
-		rows := make([]string, 0, len(items))
-		for index, item := range items {
-			rows = append(rows, controlItem(item, index == model.cursor))
-		}
-		return lipgloss.JoinVertical(lipgloss.Left, rows...)
-	}
-	rows := make([]string, 0, 4)
-	for index := 0; index < len(items); index += 2 {
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(controlItem(items[index], index == model.cursor)), column.Render(controlItem(items[index+1], index+1 == model.cursor))))
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	items := endpointControlItems(model.ui)
+	return model.ui.controlColumnsSelected(model.cursor, items...)
 }
 
-func controlItem(label string, selected bool) string {
-	style := controlsStyle
-	if selected {
-		style = focusStyle
+func endpointControlItems(ui *UI) []string {
+	return []string{
+		"t " + ui.t("keys.tunnelToggle"),
+		"s " + ui.t("keys.tailscaleToggle"),
+		"c " + ui.t("keys.create"),
+		"r " + ui.t("keys.rename"),
+		"a " + ui.t("keys.toggle"),
+		"d " + ui.t("keys.delete"),
+		"v " + ui.t("keys.show"),
+		"q " + ui.t("keys.back"),
 	}
-	return style.Render(label)
 }
 
 func endpointActionIndex(value string) (int, bool) {

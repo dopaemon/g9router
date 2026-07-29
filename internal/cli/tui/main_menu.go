@@ -20,6 +20,13 @@ type mainMenuModel struct {
 	menuWidth int
 }
 
+const g9routerBanner = `██████╗  █████╗ ██████╗  ██████╗ ██╗   ██╗████████╗███████╗██████╗
+██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██║   ██║╚══██╔══╝██╔════╝██╔══██╗
+██║  ███╗╚██████║██████╔╝██║   ██║██║   ██║   ██║   █████╗  ██████╔╝
+██║   ██║ ╚═══██║██╔══██╗██║   ██║██║   ██║   ██║   ██╔══╝  ██╔══██╗
+╚██████╔╝ █████╔╝██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║
+ ╚═════╝  ╚════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝`
+
 func (ui *UI) mainMenuChoice(items []string) (string, error) {
 	if !isInteractiveWriter(ui.Out) {
 		return "", nil
@@ -95,12 +102,33 @@ func (model *mainMenuModel) View() string {
 	for row := 0; row < rowCount; row++ {
 		rows = append(rows, column.Render(model.menuItem(row)))
 	}
-	menu := strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(fmt.Sprintf(model.ui.t("common.menuControls"), len(model.items)))
+	menu := strings.Join(rows, "\n")
 	model.menuTop = 2 + 1 + 2 + 2
 	model.menuLeft = 1 + 2 + 1 + 2
 	model.menuWidth = menuWidth
 	menuCard := model.ui.innerStyle().Render(menu)
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + menuCard)
+	banner := truncateBanner(g9routerBanner, max(1, menuWidth+4))
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		"↑↓/jk "+model.ui.t("controls.menuMove"),
+		"Enter "+model.ui.t("controls.menuSelect"),
+		fmt.Sprintf("1–%d "+model.ui.t("controls.menuDirect"), len(model.items)),
+		"q "+model.ui.t("controls.menuExit"),
+	))
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.title")) + "\n\n" + banner + "\n\n" + menuCard + "\n\n" + controls)
+}
+
+func truncateBanner(value string, width int) string {
+	lines := strings.Split(value, "\n")
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#F472B6"))
+	for index := range lines {
+		line := ansi.Truncate(lines[index], max(1, width), "")
+		padding := max(0, (width-lipgloss.Width(line))/2)
+		if index == 0 && padding > 0 {
+			padding--
+		}
+		lines[index] = strings.Repeat(" ", padding) + style.Render(line)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (model *mainMenuModel) menuItem(index int) string {

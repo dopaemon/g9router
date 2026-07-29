@@ -227,7 +227,7 @@ func (model *quotaModel) toggleUsage() error {
 
 func (model *quotaModel) View() string {
 	if model.loading {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.loadingView()
 	}
 	if model.err != nil && len(model.items) == 0 {
 		return model.ui.errorView(model.ui.t("menu.quota"), model.err)
@@ -235,8 +235,11 @@ func (model *quotaModel) View() string {
 	if model.detail >= 0 && model.detail < len(model.items) {
 		return model.detailView(model.items[model.detail])
 	}
-	rows := make([]string, 0, len(model.items))
-	for index, item := range model.items {
+	visible := max(1, min(3, model.ui.viewportHeight(14, 10)/4))
+	start, end := viewportWindow(model.cursor, len(model.items), visible)
+	rows := make([]string, 0, end-start)
+	for index := start; index < end; index++ {
+		item := model.items[index]
 		label := item.Name + " (" + item.ID + ")"
 		if item.Message != "" {
 			rows = append(rows, providerMenuItem(index, label+" — "+item.Message, index == model.cursor))
@@ -255,6 +258,9 @@ func (model *quotaModel) View() string {
 			rows = append(rows, "   "+quotaBar(name, quota, model.ui.innerWidth()))
 		}
 	}
+	if len(rows) > 10 {
+		rows = rows[:10]
+	}
 	if len(rows) == 0 {
 		rows = append(rows, mutedStyle.Render(model.ui.t("quota.noProviders")))
 	}
@@ -267,6 +273,16 @@ func (model *quotaModel) View() string {
 		"↑↓/jk move", "Enter select", "r refresh", "a auto-refresh ("+autoRefresh+")", "q back",
 	))
 	return model.ui.outerStyle().Render(content + "\n\n" + controls)
+}
+
+func (model *quotaModel) loadingView() string {
+	line := mutedStyle.Render(truncateText("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░", max(1, model.ui.innerWidth()-4)))
+	rows := strings.Join([]string{line, line, line}, "\n")
+	content := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n" + rows)
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		"↑↓/jk move", "Enter select", "r refresh", "a auto-refresh", "q back",
+	))
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + content + "\n\n" + controls)
 }
 
 func (model *quotaModel) detailView(item quotaItem) string {
@@ -301,6 +317,9 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		quota := item.Quotas[name]
 		quotaRows = append(quotaRows, quotaBar(name, quota, model.ui.innerWidth()))
 	}
+	if len(quotaRows) > 10 {
+		quotaRows = quotaRows[:10]
+	}
 	quotaCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n" + strings.Join(quotaRows, "\n"))
 	usageStatus := model.ui.t("quota.usageOff")
 	if model.usageEnabled {
@@ -311,16 +330,16 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		actions = append(actions, model.ui.t("quota.resetLimit"))
 	}
 	actions = append(actions, model.ui.t("common.back"))
-	menuRows := make([]string, 0, len(actions))
+	controlItems := make([]string, 0, len(actions))
 	for index, action := range actions {
 		disabled := item.ID == "codex" && index == 2 && (!item.ResetCreditsKnown || item.ResetCredits == 0)
 		if disabled {
-			menuRows = append(menuRows, mutedStyle.Padding(0, 1).Render(string(rune('1'+index))+"  "+action+" (disabled)"))
+			controlItems = append(controlItems, action+" (disabled)")
 			continue
 		}
-		menuRows = append(menuRows, providerMenuItem(index, action, index == model.detailCursor))
+		controlItems = append(controlItems, action)
 	}
-	menuCard := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("quota.functions")) + "\n" + strings.Join(menuRows, "\n") + "\n\n" + mutedStyle.Render("↑↓/jk move  Enter select"))
+	menuCard := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumnsSelected(model.detailCursor, controlItems...))
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + infoCard + "\n\n" + quotaCard + "\n\n" + menuCard)
 }
 

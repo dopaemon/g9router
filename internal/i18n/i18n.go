@@ -9,7 +9,7 @@ const (
 
 var translations = map[string]map[string]string{
 	English: {
-		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.quota": "Quota Tracking", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "9Router CLI", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.chooseKey": "Choose API key", "quota.requests": "Requests", "quota.errors": "Errors", "quota.input": "Input tokens", "quota.output": "Output tokens", "quota.noProviders": "No providers found.", "quota.unavailable": "Quota data unavailable", "quota.usage": "Usage", "quota.usageOn": "Usage ON", "quota.usageOff": "Usage OFF", "quota.toggleUsage": "u toggle usage", "quota.functions": "Usage functions", "quota.refresh": "r refresh", "quota.back": "q back",
+		"menu.endpoint": "Endpoint & Key", "menu.providers": "Providers", "menu.combos": "Combos", "menu.statistics": "Statistics", "menu.quota": "Quota Tracking", "menu.cliTools": "CLI Tools", "menu.logs": "Logs", "menu.settings": "Settings", "menu.language": "Language", "menu.exit": "Exit", "menu.title": "G9Router", "language.title": "Choose language", "language.english": "English", "language.vietnamese": "Tiếng Việt", "endpoint.title": "Endpoint & Key", "endpoint.card": "API Endpoint", "endpoint.local": "Local", "endpoint.tunnel": "Tunnel", "endpoint.tailscale": "Tailscale", "keys.card": "API Keys", "keys.none": "No API keys found.", "keys.selectShow": "Press v to select an API, then show it", "keys.created": "API key created. Press v to show it.", "keys.tunnelToggle": "Toggle Tunnel", "keys.tunnelUpdated": "Tunnel updated", "keys.tunnelUnchanged": "Tunnel unchanged", "keys.tailscaleToggle": "Toggle Tailscale", "keys.tailscaleUpdated": "Tailscale updated", "keys.tailscaleUnchanged": "Tailscale unchanged", "keys.toggle": "On/Off", "keys.toggleUpdated": "API key status updated", "keys.create": "Create API key", "keys.rename": "Rename", "keys.delete": "Delete", "keys.show": "Show", "keys.back": "Back", "keys.autoRefresh": "Auto refresh: 2s", "common.on": "ON", "common.off": "OFF", "common.notInstalled": "not installed", "common.error": "Error", "common.back": "Back", "common.retryBack": "r retry  q back", "common.menuControls": "↑↓/jk move  Enter select  1–%d direct  q exit", "common.controls": "Controls", "common.save": "Save", "common.cancel": "Cancel", "form.apiName": "API name", "form.finish": "Finish", "form.reveal": "Reveal this API key in terminal?", "form.delete": "Delete this API key?", "form.disableTunnel": "Disable Tunnel?", "form.chooseKey": "Choose API key", "quota.requests": "Requests", "quota.errors": "Errors", "quota.input": "Input tokens", "quota.output": "Output tokens", "quota.noProviders": "No providers found.", "quota.unavailable": "Quota data unavailable", "quota.usage": "Usage", "quota.usageOn": "Usage ON", "quota.usageOff": "Usage OFF", "quota.toggleUsage": "u toggle usage", "quota.functions": "Usage functions", "quota.refresh": "r refresh", "quota.back": "q back",
 	},
 	Vietnamese: {
 		"menu.endpoint":           "Endpoint & Key",
@@ -22,7 +22,7 @@ var translations = map[string]map[string]string{
 		"menu.settings":           "Cài đặt",
 		"menu.language":           "Ngôn ngữ",
 		"menu.exit":               "Thoát",
-		"menu.title":              "9Router CLI",
+		"menu.title":              "G9Router",
 		"language.title":          "Chọn ngôn ngữ",
 		"language.english":        "English",
 		"language.vietnamese":     "Tiếng Việt",
@@ -83,6 +83,54 @@ var translations = map[string]map[string]string{
 }
 
 func init() {
+	translations[English]["controls.providerEdit"] = "e edit"
+	translations[English]["controls.providerDelete"] = "d delete"
+	translations[English]["controls.providerToggle"] = "e on/off"
+	translations[English]["controls.providerSelect"] = "Enter select"
+	translations[English]["controls.providerMove"] = "↑↓/jk move"
+	translations[English]["controls.providerSwitch"] = "Tab/←→/hl switch card"
+	translations[English]["controls.providerAddAction"] = "a add"
+	translations[English]["controls.languageSelect"] = "Enter select"
+	translations[English]["controls.languageBack"] = "q back"
+	translations[English]["controls.toolsMove"] = "↑↓/jk move"
+	translations[English]["controls.toolsSwitch"] = "←→/hl switch"
+	translations[English]["controls.toolsShow"] = "Enter/s show"
+	translations[English]["controls.toolsReset"] = "r reset"
+	translations[English]["controls.toolsBack"] = "q back"
+	translations[English]["controls.comboMove"] = "↑↓/jk move"
+	translations[English]["controls.comboSelect"] = "Enter select"
+	translations[English]["controls.comboCreate"] = "c create"
+	translations[English]["controls.comboAddModel"] = "a add model"
+	translations[English]["controls.comboDelete"] = "d delete"
+	translations[English]["controls.comboBack"] = "q back"
+	translations[Vietnamese]["controls.providerEdit"] = "e sửa"
+	translations[Vietnamese]["controls.providerDelete"] = "d xóa"
+	translations[Vietnamese]["controls.providerToggle"] = "e bật/tắt"
+	translations[Vietnamese]["controls.providerSelect"] = "Enter chọn"
+	translations[Vietnamese]["controls.providerMove"] = "↑↓/jk di chuyển"
+	translations[Vietnamese]["controls.providerSwitch"] = "Tab/←→/hl đổi card"
+	translations[Vietnamese]["controls.providerAddAction"] = "a thêm"
+	translations[Vietnamese]["controls.languageSelect"] = "Enter chọn"
+	translations[Vietnamese]["controls.languageBack"] = "q quay lại"
+	translations[Vietnamese]["controls.toolsMove"] = "↑↓/jk di chuyển"
+	translations[Vietnamese]["controls.toolsSwitch"] = "←→/hl đổi"
+	translations[Vietnamese]["controls.toolsShow"] = "Enter/s xem"
+	translations[Vietnamese]["controls.toolsReset"] = "r đặt lại"
+	translations[Vietnamese]["controls.toolsBack"] = "q quay lại"
+	translations[Vietnamese]["controls.comboMove"] = "↑↓/jk di chuyển"
+	translations[Vietnamese]["controls.comboSelect"] = "Enter chọn"
+	translations[Vietnamese]["controls.comboCreate"] = "c tạo"
+	translations[Vietnamese]["controls.comboAddModel"] = "a thêm model"
+	translations[Vietnamese]["controls.comboDelete"] = "d xóa"
+	translations[Vietnamese]["controls.comboBack"] = "q quay lại"
+	translations[English]["controls.menuMove"] = "move"
+	translations[English]["controls.menuSelect"] = "select"
+	translations[English]["controls.menuDirect"] = "direct"
+	translations[English]["controls.menuExit"] = "exit"
+	translations[Vietnamese]["controls.menuMove"] = "di chuyển"
+	translations[Vietnamese]["controls.menuSelect"] = "chọn"
+	translations[Vietnamese]["controls.menuDirect"] = "chọn nhanh"
+	translations[Vietnamese]["controls.menuExit"] = "thoát"
 	translations[English]["keys.controls"] = "Controls"
 	translations[Vietnamese]["keys.controls"] = "Điều khiển"
 	translations[English]["common.refresh"] = "Refresh"

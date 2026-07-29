@@ -140,22 +140,38 @@ func (ui *UI) controlCard(title, body string) string {
 }
 
 func (ui *UI) controlColumns(items ...string) string {
+	return ui.controlColumnsSelected(-1, items...)
+}
+
+func (ui *UI) controlColumnsSelected(selected int, items ...string) string {
 	if len(items) == 0 {
 		return ""
 	}
 	if ui.compact() {
 		rows := make([]string, 0, len(items))
-		for _, item := range items {
-			rows = append(rows, ui.controlStyle().Render(mutedStyle.Render(item)))
+		for index, item := range items {
+			style := mutedStyle
+			if index == selected {
+				style = focusStyle
+			}
+			rows = append(rows, ui.controlStyle().Render(style.Render(item)))
 		}
 		return lipgloss.JoinVertical(lipgloss.Left, rows...)
 	}
 	rows := make([]string, 0, (len(items)+1)/2)
 	for index := 0; index < len(items); index += 2 {
-		left := ui.controlStyle().Render(mutedStyle.Render(items[index]))
+		leftStyle := mutedStyle
+		if index == selected {
+			leftStyle = focusStyle
+		}
+		left := ui.controlStyle().Render(leftStyle.Render(items[index]))
 		right := ""
 		if index+1 < len(items) {
-			right = ui.controlStyle().Render(mutedStyle.Render(items[index+1]))
+			rightStyle := mutedStyle
+			if index+1 == selected {
+				rightStyle = focusStyle
+			}
+			right = ui.controlStyle().Render(rightStyle.Render(items[index+1]))
 		}
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, right))
 	}

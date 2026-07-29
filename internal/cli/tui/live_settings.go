@@ -131,7 +131,8 @@ func (model *settingsModel) View() string {
 		settingsActionItem(model.ui, 4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
 		settingsActionItem(model.ui, 5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
-		model.ui.t("controls.toolsMoveSwitch"), model.ui.t("controls.languageSelectBack"),
+		model.ui.t("controls.toolsMove"), model.ui.t("controls.toolsSwitch"),
+		model.ui.t("controls.languageSelect"), model.ui.t("controls.languageBack"),
 	))
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)

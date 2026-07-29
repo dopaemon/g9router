@@ -250,21 +250,14 @@ func (model *providerLiveModel) View() string {
 		tabLine[index] = style.Render(label)
 	}
 	content := model.cardContent()
-	controlItems := []string{model.ui.t("controls.moveSwitch")}
+	controlItems := []string{model.ui.t("controls.providerMove"), model.ui.t("controls.providerSwitch")}
 	busy := model.loading
 	if !busy {
 		if _, ok := model.selectedProvider(); ok {
-			controlItems = append(controlItems, model.providerActions())
-			switch model.tab {
-			case oauthProviderTab:
-				controlItems = append(controlItems, model.ui.t("controls.providerOAuthSelect"), model.ui.t("controls.deleteBack"))
-			case freeProviderTab:
-				controlItems = append(controlItems, model.ui.t("controls.providerFreeSelect"))
-			default:
-				controlItems = append(controlItems, model.ui.t("controls.selectEdit"), model.ui.t("controls.deleteBack"))
-			}
+			controlItems = append(controlItems, model.providerActions()...)
+			controlItems = append(controlItems, model.ui.t("controls.providerSelect"))
 		} else if model.canAdd() {
-			controlItems = append(controlItems, model.ui.t("controls.providerAdd"))
+			controlItems = append(controlItems, model.ui.t("controls.providerSelect"), model.ui.t("controls.providerAddAction"))
 		}
 	} else {
 		controlItems = append(controlItems, model.ui.t("common.loading"))
@@ -337,7 +330,7 @@ func (model *providerLiveModel) cardContent() string {
 		model.itemsStart, model.itemsHeight = 0, 0
 		return model.ui.innerStyle().Render(model.providerContent(title, mutedStyle.Render(model.ui.t("screen.noProviders"))))
 	}
-	start, end := viewportWindow(model.cursor, len(rows), model.ui.viewportHeight(14, 10))
+	start, end := viewportWindow(model.cursor, len(rows), max(1, min(10, model.ui.viewportHeight(14, 10))))
 	model.itemsStart, model.itemsHeight = start, end-start
 	items := make([]string, 0, end-start)
 	for index := start; index < end; index++ {
@@ -430,14 +423,14 @@ func (model *providerLiveModel) canDelete() bool {
 	return selected && model.tab != freeProviderTab
 }
 
-func (model *providerLiveModel) providerActions() string {
+func (model *providerLiveModel) providerActions() []string {
 	switch model.tab {
 	case oauthProviderTab:
-		return model.ui.t("controls.providerOAuthActions")
+		return []string{model.ui.t("controls.providerToggle"), model.ui.t("controls.providerDelete"), model.ui.t("controls.providerTest")}
 	case freeProviderTab:
-		return model.ui.t("controls.providerFreeActions")
+		return []string{model.ui.t("controls.providerTest")}
 	default:
-		return model.ui.t("controls.providerEditDelete") + "  " + model.ui.t("controls.providerTest")
+		return []string{model.ui.t("controls.providerEdit"), model.ui.t("controls.providerDelete"), model.ui.t("controls.providerTest")}
 	}
 }
 

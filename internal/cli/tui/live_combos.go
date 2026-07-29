@@ -175,7 +175,7 @@ func (model *comboLiveModel) View() string {
 		return model.ui.errorView(model.ui.t("menu.combos"), model.err)
 	}
 	cards := []string{model.createCard()}
-	visible := max(1, model.ui.viewportHeight(14, 15)/5)
+	visible := max(1, min(3, model.ui.viewportHeight(14, 15)/5))
 	start, end := 0, len(model.combos)
 	if len(model.combos) > visible && model.cursor >= 2 {
 		start, end = viewportWindow((model.cursor-2)/2, len(model.combos), visible)
@@ -187,8 +187,9 @@ func (model *comboLiveModel) View() string {
 		cards = append(cards, model.comboCard(index, item))
 	}
 	controls := model.ui.controlColumns(
-		model.ui.t("controls.comboMoveSelect"), model.ui.t("controls.comboCreateAdd"),
-		model.ui.t("controls.comboEdit"), model.ui.t("controls.deleteBack"),
+		model.ui.t("controls.comboMove"), model.ui.t("controls.comboSelect"),
+		model.ui.t("controls.comboCreate"), model.ui.t("controls.comboAddModel"),
+		model.ui.t("controls.comboEdit"), model.ui.t("controls.comboDelete"), model.ui.t("controls.comboBack"),
 	)
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)

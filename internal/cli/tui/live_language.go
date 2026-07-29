@@ -101,7 +101,7 @@ func (model *languageModel) View() string {
 		}
 	}
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
-		model.ui.t("controls.languageSwitch"), model.ui.t("controls.languageSelectBack"),
+		model.ui.t("controls.languageSwitch"), model.ui.t("controls.languageSelect"), model.ui.t("controls.languageBack"),
 	))
 	model.cardsTopValue = cardTop
 	var cards string

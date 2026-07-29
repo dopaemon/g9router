@@ -134,19 +134,27 @@ func (model *logsModel) logIndexAtY(y int) int {
 	if model.rowCount() == 0 {
 		return 0
 	}
+	start, _ := viewportWindow(model.cursor, model.rowCount(), model.logsViewportHeight())
+	return moveIndex(start+y-model.itemsRegion.top, model.rowCount(), 0)
+}
+
+func (model *logsModel) logsViewportHeight() int {
 	visible := model.itemsRegion.height
 	if visible <= 0 {
 		visible = model.ui.viewportHeight(14, 10)
+		if model.paused {
+			visible = max(1, visible-1)
+		}
 	}
-	start, _ := viewportWindow(model.cursor, model.rowCount(), visible)
-	return moveIndex(start+y-model.itemsRegion.top, model.rowCount(), 0)
+	return max(1, min(10, visible))
 }
 
 func (model *logsModel) View() string {
 	model.tabRegions = nil
 	model.itemsRegion = tuiRegion{}
 	if model.detail != "" {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("logs.detail")) + "\n\n" + model.ui.innerStyle().Render(model.detail) + "\n\n" + mutedStyle.Render(model.ui.t("logs.detailControls")))
+		controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(model.ui.t("logs.detailControls")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("logs.detail")) + "\n\n" + model.ui.innerStyle().Render(model.detail) + "\n\n" + controls)
 	}
 	tabs := []string{model.ui.t("logs.apiAgent"), model.ui.t("logs.http")}
 	for index := range tabs {
@@ -166,10 +174,7 @@ func (model *logsModel) View() string {
 			left += 2
 		}
 	}
-	visible := model.ui.viewportHeight(14, 10)
-	if model.paused {
-		visible = max(1, visible-1)
-	}
+	visible := model.logsViewportHeight()
 	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	controlsText := model.ui.controlColumns(
@@ -229,11 +234,7 @@ func (model *logsModel) rows() string {
 		return mutedStyle.Render(model.ui.t("logs.empty"))
 	}
 	rows := model.currentRows()
-	visible := model.itemsRegion.height
-	if visible <= 0 {
-		visible = model.ui.viewportHeight(14, 10)
-	}
-	start, end := viewportWindow(model.cursor, len(rows), visible)
+	start, end := viewportWindow(model.cursor, len(rows), model.logsViewportHeight())
 	return strings.Join(rows[start:end], "\n")
 }
 

@@ -544,6 +544,17 @@ func TestLogsRowsKeepTenLineViewport(t *testing.T) {
 	}
 }
 
+func TestLogsRowsNeverGrowWithTallTerminal(t *testing.T) {
+	model := &logsModel{ui: &UI{width: 80, height: 100, Locale: "en"}, tab: 1, cursor: 19, httpLog: make([]string, 20)}
+	for index := range model.httpLog {
+		model.httpLog[index] = fmt.Sprintf("log-%d", index)
+	}
+	model.View()
+	if got := strings.Count(model.rows(), "log-"); got != 10 {
+		t.Fatalf("visible logs = %d, want 10", got)
+	}
+}
+
 func TestStatisticsPeriodsStackInCompactLayout(t *testing.T) {
 	model := &statisticsModel{ui: &UI{width: 42, Locale: i18n.Vietnamese}, period: 2}
 	view := model.View()
@@ -624,6 +635,46 @@ func TestLiveViewsRespectShortTerminalHeight(t *testing.T) {
 	}
 }
 
+func TestMenusUseSharedControlsCard(t *testing.T) {
+	ui := &UI{width: 80, height: 40, Locale: i18n.English}
+	models := []tea.Model{
+		&mainMenuModel{ui: ui, items: []string{"Providers"}},
+		&endpointLiveModel{ui: ui, hasData: true},
+		&providerLiveModel{ui: ui},
+		&comboLiveModel{ui: ui},
+		&statisticsModel{ui: ui},
+		&quotaModel{ui: ui, detail: -1},
+		&cliToolsModel{ui: ui},
+		&logsModel{ui: ui},
+		&settingsModel{ui: ui},
+		&languageModel{ui: ui},
+	}
+	for _, model := range models {
+		if view := model.View(); !strings.Contains(view, ui.t("common.controls")) {
+			t.Fatalf("view missing shared controls card: %q", view)
+		}
+	}
+}
+
+func TestMainMenuShowsG9RouterBanner(t *testing.T) {
+	model := &mainMenuModel{ui: &UI{width: 100, height: 40, Locale: i18n.English}, items: []string{"Providers"}}
+	view := model.View()
+	if !strings.Contains(view, "██████╗") {
+		t.Fatal("main menu banner is missing")
+	}
+	if got := lipgloss.Height(truncateBanner(g9routerBanner, model.ui.innerWidth()+4)); got != 6 {
+		t.Fatalf("banner height = %d, want 6", got)
+	}
+}
+
+func TestQuotaLoadingUsesSkeleton(t *testing.T) {
+	model := &quotaModel{ui: &UI{width: 80, height: 40, Locale: i18n.English}, loading: true, detail: -1}
+	view := model.View()
+	if strings.Contains(view, "Loading") || !strings.Contains(view, "░░░") {
+		t.Fatalf("quota loading view is not a skeleton: %q", view)
+	}
+}
+
 func TestProviderViewportKeepsLongListBounded(t *testing.T) {
 	items := make([]provider, 20)
 	for index := range items {
@@ -636,6 +687,29 @@ func TestProviderViewportKeepsLongListBounded(t *testing.T) {
 	}
 	if model.cursor < model.itemsStart || model.cursor >= model.itemsStart+model.itemsHeight {
 		t.Fatalf("cursor provider outside viewport: start=%d height=%d cursor=%d view=%q", model.itemsStart, model.itemsHeight, model.cursor, view)
+	}
+}
+
+func TestComboViewportKeepsTallTerminalBounded(t *testing.T) {
+	items := make([]combo, 20)
+	for index := range items {
+		items[index] = combo{Name: fmt.Sprintf("combo-%d", index)}
+	}
+	model := &comboLiveModel{ui: &UI{width: 80, height: 100, Locale: i18n.English}, combos: items, cursor: 19}
+	if got := lipgloss.Height(model.View()); got > 100 {
+		t.Fatalf("combo view height = %d", got)
+	}
+}
+
+func TestQuotaViewportKeepsTallTerminalBounded(t *testing.T) {
+	items := make([]quotaItem, 20)
+	for index := range items {
+		items[index] = quotaItem{ID: fmt.Sprintf("provider-%d", index), Name: fmt.Sprintf("Provider %d", index)}
+	}
+	model := &quotaModel{ui: &UI{width: 80, height: 100, Locale: i18n.English}, items: items, cursor: 19, detail: -1}
+	view := model.View()
+	if got := strings.Count(view, "Provider "); got > 3 {
+		t.Fatalf("visible quota providers = %d", got)
 	}
 }
 
