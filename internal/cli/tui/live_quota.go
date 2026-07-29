@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2/tree"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -233,35 +234,44 @@ func (model *quotaModel) View() string {
 		return model.detailView(model.items[model.detail])
 	}
 	columns := max(1, min(len(model.items), (model.ui.innerWidth()+2)/42))
-	cardWidth := model.ui.responsiveCardWidth(len(model.items), 42)
-	visibleRows := max(1, min(3, model.ui.viewportHeight(14, 10)/4))
+	cardWidth := max(1, (model.ui.innerWidth()+columns-1)/columns)
+	lineWidth := max(1, cardWidth-4)
+	branchWidth := max(1, lineWidth-4)
+	visibleRows := max(1, min(3, model.ui.viewportHeight(14, 10)/6))
 	visible := max(1, min(len(model.items), visibleRows*columns))
 	start, end := viewportWindow(model.cursor, len(model.items), visible)
 	cards := make([]string, 0, end-start)
 	for index := start; index < end; index++ {
 		item := model.items[index]
-		label := item.Name
-		if !item.Codex {
-			label += " (" + item.ID + ")"
+		account := item.Name
+		if item.Plan != "" {
+			account += " · " + item.Plan
 		}
-		rows := []string{}
+		accountRow := quotaAccountItem(model.ui.t("quota.account")+": "+truncateText(account, lineWidth), index == model.cursor)
+		children := []string{}
 		if item.Message != "" {
-			rows = append(rows, providerMenuItem(index, label+" — "+item.Message, index == model.cursor))
+			children = append(children, model.ui.t("quota.limit")+": "+errorStyle.Render(truncateText(item.Message, branchWidth)))
+		} else if len(item.Quotas) == 0 {
+			children = append(children, model.ui.t("quota.limit")+": "+model.ui.t("quota.unavailable"))
 		} else {
-			if item.Plan != "" {
-				label += " · " + item.Plan
-			}
-			rows = append(rows, providerMenuItem(index, label, index == model.cursor))
-			if len(item.Quotas) == 0 {
-				rows = append(rows, "   "+model.ui.t("quota.requests")+": "+formatInt(item.Requests)+"  "+model.ui.t("quota.errors")+": "+formatInt(item.Errors))
-			} else {
-				for _, name := range sortedQuotaNames(item.Quotas) {
-					quota := item.Quotas[name]
-					rows = append(rows, "   "+quotaBar(name, quota, cardWidth))
-				}
+			for _, name := range sortedQuotaNames(item.Quotas) {
+				quota := item.Quotas[name]
+				children = append(children, model.ui.t("quota.limit")+" ("+name+"): "+quotaBarWithoutReset("", quota, branchWidth))
+				children = append(children, model.ui.t("quota.resetTime")+": "+quotaResetValue(quota))
 			}
 		}
-		cards = append(cards, model.ui.innerStyle(cardWidth).Render(strings.Join(rows, "\n")))
+		credits := "-"
+		if item.ResetCreditsKnown {
+			credits = formatInt(int64(item.ResetCredits))
+		}
+		children = append(children, model.ui.t("quota.resetCredits")+": "+credits)
+		quotaTree := tree.Root(accountRow)
+		for _, child := range children {
+			quotaTree.Child(truncateText(child, branchWidth))
+		}
+		quotaTree.Enumerator(tree.RoundedEnumerator)
+		rows := strings.Split(quotaTree.String(), "\n")
+		cards = append(cards, model.ui.innerStyle(cardWidth).Width(cardWidth).Render(strings.Join(rows, "\n")))
 	}
 	if len(cards) == 0 {
 		cards = append(cards, model.ui.innerStyle().Render(mutedStyle.Render(model.ui.t("quota.noProviders"))))
@@ -348,6 +358,14 @@ func (model *quotaModel) detailView(item quotaItem) string {
 	}
 	menuCard := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumnsSelected(model.detailCursor, controlItems...))
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n\n" + infoCard + "\n\n" + quotaCard + "\n\n" + menuCard)
+}
+
+func quotaAccountItem(label string, selected bool) string {
+	text := label
+	if selected {
+		return focusStyle.Copy().Padding(0, 0).Render(text)
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#CBD5E1")).Render(text)
 }
 
 func sortedQuotaNames(quotas map[string]quotaWindow) []string {
@@ -441,6 +459,14 @@ func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
 }
 
 func quotaBar(name string, quota quotaWindow, width int) string {
+	return renderQuotaBar(name, quota, width, true)
+}
+
+func quotaBarWithoutReset(name string, quota quotaWindow, width int) string {
+	return renderQuotaBar(name, quota, width, false)
+}
+
+func renderQuotaBar(name string, quota quotaWindow, width int, includeReset bool) string {
 	remaining := quota.Remaining
 	if quota.Total > 0 && remaining == 0 && quota.Used < quota.Total {
 		remaining = quota.Total - quota.Used
@@ -453,6 +479,12 @@ func quotaBar(name string, quota quotaWindow, width int) string {
 	if width < 60 {
 		barWidth = 12
 	}
+	if width < 42 {
+		barWidth = 8
+	}
+	if width < 32 {
+		barWidth = 4
+	}
 	filled := int(math.Round(remaining / 100 * float64(barWidth)))
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
 	style := errorStyle
@@ -462,12 +494,25 @@ func quotaBar(name string, quota quotaWindow, width int) string {
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("#FACC15"))
 	}
 	reset := ""
-	if quota.ResetAt != "" {
-		if resetAt, err := time.Parse(time.RFC3339, quota.ResetAt); err == nil {
-			reset = "  · reset " + formatDuration(time.Until(resetAt))
-		}
+	if includeReset {
+		reset = "  · reset " + quotaResetValue(quota)
 	}
-	return fmt.Sprintf("%-8s %s %3.0f%%%s", name, style.Render("["+bar+"]"), remaining, mutedStyle.Render(reset))
+	namePrefix := ""
+	if name != "" {
+		namePrefix = fmt.Sprintf("%-8s ", name)
+	}
+	return fmt.Sprintf("%s%s %3.0f%%%s", namePrefix, style.Render("["+bar+"]"), remaining, mutedStyle.Render(reset))
+}
+
+func quotaResetValue(quota quotaWindow) string {
+	if quota.ResetAt == "" {
+		return "-"
+	}
+	resetAt, err := time.Parse(time.RFC3339, quota.ResetAt)
+	if err != nil {
+		return "-"
+	}
+	return formatDuration(time.Until(resetAt))
 }
 
 func formatDuration(duration time.Duration) string {

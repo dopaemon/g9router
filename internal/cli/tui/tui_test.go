@@ -847,6 +847,39 @@ func TestQuotaBarShowsRemainingPercentage(t *testing.T) {
 	}
 }
 
+func TestQuotaCardsShowMiniInformation(t *testing.T) {
+	model := &quotaModel{
+		ui:     &UI{width: 80, height: 30, Locale: i18n.English},
+		items:  []quotaItem{{Name: "Codex user@example.com", Plan: "team", ResetCredits: 2, ResetCreditsKnown: true, Quotas: map[string]quotaWindow{"session": {Remaining: 75, Total: 100}}}},
+		detail: -1,
+	}
+	view := model.View()
+	for _, want := range []string{"Account:", "Quota", "Reset time:", "Reset credits: 2"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("quota card missing %q: %q", want, view)
+		}
+	}
+}
+
+func TestQuotaCardsNeverOverflowWidth(t *testing.T) {
+	for _, width := range []int{40, 60, 100} {
+		ui := &UI{width: width, height: 30, Locale: i18n.English}
+		model := &quotaModel{
+			ui: ui,
+			items: []quotaItem{
+				{Name: "Codex polarisdp@gmail.com", Plan: "team", Quotas: map[string]quotaWindow{"session": {Remaining: 67, Total: 100}}},
+				{Name: "Codex polarisdp@gmail.com", Plan: "free", Quotas: map[string]quotaWindow{"session": {Remaining: 0, Total: 100}}},
+			},
+			detail: -1,
+		}
+		for lineIndex, line := range strings.Split(model.View(), "\n") {
+			if lipgloss.Width(line) > ui.cardWidth()+2 {
+				t.Fatalf("width %d line %d overflows: %d > %d: %q", width, lineIndex, lipgloss.Width(line), ui.cardWidth()+2, line)
+			}
+		}
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if got := formatDuration(3*24*time.Hour + 5*time.Hour + 12*time.Minute); got != "3d 5h 12m" {
 		t.Fatalf("duration = %q", got)

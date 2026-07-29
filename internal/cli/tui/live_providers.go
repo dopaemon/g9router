@@ -403,7 +403,7 @@ func providerMenuItem(index int, label string, selected bool) string {
 	if selected {
 		marker = "›"
 	}
-	text := fmt.Sprintf("%s %2d  %s", marker, index+1, label)
+	text := fmt.Sprintf("%s %d  %s", marker, index+1, label)
 	if selected {
 		return focusStyle.Render(text)
 	}
