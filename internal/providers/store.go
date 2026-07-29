@@ -73,8 +73,7 @@ func (s *Store) Enabled() []Provider {
 	result := []Provider{}
 	for _, item := range s.items {
 		if item.Enabled {
-			item.APIKey = ""
-			result = append(result, item)
+			result = append(result, cloneProvider(item))
 		}
 	}
 	return result
@@ -96,9 +95,8 @@ func (s *Store) List() []Provider {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]Provider, len(s.items))
-	copy(result, s.items)
 	for i := range result {
-		result[i].Accounts = append([]Account(nil), result[i].Accounts...)
+		result[i] = cloneProvider(s.items[i])
 		result[i].APIKey = ""
 		for j := range result[i].Accounts {
 			result[i].Accounts[j].APIKey = ""
@@ -122,10 +120,29 @@ func (s *Store) Find(id string) (Provider, bool) {
 	defer s.mu.RUnlock()
 	for _, provider := range s.items {
 		if provider.ID == id {
-			return provider, true
+			return cloneProvider(provider), true
 		}
 	}
 	return Provider{}, false
+}
+
+func cloneProvider(provider Provider) Provider {
+	provider.Accounts = append([]Account(nil), provider.Accounts...)
+	if provider.ProviderSpecificData != nil {
+		data := provider.ProviderSpecificData
+		provider.ProviderSpecificData = make(map[string]any, len(data))
+		for key, value := range data {
+			provider.ProviderSpecificData[key] = value
+		}
+	}
+	if provider.ModelLocks != nil {
+		locks := provider.ModelLocks
+		provider.ModelLocks = make(map[string]int64, len(locks))
+		for key, value := range locks {
+			provider.ModelLocks[key] = value
+		}
+	}
+	return provider
 }
 
 func (s *Store) accountKeyLocked(providerIndex int) (string, string) {

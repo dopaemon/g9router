@@ -119,27 +119,28 @@ func (s *Server) Run() error {
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
 	providerID := s.providerIDForAccount(id)
+	_, _, accountFound := s.findProviderAccount(id)
 	if strings.HasSuffix(id, "/accounts") {
 		s.providerAccountsAPI(w, r, strings.TrimSuffix(id, "/accounts"))
 		return
 	}
 	if strings.HasSuffix(id, "/test") {
-		s.providerTestAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/test")))
+		s.providerTestAPI(w, r, strings.TrimSuffix(id, "/test"))
 		return
 	}
 	if strings.HasSuffix(id, "/test-models") {
-		s.providerTestModelsAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/test-models")))
+		s.providerTestModelsAPI(w, r, strings.TrimSuffix(id, "/test-models"))
 		return
 	}
 	if strings.HasSuffix(id, "/models") {
-		s.providerModelsAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/models")))
+		s.providerModelsAPI(w, r, strings.TrimSuffix(id, "/models"))
 		return
 	}
 	if id == "" || id == "client" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
 		return
 	}
-	if providerID != id {
+	if accountFound || providerID != id {
 		provider, ok := s.store.Find(providerID)
 		if !ok {
 			writeJSON(w, 404, map[string]string{"error": "provider account not found"})
@@ -292,6 +293,13 @@ func (s *Server) providerIDForAccount(id string) string {
 		}
 	}
 	return id
+}
+
+func (s *Server) providerForConnection(id string) (providers.Provider, bool) {
+	if provider, index, ok := s.findProviderAccount(id); ok {
+		return providerAccount(provider, provider.Accounts[index]), true
+	}
+	return s.store.Find(id)
 }
 
 func (s *Server) suggestedModelsAPI(w http.ResponseWriter, r *http.Request) {
@@ -781,19 +789,23 @@ func (s *Server) providerTestAPI(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	provider, found := s.store.Find(id)
+	provider, found := s.providerForConnection(id)
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return
 	}
+	persistProvider, _, accountConnection := s.findProviderAccount(id)
+	if !accountConnection {
+		persistProvider = provider
+	}
 	finish := func(valid bool, errValue any) {
-		provider.TestStatus = "error"
-		provider.LastError = fmt.Sprint(errValue)
+		persistProvider.TestStatus = "error"
+		persistProvider.LastError = fmt.Sprint(errValue)
 		if valid {
-			provider.TestStatus = "active"
-			provider.LastError = ""
+			persistProvider.TestStatus = "active"
+			persistProvider.LastError = ""
 		}
-		_ = s.store.Upsert(provider)
+		_ = s.store.Upsert(persistProvider)
 		writeJSON(w, http.StatusOK, map[string]any{"valid": valid, "error": errValue, "refreshed": false})
 	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(providerProxyBaseURL(provider), "/")+"/models", nil)
@@ -825,7 +837,7 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	provider, found := s.store.Find(id)
+	provider, found := s.providerForConnection(id)
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
 		return

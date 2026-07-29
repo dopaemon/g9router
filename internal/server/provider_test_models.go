@@ -16,7 +16,7 @@ func (s *Server) providerTestModelsAPI(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	provider, found := s.store.Find(id)
+	provider, found := s.providerForConnection(id)
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Connection not found"})
 		return

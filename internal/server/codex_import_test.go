@@ -100,3 +100,18 @@ func TestProviderQueryDeleteRemovesCodexPrimaryAccount(t *testing.T) {
 		t.Fatalf("accounts=%+v", provider.Accounts)
 	}
 }
+
+func TestProviderResourcePrefersCodexAccountIDOverProviderID(t *testing.T) {
+	app := New(Options{ProviderPath: t.TempDir() + "/providers.json", OAuthPath: t.TempDir() + "/oauth.json"})
+	if err := app.store.Upsert(providers.Provider{ID: "codex", Name: "Codex", Accounts: []providers.Account{
+		{ID: "codex-team", Name: "Team", Enabled: true},
+		{ID: "codex", Name: "Primary", Enabled: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/providers/codex", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"name":"Primary"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
