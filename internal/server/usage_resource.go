@@ -76,19 +76,19 @@ func (s *Server) usageResourceAPI(w http.ResponseWriter, r *http.Request) {
 		if !found {
 			continue
 		}
-		if provider.ID == connectionID {
-			providerName = provider.ID
-			selected = provider
-			break
-		}
 		for _, account := range provider.Accounts {
 			if account.ID == connectionID {
 				providerName = provider.ID
-				selected = provider
+				selected = providerAccount(provider, account)
 				break
 			}
 		}
 		if providerName != "" {
+			break
+		}
+		if provider.ID == connectionID {
+			providerName = provider.ID
+			selected = provider
 			break
 		}
 	}
@@ -239,14 +239,14 @@ func (s *Server) codexAvailableResetCredits(ctx context.Context, token, accountI
 }
 
 func codexUsageAccountID(provider providers.Provider, token string) string {
-	for _, key := range []string{"workspaceId", "accountId", "chatgptAccountId"} {
-		if value, ok := provider.ProviderSpecificData[key].(string); ok && value != "" {
-			return value
-		}
-	}
 	for _, account := range provider.Accounts {
 		if account.Workspace != "" {
 			return account.Workspace
+		}
+	}
+	for _, key := range []string{"workspaceId", "accountId", "chatgptAccountId"} {
+		if value, ok := provider.ProviderSpecificData[key].(string); ok && value != "" {
+			return value
 		}
 	}
 	return codexAccount(token, "").Workspace
@@ -293,6 +293,12 @@ func (s *Server) codexConnection(id string) (providers.Provider, string, bool) {
 		if !found {
 			continue
 		}
+		for _, account := range provider.Accounts {
+			if account.ID == id {
+				selected := providerAccount(provider, account)
+				return selected, selected.APIKey, true
+			}
+		}
 		if provider.ID == id {
 			if provider.APIKey != "" {
 				return provider, provider.APIKey, true
@@ -304,13 +310,18 @@ func (s *Server) codexConnection(id string) (providers.Provider, string, bool) {
 			}
 			return provider, "", true
 		}
-		for _, account := range provider.Accounts {
-			if account.ID == id {
-				return provider, account.APIKey, true
-			}
-		}
 	}
 	return providers.Provider{}, "", false
+}
+
+func providerAccount(provider providers.Provider, account providers.Account) providers.Provider {
+	if account.OAuthID == "" && account.ID != "codex-legacy" {
+		account.OAuthID = provider.OAuthID
+	}
+	provider.APIKey = account.APIKey
+	provider.OAuthID = account.OAuthID
+	provider.Accounts = []providers.Account{account}
+	return provider
 }
 
 func (s *Server) codexCreditsAPI(w http.ResponseWriter, r *http.Request, token, accountID string) {

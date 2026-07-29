@@ -23,6 +23,7 @@ type Provider struct {
 type Account struct {
 	ID            string `json:"id,omitempty"`
 	APIKey        string `json:"apiKey,omitempty"`
+	OAuthID       string `json:"oauthId,omitempty"`
 	Name          string `json:"name,omitempty"`
 	Email         string `json:"email,omitempty"`
 	Workspace     string `json:"workspace,omitempty"`
@@ -50,7 +51,7 @@ func (s *Store) Resolve(model string) []Provider {
 		}
 		selected := item
 		if len(item.Accounts) > 0 {
-			selected.APIKey = s.accountKeyLocked(index)
+			selected.APIKey, selected.OAuthID = s.accountKeyLocked(index)
 			selected.Accounts = s.items[index].Accounts
 		}
 		alias := item.ID
@@ -97,6 +98,7 @@ func (s *Store) List() []Provider {
 	result := make([]Provider, len(s.items))
 	copy(result, s.items)
 	for i := range result {
+		result[i].Accounts = append([]Account(nil), result[i].Accounts...)
 		result[i].APIKey = ""
 		for j := range result[i].Accounts {
 			result[i].Accounts[j].APIKey = ""
@@ -126,11 +128,11 @@ func (s *Store) Find(id string) (Provider, bool) {
 	return Provider{}, false
 }
 
-func (s *Store) accountKeyLocked(providerIndex int) string {
+func (s *Store) accountKeyLocked(providerIndex int) (string, string) {
 	provider := &s.items[providerIndex]
 	accounts := provider.Accounts
 	if len(accounts) == 0 {
-		return provider.APIKey
+		return provider.APIKey, provider.OAuthID
 	}
 	start := s.next[provider.ID] % len(accounts)
 	for offset := 0; offset < len(accounts); offset++ {
@@ -141,9 +143,9 @@ func (s *Store) accountKeyLocked(providerIndex int) string {
 		}
 		provider.Accounts[index].RequestsUsed++
 		s.next[provider.ID] = index + 1
-		return account.APIKey
+		return account.APIKey, account.OAuthID
 	}
-	return ""
+	return "", ""
 }
 func (s *Store) Upsert(provider Provider) error {
 	s.mu.Lock()

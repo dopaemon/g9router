@@ -115,8 +115,12 @@ type provider struct {
 }
 
 type providerAccount struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Plan    string `json:"plan"`
+	OAuthID string `json:"oauthId"`
+	Enabled bool   `json:"enabled"`
 }
 
 type providersResponse struct {

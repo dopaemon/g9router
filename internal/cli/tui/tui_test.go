@@ -743,6 +743,46 @@ func TestOAuthProviderShowsEmail(t *testing.T) {
 	}
 }
 
+func TestOAuthProviderShowsCodexPlansForSameEmail(t *testing.T) {
+	name := oauthProviderDisplayName(provider{
+		ID:   "codex",
+		Name: "Codex",
+		Accounts: []providerAccount{
+			{ID: "codex-team", Name: "Codex user@example.com", Email: "user@example.com", Plan: "team"},
+			{ID: "codex", Name: "Codex user@example.com", Email: "user@example.com", Plan: "pro"},
+		},
+	})
+	if !strings.Contains(name, "· team") || !strings.Contains(name, "· pro") || strings.Contains(name, "primary user") || !strings.Contains(name, " / ") {
+		t.Fatalf("display name = %q", name)
+	}
+}
+
+func TestCodexPlansBecomeSeparateOAuthConnections(t *testing.T) {
+	connections := splitOAuthAccounts([]provider{{
+		ID: "codex", OAuthID: "codex-oauth", Accounts: []providerAccount{
+			{ID: "codex-team", Name: "Codex user@example.com", Plan: "team", OAuthID: "team-oauth", Enabled: true},
+			{ID: "codex", Name: "Codex user@example.com", Plan: "pro", OAuthID: "pro-oauth", Enabled: true},
+		},
+	}})
+	if len(connections) != 2 || connections[0].ID == connections[1].ID || len(connections[0].Accounts) != 1 || len(connections[1].Accounts) != 1 {
+		t.Fatalf("connections=%+v", connections)
+	}
+}
+
+func TestQuotaAndProviderUseSameCodexDisplayName(t *testing.T) {
+	connection := splitOAuthAccounts([]provider{{
+		ID: "codex", APIType: "openai-responses", Accounts: []providerAccount{{
+			ID: "codex", Name: "Codex user@example.com", Email: "user@example.com", Plan: "free", Enabled: true,
+		}},
+	}})[0]
+	if got := oauthProviderDisplayName(connection); got != "Codex user@example.com · free" {
+		t.Fatalf("provider display name = %q", got)
+	}
+	if connection.Accounts[0].Plan != "free" {
+		t.Fatalf("provider plan = %q", connection.Accounts[0].Plan)
+	}
+}
+
 func TestQuotaBarShowsRemainingPercentage(t *testing.T) {
 	bar := quotaBar("session", quotaWindow{Used: 25, Total: 100, Remaining: 75}, 80)
 	if !strings.Contains(bar, "75%") || !strings.Contains(bar, "█") {

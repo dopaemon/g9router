@@ -1,7 +1,6 @@
 package server
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -95,34 +94,47 @@ func (s *Server) codexBulkImportAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func codexAccount(token, name string) providers.Account {
-	sum := sha256.Sum256([]byte(token))
-	account := providers.Account{ID: "codex-" + base64.RawURLEncoding.EncodeToString(sum[:9]), APIKey: token, Name: strings.TrimSpace(name), Enabled: true}
+	return codexAccountFromTokens(token, token, name)
+}
+
+func codexAccountFromTokens(accessToken, claimsToken, name string) providers.Account {
+	email, workspace, plan := codexClaims(claimsToken)
+	account := providers.Account{ID: codexAccountID(plan), APIKey: accessToken, Name: strings.TrimSpace(name), Email: email, Workspace: workspace, Plan: plan, Enabled: true}
 	if len(account.Name) == 0 {
 		account.Name = "ChatGPT Access Token"
 	}
+	if account.Email != "" {
+		account.Name = "Codex " + account.Email
+	}
+	return account
+}
+
+func codexAccountID(plan string) string {
+	plan = strings.ToLower(strings.TrimSpace(plan))
+	if strings.Contains(plan, "team") || strings.Contains(plan, "business") || strings.Contains(plan, "enterprise") {
+		return "codex-team"
+	}
+	return "codex"
+}
+
+func codexClaims(token string) (email, workspace, plan string) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return account
+		return "", "", ""
 	}
 	encoded := strings.ReplaceAll(strings.ReplaceAll(parts[1], "-", "+"), "_", "/")
 	encoded += strings.Repeat("=", (4-len(encoded)%4)%4)
 	payload, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return account
+		return "", "", ""
 	}
 	var claims map[string]any
 	if json.Unmarshal(payload, &claims) != nil {
-		return account
+		return "", "", ""
 	}
 	profile, _ := claims["https://api.openai.com/profile"].(map[string]any)
 	auth, _ := claims["https://api.openai.com/auth"].(map[string]any)
-	account.Email = codexString(profile["email"], claims["email"], claims["preferred_username"])
-	account.Workspace = codexString(auth["chatgpt_account_id"])
-	account.Plan = codexString(auth["chatgpt_plan_type"])
-	if account.Email != "" {
-		account.Name = "Codex " + account.Email
-	}
-	return account
+	return codexString(profile["email"], claims["email"], claims["preferred_username"]), codexString(auth["chatgpt_account_id"]), codexString(auth["chatgpt_plan_type"])
 }
 
 func codexString(values ...any) string {

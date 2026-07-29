@@ -45,6 +45,7 @@ type quotaItem struct {
 	ID                string
 	Name              string
 	Email             string
+	Codex             bool
 	Requests          int64
 	Errors            int64
 	InputTokens       int64
@@ -132,7 +133,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					model.refreshing = true
 					return model, model.refreshCmd()
 				case 2:
-					if item.ID == "codex" {
+					if isCodexQuotaItem(item) {
 						if item.ResetCreditsKnown && item.ResetCredits > 0 {
 							model.refreshing = true
 							return model, model.resetCodexLimit(item)
@@ -204,7 +205,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *quotaModel) detailActionCount(item quotaItem) int {
-	if item.ID == "codex" {
+	if isCodexQuotaItem(item) {
 		return 4
 	}
 	return 3
@@ -240,7 +241,10 @@ func (model *quotaModel) View() string {
 	rows := make([]string, 0, end-start)
 	for index := start; index < end; index++ {
 		item := model.items[index]
-		label := item.Name + " (" + item.ID + ")"
+		label := item.Name
+		if !item.Codex {
+			label += " (" + item.ID + ")"
+		}
 		if item.Message != "" {
 			rows = append(rows, providerMenuItem(index, label+" — "+item.Message, index == model.cursor))
 			continue
@@ -297,7 +301,7 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		model.ui.t("quota.input") + ": " + formatInt(item.InputTokens),
 		model.ui.t("quota.output") + ": " + formatInt(item.OutputTokens),
 	}
-	if item.ID == "codex" {
+	if isCodexQuotaItem(item) {
 		credits := "-"
 		if item.ResetCreditsKnown {
 			credits = formatInt(int64(item.ResetCredits))
@@ -326,13 +330,13 @@ func (model *quotaModel) detailView(item quotaItem) string {
 		usageStatus = model.ui.t("quota.usageOn")
 	}
 	actions := []string{model.ui.t("common.refresh"), model.ui.t("quota.toggleUsage") + " (" + usageStatus + ")"}
-	if item.ID == "codex" {
+	if isCodexQuotaItem(item) {
 		actions = append(actions, model.ui.t("quota.resetLimit"))
 	}
 	actions = append(actions, model.ui.t("common.back"))
 	controlItems := make([]string, 0, len(actions))
 	for index, action := range actions {
-		disabled := item.ID == "codex" && index == 2 && (!item.ResetCreditsKnown || item.ResetCredits == 0)
+		disabled := isCodexQuotaItem(item) && index == 2 && (!item.ResetCreditsKnown || item.ResetCredits == 0)
 		if disabled {
 			controlItems = append(controlItems, action+" (disabled)")
 			continue
@@ -364,6 +368,10 @@ func quotaProviderEmail(item provider) string {
 	return ""
 }
 
+func isCodexQuotaItem(item quotaItem) bool {
+	return item.Codex
+}
+
 func (model *quotaModel) refreshCmd() tea.Cmd {
 	ui, usageEnabled := model.ui, model.usageEnabled
 	return func() tea.Msg { return loadQuota(ui, usageEnabled) }
@@ -380,11 +388,15 @@ func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
 	if err := ui.request(http.MethodGet, "/api/providers", nil, &response); err != nil {
 		return quotaDataMsg{usageEnabled: usageEnabled, err: err}
 	}
-	items := make([]quotaItem, 0, len(response.Connections))
-	for _, provider := range response.Connections {
-		item := quotaItem{ID: provider.ID, Name: provider.Name, Email: quotaProviderEmail(provider)}
+	connections := splitOAuthAccounts(response.Connections)
+	items := make([]quotaItem, 0, len(connections))
+	for _, provider := range connections {
+		item := quotaItem{ID: provider.ID, Name: oauthProviderDisplayName(provider), Email: quotaProviderEmail(provider), Codex: provider.APIType == "codex" || strings.HasPrefix(provider.ID, "codex")}
 		if item.Name == "" {
 			item.Name = provider.ID
+		}
+		if len(provider.Accounts) > 0 {
+			item.Plan = provider.Accounts[0].Plan
 		}
 		var usage struct {
 			Requests     int64                  `json:"requests"`
@@ -404,11 +416,14 @@ func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
 			continue
 		}
 		if err := ui.request(http.MethodGet, "/api/usage/"+url.PathEscape(provider.ID), nil, &usage); err != nil {
-			usage.Message = ui.t("quota.unavailable")
+			usage.Message = err.Error()
 		}
 		item.Requests, item.Errors = usage.Requests, usage.Errors
 		item.InputTokens, item.OutputTokens = usage.InputTokens, usage.OutputTokens
-		item.Message, item.Plan, item.Quotas = usage.Message, usage.Plan, usage.Quotas
+		item.Message, item.Quotas = usage.Message, usage.Quotas
+		if item.Plan == "" {
+			item.Plan = usage.Plan
+		}
 		if usage.ResetCredits != nil {
 			item.ResetCredits = usage.ResetCredits.AvailableCount
 			item.ResetCreditsKnown = true

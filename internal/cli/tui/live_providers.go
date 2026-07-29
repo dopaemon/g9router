@@ -313,7 +313,11 @@ func (model *providerLiveModel) cardContent() string {
 		title = model.ui.t("screen.oauthProviders")
 		rows = []string{model.ui.t("provider.addOAuth")}
 		for _, item := range model.oauthConnections {
-			rows = append(rows, oauthProviderDisplayName(item)+" ("+item.ID+") ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
+			label := oauthProviderDisplayName(item)
+			if !strings.HasPrefix(item.ID, "codex") {
+				label += " (" + item.ID + ")"
+			}
+			rows = append(rows, label+" ["+statusTextLocale(item.Enabled, model.ui.Locale)+"]")
 		}
 	case freeProviderTab:
 		title = model.ui.t("screen.freeProviders")
@@ -358,13 +362,28 @@ func oauthProviderDisplayName(item provider) string {
 	if name == "" {
 		name = item.ID
 	}
-	email := ""
 	if len(item.Accounts) > 0 {
-		email = strings.TrimSpace(item.Accounts[0].Email)
-		if email == "" && strings.TrimSpace(item.Accounts[0].Name) != "" {
-			name = strings.TrimSpace(item.Accounts[0].Name)
+		accounts := make([]string, 0, len(item.Accounts))
+		for _, account := range item.Accounts {
+			label := strings.TrimSpace(account.Name)
+			if label == "" {
+				label = strings.TrimSpace(account.Email)
+			}
+			if label == "" {
+				label = name
+			}
+			if strings.HasPrefix(item.ID, "codex") && account.Plan != "" {
+				label += " · " + account.Plan
+			} else if account.Plan != "" && !strings.Contains(strings.ToLower(label), strings.ToLower(account.Plan)) {
+				label += " (" + account.Plan + ")"
+			}
+			accounts = append(accounts, label)
+		}
+		if len(accounts) > 0 {
+			return strings.Join(accounts, " / ")
 		}
 	}
+	email := ""
 	if email == "" {
 		for _, key := range []string{"email", "userEmail", "githubEmail"} {
 			if value, ok := item.ProviderSpecificData[key].(string); ok && strings.TrimSpace(value) != "" {
@@ -665,10 +684,10 @@ func loadProviders(ui *UI) providerDataMsg {
 	if err := ui.request(http.MethodGet, "/api/oauth", nil, &credentials); err != nil {
 		return providerDataMsg{err: err}
 	}
-	custom, oauthConnections, apiKeys := []provider{}, []provider{}, []provider{}
+	custom, apiKeys := []provider{}, []provider{}
+	oauthConnections := splitOAuthAccounts(response.Connections)
 	for _, item := range response.Connections {
 		if item.OAuthID != "" || item.ID == "codex" {
-			oauthConnections = append(oauthConnections, item)
 			continue
 		}
 		if item.APIType == "openai" || item.APIType == "anthropic" {
@@ -690,6 +709,25 @@ func loadProviders(ui *UI) providerDataMsg {
 	sort.Slice(free, func(left, right int) bool { return free[left].ID < free[right].ID })
 	sort.Slice(apiKeys, func(left, right int) bool { return apiKeys[left].ID < apiKeys[right].ID })
 	return providerDataMsg{custom: custom, oauth: credentials, oauthConnections: oauthConnections, free: free, apiKeys: apiKeys}
+}
+
+func splitOAuthAccounts(connections []provider) []provider {
+	result := []provider{}
+	for _, item := range connections {
+		if item.ID == "codex" && len(item.Accounts) > 0 {
+			for _, account := range item.Accounts {
+				connection := item
+				connection.ID, connection.Name, connection.OAuthID = account.ID, account.Name, account.OAuthID
+				connection.Enabled, connection.Accounts = account.Enabled, []providerAccount{account}
+				result = append(result, connection)
+			}
+			continue
+		}
+		if item.OAuthID != "" || item.ID == "codex" {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func (model *providerLiveModel) oauthCredential(item provider) *oauthProvider {

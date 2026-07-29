@@ -118,24 +118,71 @@ func (s *Server) Run() error {
 
 func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	providerID := s.providerIDForAccount(id)
 	if strings.HasSuffix(id, "/accounts") {
 		s.providerAccountsAPI(w, r, strings.TrimSuffix(id, "/accounts"))
 		return
 	}
 	if strings.HasSuffix(id, "/test") {
-		s.providerTestAPI(w, r, strings.TrimSuffix(id, "/test"))
+		s.providerTestAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/test")))
 		return
 	}
 	if strings.HasSuffix(id, "/test-models") {
-		s.providerTestModelsAPI(w, r, strings.TrimSuffix(id, "/test-models"))
+		s.providerTestModelsAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/test-models")))
 		return
 	}
 	if strings.HasSuffix(id, "/models") {
-		s.providerModelsAPI(w, r, strings.TrimSuffix(id, "/models"))
+		s.providerModelsAPI(w, r, s.providerIDForAccount(strings.TrimSuffix(id, "/models")))
 		return
 	}
 	if id == "" || id == "client" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found"})
+		return
+	}
+	if providerID != id {
+		provider, ok := s.store.Find(providerID)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "provider account not found"})
+			return
+		}
+		for index := range provider.Accounts {
+			if provider.Accounts[index].ID != id {
+				continue
+			}
+			switch r.Method {
+			case http.MethodGet:
+				account := provider.Accounts[index]
+				writeJSON(w, 200, map[string]any{"connection": map[string]any{"id": account.ID, "provider": provider.ID, "name": account.Name, "oauthId": account.OAuthID, "enabled": account.Enabled, "isActive": account.Enabled, "accounts": []providers.Account{account}}})
+			case http.MethodPut:
+				var input map[string]any
+				if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil {
+					writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+					return
+				}
+				if value, ok := input["enabled"].(bool); ok {
+					provider.Accounts[index].Enabled = value
+				}
+				if value, ok := input["isActive"].(bool); ok {
+					provider.Accounts[index].Enabled = value
+				}
+				if err := s.store.Upsert(provider); err != nil {
+					writeJSON(w, 500, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, 200, map[string]bool{"success": true})
+			case http.MethodDelete:
+				provider.Accounts = append(provider.Accounts[:index], provider.Accounts[index+1:]...)
+				if err := s.store.Upsert(provider); err != nil {
+					writeJSON(w, 500, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, 200, map[string]string{"status": "deleted"})
+			default:
+				writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			}
+			return
+		}
+		writeJSON(w, 404, map[string]string{"error": "provider account not found"})
 		return
 	}
 	if r.Method == http.MethodDelete {
@@ -234,6 +281,17 @@ func (s *Server) providerResourceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+}
+
+func (s *Server) providerIDForAccount(id string) string {
+	for _, provider := range s.store.List() {
+		for _, account := range provider.Accounts {
+			if account.ID == id {
+				return provider.ID
+			}
+		}
+	}
+	return id
 }
 
 func (s *Server) suggestedModelsAPI(w http.ResponseWriter, r *http.Request) {
@@ -2981,7 +3039,17 @@ func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"connection": safeProviderConnection(provider)})
 	case http.MethodDelete:
-		if err := s.store.Delete(r.URL.Query().Get("id")); err != nil {
+		id := r.URL.Query().Get("id")
+		if provider, accountIndex, ok := s.findProviderAccount(id); ok {
+			provider.Accounts = append(provider.Accounts[:accountIndex], provider.Accounts[accountIndex+1:]...)
+			if err := s.store.Upsert(provider); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"message": "Connection deleted successfully"})
+			return
+		}
+		if err := s.store.Delete(id); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -2989,6 +3057,21 @@ func (s *Server) providerAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) findProviderAccount(id string) (providers.Provider, int, bool) {
+	for _, visible := range s.store.List() {
+		provider, ok := s.store.Find(visible.ID)
+		if !ok {
+			continue
+		}
+		for index, account := range provider.Accounts {
+			if account.ID == id {
+				return provider, index, true
+			}
+		}
+	}
+	return providers.Provider{}, 0, false
 }
 
 func safeProviderConnection(provider providers.Provider) map[string]any {

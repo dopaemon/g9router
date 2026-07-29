@@ -79,6 +79,11 @@ func (s *Server) genericOAuthExchangeAPI(w http.ResponseWriter, r *http.Request)
 		token.ExpiresIn = 3600
 	}
 	credentialID := provider + "-oauth"
+	var codexAccountValue providers.Account
+	if provider == "codex" {
+		codexAccountValue = codexAccountFromTokens(token.AccessToken, token.IDToken, "")
+		credentialID = codexAccountValue.ID + "-oauth"
+	}
 	if err := s.oauth.Upsert(oauth.Credential{ID: credentialID, Provider: provider, AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenURL: tokenURL, ClientID: clientID, ExpiresAt: time.Now().Add(time.Duration(token.ExpiresIn) * time.Second).UnixMilli(), Scope: token.Scope}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -87,14 +92,40 @@ func (s *Server) genericOAuthExchangeAPI(w http.ResponseWriter, r *http.Request)
 	name, email := provider, ""
 	if provider == "codex" {
 		baseURL, apiType = "https://chatgpt.com/backend-api/codex", "openai-responses"
-		email = codexAccount(token.IDToken, "").Email
+		email = codexAccountValue.Email
 		if email != "" {
 			name = "Codex " + email
 		}
 	}
-	if err := s.store.Upsert(providers.Provider{ID: provider, Name: name, BaseURL: baseURL, APIKey: token.AccessToken, APIType: apiType, OAuthID: credentialID, Enabled: true, TestStatus: "active"}); err != nil {
+	connection := providers.Provider{ID: provider, Name: name, BaseURL: baseURL, APIKey: token.AccessToken, APIType: apiType, OAuthID: credentialID, Enabled: true, TestStatus: "active"}
+	if provider == "codex" {
+		existing, _ := s.store.Find(provider)
+		connection = existing
+		connection.ID, connection.Name, connection.BaseURL, connection.APIType = provider, name, baseURL, apiType
+		connection.Enabled, connection.TestStatus, connection.OAuthID, connection.APIKey = true, "active", credentialID, token.AccessToken
+		if len(connection.Accounts) == 0 && existing.APIKey != "" {
+			connection.Accounts = append(connection.Accounts, providers.Account{ID: "codex-legacy", APIKey: existing.APIKey, OAuthID: existing.OAuthID, Name: existing.Name, Enabled: existing.Enabled})
+		}
+		codexAccountValue.OAuthID = credentialID
+		updated := false
+		for index := range connection.Accounts {
+			if codexAccountID(connection.Accounts[index].Plan) == codexAccountID(codexAccountValue.Plan) {
+				connection.Accounts[index] = codexAccountValue
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			connection.Accounts = append(connection.Accounts, codexAccountValue)
+		}
+	}
+	if err := s.store.Upsert(connection); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "connection": map[string]any{"provider": provider, "id": credentialID, "email": email, "name": name}})
+	connectionID := credentialID
+	if provider == "codex" {
+		connectionID = codexAccountValue.ID
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "connection": map[string]any{"provider": provider, "id": connectionID, "email": email, "name": name, "plan": codexAccountValue.Plan}})
 }

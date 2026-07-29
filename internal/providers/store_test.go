@@ -28,3 +28,18 @@ func TestResolveMatchesProviderAlias(t *testing.T) {
 		t.Fatalf("resolved providers = %+v", resolved)
 	}
 }
+
+func TestListRedactsWithoutMutatingStoredCredentials(t *testing.T) {
+	store := New(t.TempDir() + "/providers.json")
+	if err := store.Upsert(Provider{ID: "codex", APIKey: "parent", Accounts: []Account{{ID: "codex", APIKey: "account"}}}); err != nil {
+		t.Fatal(err)
+	}
+	listed := store.List()
+	if listed[0].APIKey != "" || listed[0].Accounts[0].APIKey != "" {
+		t.Fatalf("secrets leaked: %+v", listed)
+	}
+	provider, ok := store.Find("codex")
+	if !ok || provider.APIKey != "parent" || provider.Accounts[0].APIKey != "account" {
+		t.Fatalf("stored credentials mutated: %+v", provider)
+	}
+}
