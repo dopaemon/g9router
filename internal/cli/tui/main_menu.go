@@ -118,15 +118,20 @@ func (model *mainMenuModel) View() string {
 }
 
 func truncateBanner(value string, width int) string {
+	width = max(1, width)
 	lines := strings.Split(value, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		maxWidth = max(maxWidth, lipgloss.Width(line))
+	}
+	if maxWidth > width {
+		lines = []string{"G9Router"}
+	}
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#F472B6"))
+	center := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
 	for index := range lines {
-		line := ansi.Truncate(lines[index], max(1, width), "")
-		padding := max(0, (width-lipgloss.Width(line))/2)
-		if index == 0 && padding > 0 {
-			padding--
-		}
-		lines[index] = strings.Repeat(" ", padding) + style.Render(line)
+		line := ansi.Truncate(lines[index], width, "")
+		lines[index] = center.Render(style.Render(line))
 	}
 	return strings.Join(lines, "\n")
 }

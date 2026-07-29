@@ -699,6 +699,31 @@ func TestMainMenuShowsG9RouterBanner(t *testing.T) {
 	}
 }
 
+func TestBannerFallsBackWhenTooNarrow(t *testing.T) {
+	view := truncateBanner(g9routerBanner, 20)
+	if strings.Contains(view, "██████╗") || !strings.Contains(view, "G9Router") {
+		t.Fatalf("narrow banner = %q", view)
+	}
+}
+
+func TestBannerCentersEveryLine(t *testing.T) {
+	width := 100
+	for _, line := range strings.Split(truncateBanner(g9routerBanner, width), "\n") {
+		left := len(line) - len(strings.TrimLeft(line, " "))
+		right := len(line) - len(strings.TrimRight(line, " "))
+		if left < 0 || right < 0 || abs(left-right) > 1 {
+			t.Fatalf("line is not centered: left=%d right=%d line=%q", left, right, line)
+		}
+	}
+}
+
+func abs(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
 func TestQuotaLoadingUsesSkeleton(t *testing.T) {
 	model := &quotaModel{ui: &UI{width: 80, height: 40, Locale: i18n.English}, loading: true, detail: -1}
 	view := model.View()
