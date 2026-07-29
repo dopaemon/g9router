@@ -384,6 +384,38 @@ func TestResponsiveCardWidths(t *testing.T) {
 	}
 }
 
+func TestResponsiveCardGridFitsTerminalWidths(t *testing.T) {
+	for _, width := range []int{20, 40, 80, 120, 180} {
+		ui := &UI{width: width}
+		columns := ui.responsiveColumns(7, 30)
+		cardWidth := ui.responsiveCardWidth(7, 30)
+		cards := make([]string, 7)
+		for index := range cards {
+			cards[index] = ui.innerStyle(cardWidth).Render(fmt.Sprintf("card %d", index+1))
+		}
+		for _, line := range strings.Split(ui.joinResponsiveCards(cards, columns), "\n") {
+			if got := lipgloss.Width(line); got > ui.innerWidth() {
+				t.Fatalf("width %d columns %d rendered %d > %d: %q", width, columns, got, ui.innerWidth(), line)
+			}
+		}
+	}
+}
+
+func TestTUIResizeUpdatesLayoutImmediately(t *testing.T) {
+	ui := &UI{width: 80, height: 24}
+	model := sizedModel{ui: ui, model: &mainMenuModel{ui: ui, items: []string{"Providers", "Settings"}}}
+	updated, command := model.Update(tea.WindowSizeMsg{Width: 32, Height: 12})
+	resized := updated.(sizedModel)
+	if resized.ui.width != 32 || resized.ui.height != 12 || command == nil {
+		t.Fatalf("resize state: width=%d height=%d command=%v", resized.ui.width, resized.ui.height, command)
+	}
+	for _, line := range strings.Split(resized.View(), "\n") {
+		if lipgloss.Width(line) > 32 {
+			t.Fatalf("resized line width = %d", lipgloss.Width(line))
+		}
+	}
+}
+
 func TestResponsiveLayoutAtTinySize(t *testing.T) {
 	ui := &UI{width: 10, height: 1}
 	if got := ui.cardWidth(); got > 6 {

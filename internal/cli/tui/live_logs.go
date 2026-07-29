@@ -164,18 +164,28 @@ func (model *logsModel) View() string {
 			tabs[index] = mutedStyle.Render(tabs[index])
 		}
 	}
+	tabView := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	if lipgloss.Width(tabView) > model.ui.innerWidth() {
+		tabView = lipgloss.JoinVertical(lipgloss.Left, tabs...)
+	}
 	tabsTop := 2 + 1 + 2
-	left := 1 + 2
-	for index, tab := range tabs {
-		width := lipgloss.Width(tab)
-		model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: tabsTop, width: width, height: 1})
-		left += width
-		if index+1 < len(tabs) {
-			left += 2
+	if lipgloss.Height(tabView) > 1 {
+		for index := range tabs {
+			model.tabRegions = append(model.tabRegions, tuiRegion{left: 1 + 2, top: tabsTop + index, width: model.ui.innerWidth(), height: 1})
+		}
+	} else {
+		left := 1 + 2
+		for index, tab := range tabs {
+			width := lipgloss.Width(tab)
+			model.tabRegions = append(model.tabRegions, tuiRegion{left: left, top: tabsTop, width: width, height: 1})
+			left += width
+			if index+1 < len(tabs) {
+				left += 2
+			}
 		}
 	}
 	visible := model.logsViewportHeight()
-	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + 1 + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
+	model.itemsRegion = tuiRegion{left: 1 + 2 + 1 + 2, top: tabsTop + lipgloss.Height(tabView) + 2 + 2 + 1, width: model.ui.innerWidth(), height: visible}
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(tabs[model.tab]) + "\n" + model.currentContent())
 	controlsText := model.ui.controlColumns(
 		"↑↓/jk "+model.ui.t("logs.scroll"),
@@ -191,7 +201,7 @@ func (model *logsModel) View() string {
 		controlsText += "\n" + mutedStyle.Render(model.ui.t("logs.paused"))
 	}
 	controls := model.ui.controlCard(model.ui.t("common.controls"), controlsText)
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + strings.Join(tabs, "  ") + "\n\n" + content + "\n\n" + controls)
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.logs")) + "\n\n" + tabView + "\n\n" + content + "\n\n" + controls)
 }
 
 func (model *logsModel) detailForCursor() string {

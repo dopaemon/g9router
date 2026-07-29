@@ -92,27 +92,21 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			step := 2
-			if model.ui.compact() {
-				step = 1
-			}
+			step := model.columns()
 			if model.cursor >= step {
 				model.cursor -= step
 			}
 		case "down", "j":
-			step := 2
-			if model.ui.compact() {
-				step = 1
-			}
+			step := model.columns()
 			if model.cursor+step < len(cliToolOrder) {
 				model.cursor += step
 			}
 		case "left", "h":
-			if !model.ui.compact() && model.cursor%2 == 1 {
+			if model.cursor%model.columns() > 0 {
 				model.cursor--
 			}
 		case "right", "l":
-			if !model.ui.compact() && model.cursor%2 == 0 && model.cursor+1 < len(cliToolOrder) {
+			if model.cursor%model.columns() < model.columns()-1 && model.cursor+1 < len(cliToolOrder) {
 				model.cursor++
 			}
 		case "enter", " ", "s":
@@ -164,26 +158,29 @@ func (model *cliToolsModel) View() string {
 	if model.err != nil && len(model.statuses) == 0 {
 		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)
 	}
-	cards := make([]string, 0, (len(cliToolOrder)+1)/2)
-	if model.ui.compact() {
+	columns := model.columns()
+	cards := make([]string, 0, (len(cliToolOrder)+columns-1)/columns)
+	if columns == 1 {
 		visible := max(1, min(5, model.ui.viewportHeight(8, 10)/2))
 		start, end := viewportWindow(model.cursor, len(cliToolOrder), visible)
 		for index := start; index < end; index++ {
 			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 		}
 	} else {
-		column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
-		rowCount := (len(cliToolOrder) + 1) / 2
+		column := lipgloss.NewStyle().Width(model.ui.responsiveCardWidth(len(cliToolOrder), 30))
+		rowCount := (len(cliToolOrder) + columns - 1) / columns
 		visibleRows := max(1, min(3, model.ui.viewportHeight(8, 6)/2))
-		startRow, endRow := viewportWindow(model.cursor/2, rowCount, visibleRows)
+		startRow, endRow := viewportWindow(model.cursor/columns, rowCount, visibleRows)
 		for row := startRow; row < endRow; row++ {
-			index := row * 2
-			left := cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)
-			right := ""
-			if index+1 < len(cliToolOrder) {
-				right = cliToolCard(model.ui, index+1, cliToolOrder[index+1], model.statuses[cliToolOrder[index+1]], index+1 == model.cursor)
+			rowCards := make([]string, 0, columns)
+			for columnIndex := 0; columnIndex < columns; columnIndex++ {
+				index := row*columns + columnIndex
+				if index >= len(cliToolOrder) {
+					break
+				}
+				rowCards = append(rowCards, column.Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 			}
-			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), column.Render(right)))
+			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, rowCards...))
 		}
 	}
 	controlsText := model.ui.controlColumns(
@@ -195,6 +192,10 @@ func (model *cliToolsModel) View() string {
 	}
 	controls := model.ui.controlCard(model.ui.t("common.controls"), controlsText)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
+}
+
+func (model *cliToolsModel) columns() int {
+	return model.ui.responsiveColumns(len(cliToolOrder), 30)
 }
 
 func cliToolCard(ui *UI, index int, id string, status cliToolStatus, selected bool) string {

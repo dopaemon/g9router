@@ -9,7 +9,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type settingsRefreshMsg struct{}
@@ -118,10 +117,8 @@ func (model *settingsModel) View() string {
 	if model.err != nil && len(model.values) == 0 && len(model.tunnel) == 0 {
 		return model.ui.errorView(model.ui.t("menu.settings"), model.err)
 	}
-	cardWidth := model.ui.columnWidth(2)
-	if model.ui.compact() {
-		cardWidth = model.ui.innerWidth()
-	}
+	columns := model.ui.responsiveColumns(2, 36)
+	cardWidth := model.ui.responsiveCardWidth(2, 36)
 	runtimeCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.runtime")) + "\n" +
 		settingsActionItem(model.ui, 0, model.ui.t("settings.toggleRTK"), settingsEnabled(model.values, "rtkEnabled"), model.cursor == 0) + "\n" +
 		settingsActionItem(model.ui, 1, model.ui.t("settings.toggleHeadroom"), settingsEnabled(model.values, "headroomEnabled"), model.cursor == 1) + "\n" +
@@ -137,10 +134,7 @@ func (model *settingsModel) View() string {
 	if model.notice != "" {
 		controls += "\n" + successStyle.Render(model.notice)
 	}
-	cards := lipgloss.JoinHorizontal(lipgloss.Top, runtimeCard, securityCard)
-	if model.ui.compact() {
-		cards = lipgloss.JoinVertical(lipgloss.Left, runtimeCard, securityCard)
-	}
+	cards := model.ui.joinResponsiveCards([]string{runtimeCard, securityCard}, columns)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + cards + "\n\n" + controls)
 }
 

@@ -275,10 +275,10 @@ func (model *providerLiveModel) View() string {
 	controlCard := model.ui.controlCard(model.ui.t("common.controls"), controls)
 	model.tabsTop = 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("menu.providers"))) + 2
 	tabView := lipgloss.JoinHorizontal(lipgloss.Top, tabLine...)
-	if model.ui.compact() {
+	if lipgloss.Width(tabView) > model.ui.innerWidth() {
 		tabView = lipgloss.JoinVertical(lipgloss.Left, tabLine...)
 	}
-	if model.ui.compact() {
+	if lipgloss.Height(tabView) > 1 {
 		for index := range tabLine {
 			model.tabRegions = append(model.tabRegions, tuiRegion{left: 1 + 2, top: model.tabsTop + index, width: model.ui.innerWidth(), height: 1})
 		}

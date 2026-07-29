@@ -81,35 +81,25 @@ func (model *languageModel) View() string {
 	if model.err != nil {
 		return model.ui.errorView(model.ui.t("language.title"), model.err)
 	}
-	english := languageCard(model.ui.columnWidth(2), 0, model.ui.t("language.english"), model.cursor == 0)
-	vietnamese := languageCard(model.ui.columnWidth(2), 1, model.ui.t("language.vietnamese"), model.cursor == 1)
+	columns := model.ui.responsiveColumns(2, 24)
+	cardWidth := model.ui.responsiveCardWidth(2, 24)
+	english := languageCard(cardWidth, 0, model.ui.t("language.english"), model.cursor == 0)
+	vietnamese := languageCard(cardWidth, 1, model.ui.t("language.vietnamese"), model.cursor == 1)
 	model.cardRegions = nil
 	cardTop := 2 + lipgloss.Height(cardTitleStyle.Render(model.ui.t("language.title"))) + 2
 	cardLeft := 1 + 2
-	if model.ui.compact() {
-		cardHeight := lipgloss.Height(english)
-		model.cardRegions = []tuiRegion{
-			{left: cardLeft, top: cardTop, width: model.ui.innerWidth(), height: cardHeight},
-			{left: cardLeft, top: cardTop + cardHeight, width: model.ui.innerWidth(), height: cardHeight},
-		}
-	} else {
-		cardWidth := model.ui.columnWidth(2)
-		cardHeight := lipgloss.Height(english)
-		model.cardRegions = []tuiRegion{
-			{left: cardLeft, top: cardTop, width: cardWidth, height: cardHeight},
-			{left: cardLeft + cardWidth + 1, top: cardTop, width: cardWidth, height: cardHeight},
-		}
+	cardHeight := lipgloss.Height(english)
+	for index := range []string{"english", "vietnamese"} {
+		row, column := index/columns, index%columns
+		model.cardRegions = append(model.cardRegions, tuiRegion{
+			left: cardLeft + column*cardWidth, top: cardTop + row*cardHeight, width: cardWidth, height: cardHeight,
+		})
 	}
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
 		model.ui.t("controls.languageSwitch"), model.ui.t("controls.languageSelect"), model.ui.t("controls.languageBack"),
 	))
 	model.cardsTopValue = cardTop
-	var cards string
-	if model.ui.compact() {
-		cards = lipgloss.JoinVertical(lipgloss.Left, english, vietnamese)
-	} else {
-		cards = lipgloss.JoinHorizontal(lipgloss.Top, english, vietnamese)
-	}
+	cards := model.ui.joinResponsiveCards([]string{english, vietnamese}, columns)
 	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("language.title")) + "\n\n" + cards + "\n\n" + controls)
 }
 

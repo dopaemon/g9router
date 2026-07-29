@@ -219,7 +219,9 @@ func endpointControlRegions(view, title string, items, width int, compact bool) 
 
 func endpointLine(ui *UI, label, value string) string {
 	if ui.compact() {
-		return label + ": " + ansi.Truncate(value, max(1, ui.innerWidth()-len(label)-2), "…")
+		labelWidth := min(len(label), max(1, ui.innerWidth()/3))
+		label = ansi.Truncate(label, labelWidth, "…")
+		return label + ": " + ansi.Truncate(value, max(1, ui.innerWidth()-lipgloss.Width(label)-2), "…")
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, endpointLabelStyle.Render(label), value)
 }

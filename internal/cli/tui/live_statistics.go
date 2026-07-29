@@ -125,14 +125,15 @@ func (model *statisticsModel) View() string {
 		model.ui.t("controls.period"), model.ui.t("controls.tokenCursor"),
 		model.ui.t("controls.refresh"), model.ui.t("controls.back"),
 	))
-	breakdowns := lipgloss.JoinHorizontal(lipgloss.Top, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
-	activity := lipgloss.JoinHorizontal(lipgloss.Top, model.chartCard(), model.recentCard())
-	if model.ui.compact() {
-		breakdowns = lipgloss.JoinVertical(lipgloss.Left, model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider), model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel))
-		activity = lipgloss.JoinVertical(lipgloss.Left, model.chartCard(), model.recentCard())
-	}
+	columns := model.ui.responsiveColumns(2, 36)
+	cardWidth := model.ui.responsiveCardWidth(2, 36)
+	breakdowns := model.ui.joinResponsiveCards([]string{
+		model.breakdownCard(model.ui.t("screen.byProvider"), model.stats.ByProvider, cardWidth),
+		model.breakdownCard(model.ui.t("screen.byModel"), model.stats.ByModel, cardWidth),
+	}, columns)
+	activity := model.ui.joinResponsiveCards([]string{model.chartCard(cardWidth), model.recentCard(cardWidth)}, columns)
 	periodView := lipgloss.JoinHorizontal(lipgloss.Top, periods...)
-	if model.ui.compact() {
+	if lipgloss.Width(periodView) > model.ui.innerWidth() {
 		periodView = lipgloss.JoinVertical(lipgloss.Left, periods...)
 	}
 	content := cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + periodView + "\n\n" + model.overviewCard() + "\n\n" + breakdowns + "\n\n" + activity + "\n\n" + controls
@@ -152,14 +153,14 @@ func (model *statisticsModel) overviewCard() string {
 }
 
 func (model *statisticsModel) statisticsLine(leftLabel, leftValue, rightLabel, rightValue string) string {
-	if model.ui.compact() {
+	if model.ui.responsiveColumns(2, 24) == 1 {
 		return leftLabel + ": " + leftValue + "\n" + rightLabel + ": " + rightValue
 	}
 	column := lipgloss.NewStyle().Width(model.ui.columnWidth(2))
 	return lipgloss.JoinHorizontal(lipgloss.Top, column.Render(leftLabel+": "+leftValue), column.Render(rightLabel+": "+rightValue))
 }
 
-func (model *statisticsModel) breakdownCard(title string, values map[string]int) string {
+func (model *statisticsModel) breakdownCard(title string, values map[string]int, width int) string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -180,10 +181,6 @@ func (model *statisticsModel) breakdownCard(title string, values map[string]int)
 	if len(rows) > 5 {
 		rows = rows[:5]
 	}
-	width := model.ui.columnWidth(2)
-	if model.ui.compact() {
-		width = model.ui.innerWidth()
-	}
 	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(title) + "\n" + strings.Join(rows, "\n"))
 }
 
@@ -194,7 +191,7 @@ func truncateText(value string, limit int) string {
 	return ansi.Truncate(value, limit, "…")
 }
 
-func (model *statisticsModel) chartCard() string {
+func (model *statisticsModel) chartCard(width int) string {
 	max := int64(1)
 	for _, point := range model.chart {
 		if point.Tokens > max {
@@ -226,14 +223,10 @@ func (model *statisticsModel) chartCard() string {
 		}
 		rows[index] = line
 	}
-	width := model.ui.columnWidth(2)
-	if model.ui.compact() {
-		width = model.ui.innerWidth()
-	}
 	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(model.ui.t("screen.tokenUsage")) + "\n" + strings.Join(rows, "\n"))
 }
 
-func (model *statisticsModel) recentCard() string {
+func (model *statisticsModel) recentCard(width int) string {
 	rows := make([]string, 0, len(model.stats.RecentRequests))
 	for _, request := range model.stats.RecentRequests {
 		status := request.Status
@@ -247,10 +240,6 @@ func (model *statisticsModel) recentCard() string {
 	}
 	if len(rows) == 0 {
 		rows = append(rows, model.ui.t("stats.noRequests"))
-	}
-	width := model.ui.columnWidth(2)
-	if model.ui.compact() {
-		width = model.ui.innerWidth()
 	}
 	return model.ui.innerStyle(width).Render(cardTitleStyle.Render(model.ui.t("screen.recentRequests")) + "\n" + strings.Join(rows, "\n"))
 }

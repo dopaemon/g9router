@@ -28,11 +28,17 @@ func (region tuiRegion) contains(x, y int) bool {
 func (model sizedModel) Init() tea.Cmd { return model.model.Init() }
 
 func (model sizedModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	resized := false
 	if size, ok := message.(tea.WindowSizeMsg); ok {
+		resized = model.ui.width != size.Width || model.ui.height != size.Height
 		model.ui.width, model.ui.height = size.Width, size.Height
+		model.ui.viewClipped = false
 	}
 	updated, command := model.model.Update(message)
 	model.model = updated
+	if resized {
+		command = tea.Batch(command, func() tea.Msg { return tea.ClearScreen() })
+	}
 	return model, command
 }
 
@@ -46,7 +52,7 @@ func (ui *UI) cardWidth() int {
 		}
 		return 76
 	}
-	return max(1, min(width, 78))
+	return max(1, min(width, 120))
 }
 
 func (ui *UI) innerWidth() int {
@@ -63,6 +69,30 @@ func (ui *UI) columnWidth(columns int) int {
 	}
 	width := (ui.innerWidth() - columns + 1) / columns
 	return max(1, width)
+}
+
+func (ui *UI) responsiveColumns(total, minimum int) int {
+	if total < 1 || minimum < 1 {
+		return 1
+	}
+	return max(1, min(total, (ui.innerWidth()+2)/(minimum+2)))
+}
+
+func (ui *UI) responsiveCardWidth(total, minimum int) int {
+	columns := ui.responsiveColumns(total, minimum)
+	return max(1, (ui.innerWidth()-2*(columns-1)-2*columns)/columns)
+}
+
+func (ui *UI) joinResponsiveCards(cards []string, columns int) string {
+	if len(cards) == 0 {
+		return ""
+	}
+	rows := make([]string, 0, (len(cards)+columns-1)/columns)
+	for index := 0; index < len(cards); index += columns {
+		end := min(index+columns, len(cards))
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cards[index:end]...))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
 func (ui *UI) compact() bool { return ui.innerWidth() < 56 }

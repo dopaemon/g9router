@@ -237,8 +237,7 @@ func (model *quotaModel) View() string {
 		return model.detailView(model.items[model.detail])
 	}
 	columns := max(1, min(len(model.items), (model.ui.innerWidth()+2)/42))
-	gap := 2
-	cardWidth := max(1, (model.ui.innerWidth()-gap*(columns-1))/columns)
+	cardWidth := model.ui.responsiveCardWidth(len(model.items), 42)
 	visibleRows := max(1, min(3, model.ui.viewportHeight(14, 10)/4))
 	visible := max(1, min(len(model.items), visibleRows*columns))
 	start, end := viewportWindow(model.cursor, len(model.items), visible)
