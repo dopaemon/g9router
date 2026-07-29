@@ -54,9 +54,9 @@ func (model *languageModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "left", "h", "up", "k":
-			model.cursor = 0
+			model.cursor = cycleIndex(model.cursor, 2, -1)
 		case "right", "l", "down", "j":
-			model.cursor = 1
+			model.cursor = cycleIndex(model.cursor, 2, 1)
 		case "enter", " ":
 			return model, model.selectLanguage()
 		}

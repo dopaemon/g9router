@@ -162,15 +162,11 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (model *tuiForm) next() {
-	if model.cursor+1 < len(model.fields) {
-		model.cursor++
-	}
+	model.cursor = cycleIndex(model.cursor, len(model.fields), 1)
 }
 
 func (model *tuiForm) previous() {
-	if model.cursor > 0 {
-		model.cursor--
-	}
+	model.cursor = cycleIndex(model.cursor, len(model.fields), -1)
 }
 
 func (model *tuiForm) nextOption(field *tuiField) {

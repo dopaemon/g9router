@@ -31,17 +31,7 @@ func (ui *UI) mouseHint() string {
 }
 
 func moveIndex(index, count, delta int) int {
-	if count <= 0 {
-		return 0
-	}
-	index += delta
-	if index < 0 {
-		return 0
-	}
-	if index >= count {
-		return count - 1
-	}
-	return index
+	return cycleIndex(index, count, delta)
 }
 
 func cycleIndex(index, count, delta int) int {

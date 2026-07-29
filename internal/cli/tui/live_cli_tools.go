@@ -92,23 +92,13 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			step := model.columns()
-			if model.cursor >= step {
-				model.cursor -= step
-			}
+			model.cursor = cycleIndex(model.cursor, len(cliToolOrder), -model.columns())
 		case "down", "j":
-			step := model.columns()
-			if model.cursor+step < len(cliToolOrder) {
-				model.cursor += step
-			}
+			model.cursor = cycleIndex(model.cursor, len(cliToolOrder), model.columns())
 		case "left", "h":
-			if model.cursor%model.columns() > 0 {
-				model.cursor--
-			}
+			model.cursor = cycleIndex(model.cursor, len(cliToolOrder), -1)
 		case "right", "l":
-			if model.cursor%model.columns() < model.columns()-1 && model.cursor+1 < len(cliToolOrder) {
-				model.cursor++
-			}
+			model.cursor = cycleIndex(model.cursor, len(cliToolOrder), 1)
 		case "enter", " ", "s":
 			if model.loading || model.actionRunning {
 				return model, nil

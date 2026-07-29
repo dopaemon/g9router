@@ -66,13 +66,9 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			model.cursor = moveIndex(model.cursor, 6, 1)
 		case "left", "h":
-			if model.cursor >= 4 {
-				model.cursor = 0
-			}
+			model.cursor = cycleIndex(model.cursor, 6, -1)
 		case "right", "l":
-			if model.cursor < 4 {
-				model.cursor = 4
-			}
+			model.cursor = cycleIndex(model.cursor, 6, 1)
 		case "enter", " ":
 			if model.loading || model.actionRunning {
 				return model, nil

@@ -80,21 +80,13 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch key {
 		case "up", "k":
-			if model.cursor >= 2 {
-				model.cursor -= 2
-			}
+			model.cursor = cycleIndex(model.cursor, 8, -2)
 		case "down", "j":
-			if model.cursor+2 < 8 {
-				model.cursor += 2
-			}
+			model.cursor = cycleIndex(model.cursor, 8, 2)
 		case "left", "h":
-			if model.cursor%2 == 1 {
-				model.cursor--
-			}
+			model.cursor = cycleIndex(model.cursor, 8, -1)
 		case "right", "l":
-			if model.cursor%2 == 0 {
-				model.cursor++
-			}
+			model.cursor = cycleIndex(model.cursor, 8, 1)
 		case "enter", " ":
 			return model, model.runEndpointAction(model.cursor)
 		case "t":

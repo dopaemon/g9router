@@ -932,11 +932,23 @@ func TestProviderCompactTabsStack(t *testing.T) {
 }
 
 func TestNavigationHelpers(t *testing.T) {
-	if got := moveIndex(0, 3, -1); got != 0 || moveIndex(2, 3, 1) != 2 {
-		t.Fatalf("clamped navigation failed")
+	if got := moveIndex(0, 3, -1); got != 2 || moveIndex(2, 3, 1) != 0 {
+		t.Fatalf("wrapped navigation failed")
 	}
 	if got := cycleIndex(0, 3, -1); got != 2 || cycleIndex(2, 3, 1) != 0 {
 		t.Fatalf("cycled navigation failed")
+	}
+}
+
+func TestQuotaCursorWraps(t *testing.T) {
+	model := &quotaModel{ui: &UI{}, items: []quotaItem{{ID: "one"}, {ID: "two"}}, detail: -1}
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if updated.(*quotaModel).cursor != 1 {
+		t.Fatalf("up from first cursor = %d, want 1", updated.(*quotaModel).cursor)
+	}
+	updated, _ = updated.(*quotaModel).Update(tea.KeyMsg{Type: tea.KeyDown})
+	if updated.(*quotaModel).cursor != 0 {
+		t.Fatalf("down from last cursor = %d, want 0", updated.(*quotaModel).cursor)
 	}
 }
 

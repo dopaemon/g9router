@@ -103,14 +103,10 @@ func (model *logsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.cursor = 0
 			model.followTail = true
 		case actionMatches(message.String(), logActions.up):
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = cycleIndex(model.cursor, model.rowCount(), -1)
 			model.followTail = false
 		case actionMatches(message.String(), logActions.down):
-			if model.cursor+1 < model.rowCount() {
-				model.cursor++
-			}
+			model.cursor = cycleIndex(model.cursor, model.rowCount(), 1)
 			model.followTail = model.cursor == model.rowCount()-1
 		case actionMatches(message.String(), logActions.refresh), message.String() == "enter", message.String() == " ":
 			if message.String() == "enter" && model.rowCount() > 0 {

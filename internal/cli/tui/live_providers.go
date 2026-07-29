@@ -162,13 +162,9 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.tab = providerTab(cycleIndex(int(model.tab), 4, -1))
 			model.cursor = 0
 		case "up", "k":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = cycleIndex(model.cursor, model.itemCount(), -1)
 		case "down", "j":
-			if model.cursor+1 < model.itemCount() {
-				model.cursor++
-			}
+			model.cursor = cycleIndex(model.cursor, model.itemCount(), 1)
 		case "enter", " ":
 			if !model.loading {
 				return model, model.runAction()

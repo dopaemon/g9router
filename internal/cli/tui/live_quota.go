@@ -167,13 +167,9 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			if model.cursor > 0 {
-				model.cursor--
-			}
+			model.cursor = cycleIndex(model.cursor, len(model.items), -1)
 		case "down", "j":
-			if model.cursor+1 < len(model.items) {
-				model.cursor++
-			}
+			model.cursor = cycleIndex(model.cursor, len(model.items), 1)
 		case "enter", " ":
 			if !model.refreshing && len(model.items) > 0 {
 				model.detail = model.cursor
