@@ -117,10 +117,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		logs := ui.t("menu.logs")
 		settings := ui.t("menu.settings")
 		language := ui.t("menu.language")
+		credits := ui.t("menu.credits")
 		exit := ui.t("menu.exit")
-		choice, err := ui.mainMenuChoice([]string{endpoint, providers, combos, statistics, quota, cliTools, logs, settings, language, exit})
+		items := []string{endpoint, providers, combos, statistics, quota, cliTools, logs, settings, language, credits, exit}
+		choice, err := ui.mainMenuChoice(items)
 		if !isInteractiveWriter(ui.Out) || accessibleMode(ui.In) {
-			choice, err = ui.huhChoice(ui.t("menu.title"), []string{endpoint, providers, combos, statistics, quota, cliTools, logs, settings, language, exit})
+			choice, err = ui.huhChoice(ui.t("menu.title"), items)
 		}
 		if err != nil {
 			return err
@@ -200,6 +202,13 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			if err := ui.selectLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
+		case credits:
+			run(credits, func() error {
+				if ui.liveMode() {
+					return ui.liveCredits()
+				}
+				return ui.accessibleCredits(reader)
+			})
 		case exit:
 			return nil
 		}

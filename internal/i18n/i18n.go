@@ -83,6 +83,18 @@ var translations = map[string]map[string]string{
 }
 
 func init() {
+	translations[English]["menu.credits"] = "Credits"
+	translations[English]["credits.title"] = "Credits"
+	translations[English]["credits.app"] = "G9Router"
+	translations[English]["credits.description"] = "OpenAI-compatible local gateway"
+	translations[English]["credits.builtWith"] = "Built with Go and Charm"
+	translations[English]["credits.inspired"] = "Inspired by 9Router"
+	translations[Vietnamese]["menu.credits"] = "Ghi công"
+	translations[Vietnamese]["credits.title"] = "Ghi công"
+	translations[Vietnamese]["credits.app"] = "G9Router"
+	translations[Vietnamese]["credits.description"] = "Gateway local tương thích OpenAI"
+	translations[Vietnamese]["credits.builtWith"] = "Xây dựng với Go và Charm"
+	translations[Vietnamese]["credits.inspired"] = "Lấy cảm hứng từ 9Router"
 	translations[English]["controls.providerEdit"] = "e edit"
 	translations[English]["controls.providerDelete"] = "d delete"
 	translations[English]["controls.providerToggle"] = "e on/off"
