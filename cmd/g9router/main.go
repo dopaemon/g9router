@@ -111,6 +111,9 @@ func run(options runOptions) error {
 	if options.ssh {
 		ports = append(ports, options.sshPort)
 	}
+	if err := instance.ReleaseOwnedPorts(ports...); err != nil {
+		return err
+	}
 	releaseInstance, err := instance.Acquire(ports...)
 	if err != nil {
 		return err

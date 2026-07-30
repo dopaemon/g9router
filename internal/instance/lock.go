@@ -4,10 +4,67 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/gofrs/flock"
+	processnet "github.com/shirou/gopsutil/v3/net"
+	"github.com/shirou/gopsutil/v3/process"
 )
+
+func ReleaseOwnedPorts(ports ...int) error {
+	connections, err := processnet.Connections("tcp")
+	if err != nil {
+		return fmt.Errorf("inspect TCP listeners: %w", err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("find current executable: %w", err)
+	}
+	executable, _ = filepath.EvalSymlinks(executable)
+	wanted := make(map[int]struct{}, len(ports))
+	for _, port := range ports {
+		wanted[port] = struct{}{}
+	}
+	for _, connection := range connections {
+		if connection.Status != "LISTEN" || connection.Pid <= 0 {
+			continue
+		}
+		if _, ok := wanted[int(connection.Laddr.Port)]; !ok || int(connection.Pid) == os.Getpid() {
+			continue
+		}
+		owner, err := process.NewProcess(connection.Pid)
+		if err != nil {
+			continue
+		}
+		ownerPath, err := owner.Exe()
+		if err != nil {
+			continue
+		}
+		ownerPath, _ = filepath.EvalSymlinks(ownerPath)
+		if !sameExecutable(ownerPath, executable) {
+			continue
+		}
+		if err := owner.Kill(); err != nil {
+			return fmt.Errorf("stop G9Router process %d: %w", connection.Pid, err)
+		}
+		for running, _ := owner.IsRunning(); running; running, _ = owner.IsRunning() {
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+	return nil
+}
+
+func sameExecutable(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
 
 func Acquire(ports ...int) (func(), error) {
 	ports = uniquePorts(ports)
