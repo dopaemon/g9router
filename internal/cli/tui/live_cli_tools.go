@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -127,7 +126,7 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, cliToolsRefresh()
 	case cliToolsActionDoneMsg:
 		model.actionRunning = false
-		if errors.Is(message.err, huh.ErrUserAborted) {
+		if errors.Is(message.err, errUserAborted) {
 			message.err = nil
 			message.notice = ""
 		}

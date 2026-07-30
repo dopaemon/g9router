@@ -740,6 +740,95 @@ func TestLoadingTextUsesBubbleSpinner(t *testing.T) {
 	}
 }
 
+func TestTUISelectRendersDefaultListItems(t *testing.T) {
+	model := &tuiForm{
+		ui:     &UI{Locale: i18n.English, width: 80, height: 30},
+		title:  "OAuth provider",
+		fields: []tuiField{{label: "OAuth provider", kind: tuiSelect, options: []string{"codex", "claude"}, value: "codex"}},
+	}
+	view := model.View()
+	if !strings.Contains(view, "codex") || !strings.Contains(view, "claude") {
+		t.Fatalf("OAuth list view = %q", view)
+	}
+}
+
+func TestTUIFormShowsOneChoiceMenuAtATime(t *testing.T) {
+	model := &tuiForm{
+		ui: &UI{Locale: i18n.English, width: 80, height: 24},
+		fields: []tuiField{
+			{label: "API type", kind: tuiSelect, options: []string{"openai", "anthropic", "gemini"}, value: "openai"},
+			{label: "Finish", kind: tuiSelect, options: []string{"Save", "Back"}, value: "Save"},
+		},
+	}
+	view := model.View()
+	if !strings.Contains(view, "anthropic") || strings.Contains(view, "Back") {
+		t.Fatalf("inactive choice menu rendered: %q", view)
+	}
+	model.cursor = 1
+	view = model.View()
+	if strings.Contains(view, "anthropic") || !strings.Contains(view, "Back") {
+		t.Fatalf("active choice menu missing: %q", view)
+	}
+}
+
+func TestTUISelectFitsSmallTerminal(t *testing.T) {
+	ui := &UI{Locale: i18n.English, width: 80, height: 12}
+	options := []string{"codex", "claude", "xai", "gemini-cli", "antigravity", "cline", "clinepass", "kimchi", "iflow", "Back"}
+	model := &tuiForm{ui: ui, title: "OAuth provider", fields: []tuiField{{label: "OAuth provider", kind: tuiSelect, options: options}}}
+	view := ui.fitView(model.View())
+	if ui.viewClipped || !strings.Contains(view, "╯") {
+		t.Fatalf("small form clipped=%v view=%q", ui.viewClipped, view)
+	}
+}
+
+func TestTUISelectShowsUsefulOptionWindow(t *testing.T) {
+	ui := &UI{Locale: i18n.English, width: 80, height: 18}
+	options := []string{"codex", "claude", "xai", "gemini-cli", "antigravity", "cline", "iflow", "Back"}
+	view := (&tuiForm{ui: ui, title: "OAuth provider", fields: []tuiField{{label: "OAuth provider", kind: tuiSelect, options: options}}}).View()
+	visible := 0
+	for _, option := range options {
+		if strings.Contains(view, option) {
+			visible++
+		}
+	}
+	if visible < 7 {
+		t.Fatalf("visible options = %d, want at least 7: %q", visible, view)
+	}
+}
+
+func TestTUIFormKeepsOuterBorderAfterResize(t *testing.T) {
+	model := &tuiForm{
+		title:  "OAuth provider",
+		fields: []tuiField{{label: "OAuth provider", kind: tuiSelect, options: []string{"codex", "claude", "xai"}}},
+	}
+	ui := &UI{Locale: i18n.English, width: 120, height: 24}
+	model.ui = ui
+	for _, size := range []struct{ width, height int }{{120, 24}, {80, 20}, {56, 18}, {42, 16}, {80, 20}} {
+		ui.width, ui.height = size.width, size.height
+		view := ui.fitView(model.View())
+		lines := strings.Split(view, "\n")
+		for index, line := range lines {
+			if got := lipgloss.Width(line); got > size.width {
+				t.Fatalf("size %dx%d line %d overflows: %d: %q", size.width, size.height, index, got, line)
+			}
+		}
+		if !strings.Contains(lines[len(lines)-1], "╰") || !strings.Contains(lines[len(lines)-1], "╯") {
+			t.Fatalf("size %dx%d lost bottom border: %q", size.width, size.height, view)
+		}
+		positions := make([]int, 0, 2)
+		for _, line := range lines {
+			for _, option := range []string{"codex", "claude"} {
+				if position := strings.Index(line, option); position >= 0 {
+					positions = append(positions, position)
+				}
+			}
+		}
+		if len(positions) == 2 && positions[0] != positions[1] {
+			t.Fatalf("size %dx%d option alignment differs: %v\n%s", size.width, size.height, positions, view)
+		}
+	}
+}
+
 func TestProviderViewportKeepsLongListBounded(t *testing.T) {
 	items := make([]provider, 20)
 	for index := range items {
@@ -1030,6 +1119,24 @@ func TestLiveScreensRenderAtNarrowWidth(t *testing.T) {
 	for index, view := range views {
 		if strings.TrimSpace(view) == "" {
 			t.Fatalf("screen %d rendered empty", index)
+		}
+	}
+}
+
+func TestMainMenuCardsKeepBordersAtWidth(t *testing.T) {
+	for _, width := range []int{42, 56, 80, 120} {
+		ui := &UI{width: width, height: 40, Locale: i18n.English}
+		view := ui.fitView((&mainMenuModel{ui: ui, items: []string{
+			"Endpoint & Key", "Providers", "Combos", "Statistics", "Quota Tracking", "CLI Tools", "Logs", "Settings", "Language", "Credits", "Exit",
+		}}).View())
+		lines := strings.Split(view, "\n")
+		for index, line := range lines {
+			if got := lipgloss.Width(line); got > width {
+				t.Fatalf("width %d line %d overflows: %d: %q", width, index, got, line)
+			}
+		}
+		if !strings.Contains(view, "╰") || !strings.Contains(view, "╯") {
+			t.Fatalf("width %d lost card border: %q", width, view)
 		}
 	}
 }

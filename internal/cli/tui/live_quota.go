@@ -14,7 +14,6 @@ import (
 	"charm.land/lipgloss/v2/tree"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -110,7 +109,7 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, tea.Batch(commands...)
 	case quotaActionDoneMsg:
 		model.refreshing = false
-		if errors.Is(message.err, huh.ErrUserAborted) {
+		if errors.Is(message.err, errUserAborted) {
 			model.err = nil
 			return model, nil
 		}

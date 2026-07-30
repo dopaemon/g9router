@@ -40,11 +40,10 @@ func ReleaseOwnedPorts(ports ...int) error {
 			continue
 		}
 		ownerPath, err := owner.Exe()
-		if err != nil {
-			continue
+		if err == nil && ownerPath != "" {
+			ownerPath, _ = filepath.EvalSymlinks(ownerPath)
 		}
-		ownerPath, _ = filepath.EvalSymlinks(ownerPath)
-		if !sameExecutable(ownerPath, executable) {
+		if (err == nil && ownerPath != "" && !sameExecutable(ownerPath, executable)) || (err != nil || ownerPath == "") && !sameExecutableName(owner, executable) {
 			continue
 		}
 		if err := owner.Kill(); err != nil {
@@ -58,12 +57,22 @@ func ReleaseOwnedPorts(ports ...int) error {
 }
 
 func sameExecutable(left, right string) bool {
+	left = strings.TrimSuffix(left, " (deleted)")
+	right = strings.TrimSuffix(right, " (deleted)")
 	left = filepath.Clean(left)
 	right = filepath.Clean(right)
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
+}
+
+func sameExecutableName(owner *process.Process, executable string) bool {
+	name, err := owner.Name()
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSuffix(name, ".exe"), strings.TrimSuffix(filepath.Base(executable), ".exe"))
 }
 
 func Acquire(ports ...int) (func(), error) {

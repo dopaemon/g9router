@@ -185,13 +185,14 @@ func truncateBanner(value string, width int) string {
 }
 
 func (model *mainMenuModel) menuItem(index int) string {
-	label := ansi.Truncate(fmt.Sprintf("%d  %s", index+1, model.items[index]), max(1, model.ui.innerWidth()-2), "…")
+	width := max(1, model.ui.innerWidth()-2)
+	label := ansi.Truncate(fmt.Sprintf("%d  %s", index+1, model.items[index]), width, "…")
 	if index == model.cursor {
 		label = focusStyle.Render(label)
 	} else {
 		label = cardTitleStyle.Render(label)
 	}
-	return lipgloss.NewStyle().Width(model.ui.innerWidth()).Padding(0, 1).Render(label)
+	return lipgloss.NewStyle().Width(width).Padding(0, 1).Render(label)
 }
 
 func min(left, right int) int {

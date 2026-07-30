@@ -11,7 +11,6 @@ import (
 
 	"g9router/internal/i18n"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 )
 
 func (ui *UI) huhMode() bool {
@@ -37,40 +36,23 @@ func (ui *UI) huhChoiceIO(title string, options []string, input io.Reader, outpu
 	if len(options) == 0 {
 		return "", fmt.Errorf("no choices available")
 	}
-	value := options[0]
-	formOptions := make([]huh.Option[string], 0, len(options))
-	for _, option := range options {
-		formOptions = append(formOptions, huh.NewOption(option, option))
-	}
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title(title).Options(formOptions...).Value(&value),
-	))
-	if err := ui.runHuhIO(form, input, output); err != nil {
+	result, err := ui.runTUIForm(title, []tuiField{{label: title, kind: tuiSelect, options: options, value: options[0]}}, input, output)
+	if err != nil {
 		return "", err
 	}
-	return value, nil
+	return result.values[0], nil
 }
 
 func (ui *UI) huhValue(title, value string, password bool) (string, error) {
-	input := huh.NewInput().Title(title).Value(&value)
-	if password {
-		input = input.EchoMode(huh.EchoModePassword)
-	}
-	form := huh.NewForm(huh.NewGroup(input))
-	if err := ui.runHuh(form); err != nil {
+	result, err := ui.runTUIForm(title, []tuiField{{label: title, kind: tuiInput, value: value, password: password}}, ui.In, ui.Out)
+	if err != nil {
 		return "", err
 	}
-	return value, nil
+	return result.values[0], nil
 }
 
 func (ui *UI) huhConfirm(title string, value bool) (bool, error) {
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title(title).Value(&value),
-	))
-	if err := ui.runHuh(form); err != nil {
-		return false, err
-	}
-	return value, nil
+	return ui.tuiConfirm(title, ui.In, ui.Out)
 }
 
 func (ui *UI) huhNumber(title string, labels []string) (int, error) {
@@ -134,7 +116,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		run := func(name string, action func() error) {
 			for {
 				err := action()
-				if err == nil || errors.Is(err, huh.ErrUserAborted) || errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, tea.ErrInterrupted) {
+				if err == nil || errors.Is(err, errUserAborted) || errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, tea.ErrInterrupted) {
 					return
 				}
 				fmt.Fprintln(ui.Out, Error(err.Error()))
@@ -198,12 +180,12 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 			})
 		case language:
 			if ui.liveMode() {
-				if err := ui.liveLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+				if err := ui.liveLanguage(); err != nil && !errors.Is(err, errUserAborted) {
 					return err
 				}
 				continue
 			}
-			if err := ui.selectLanguage(); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+			if err := ui.selectLanguage(); err != nil && !errors.Is(err, errUserAborted) {
 				return err
 			}
 		case credits:

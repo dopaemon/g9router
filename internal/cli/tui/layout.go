@@ -200,6 +200,7 @@ func (ui *UI) controlColumnsSelected(selected int, items ...string) string {
 	if ui.compact() {
 		rows := make([]string, 0, len(items))
 		for index, item := range items {
+			item = ansi.Truncate(item, max(1, ui.columnWidth(2)-2), "…")
 			style := mutedStyle
 			if index == selected {
 				style = focusStyle
@@ -210,18 +211,20 @@ func (ui *UI) controlColumnsSelected(selected int, items ...string) string {
 	}
 	rows := make([]string, 0, (len(items)+1)/2)
 	for index := 0; index < len(items); index += 2 {
+		leftItem := ansi.Truncate(items[index], max(1, ui.columnWidth(2)-2), "…")
 		leftStyle := mutedStyle
 		if index == selected {
 			leftStyle = focusStyle
 		}
-		left := ui.controlStyle().Render(leftStyle.Render(items[index]))
+		left := ui.controlStyle().Render(leftStyle.Render(leftItem))
 		right := ""
 		if index+1 < len(items) {
+			rightItem := ansi.Truncate(items[index+1], max(1, ui.columnWidth(2)-2), "…")
 			rightStyle := mutedStyle
 			if index+1 == selected {
 				rightStyle = focusStyle
 			}
-			right = ui.controlStyle().Render(rightStyle.Render(items[index+1]))
+			right = ui.controlStyle().Render(rightStyle.Render(rightItem))
 		}
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, right))
 	}

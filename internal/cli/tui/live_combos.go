@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -47,25 +46,18 @@ type comboModelResponse struct {
 	} `json:"models"`
 }
 
-func (ui *UI) comboModelOptions() ([]huh.Option[string], error) {
+func (ui *UI) comboModelOptions() ([]string, error) {
 	var payload comboModelResponse
 	if err := ui.request(http.MethodGet, "/api/models", nil, &payload); err != nil {
 		return nil, err
 	}
-	options := make([]huh.Option[string], 0, len(payload.Models))
+	options := make([]string, 0, len(payload.Models))
 	for _, item := range payload.Models {
 		value := item.RoutedModel
 		if value == "" {
 			value = item.Provider + "/" + item.Model
 		}
-		label := item.Name
-		if label == "" {
-			label = value
-		}
-		if item.Alias != "" && item.Alias != item.Model {
-			label += " (" + item.Alias + ")"
-		}
-		options = append(options, huh.NewOption(label, value))
+		options = append(options, value)
 	}
 	if len(options) == 0 {
 		return nil, errors.New("no models found")
@@ -153,7 +145,7 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, comboRefresh()
 	case comboActionDoneMsg:
 		model.actionRunning = false
-		if errors.Is(message.err, huh.ErrUserAborted) {
+		if errors.Is(message.err, errUserAborted) {
 			message.err = nil
 			message.notice = ""
 		}

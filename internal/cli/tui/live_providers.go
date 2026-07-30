@@ -14,7 +14,6 @@ import (
 
 	"g9router/internal/providers"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -193,7 +192,7 @@ func (model *providerLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.refreshing = true
 		return model, model.refreshCmd()
 	case providerActionDoneMsg:
-		if errors.Is(message.err, huh.ErrUserAborted) {
+		if errors.Is(message.err, errUserAborted) {
 			message.err = nil
 			message.notice = ""
 		}
@@ -557,21 +556,20 @@ func (model *providerLiveModel) testModel(input io.Reader, output io.Writer) (st
 	if len(available.Models) == 0 {
 		return "", errors.New(model.ui.t("form.noTestModels"))
 	}
-	options := make([]huh.Option[string], 0, len(available.Models))
 	modelName := available.Models[0].ID
+	options := make([]string, 0, len(available.Models))
 	for _, availableModel := range available.Models {
 		label := availableModel.Name
 		if label == "" {
 			label = availableModel.ID
 		}
-		options = append(options, huh.NewOption(label, availableModel.ID))
+		options = append(options, availableModel.ID)
 	}
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title(model.ui.t("form.testModel")).Options(options...).Value(&modelName),
-	))
-	if err := model.ui.runHuhIO(form, input, output); err != nil {
+	selected, err := model.ui.tuiSelect(model.ui.t("form.testModel"), model.ui.t("form.testModel"), options, input, output)
+	if err != nil {
 		return "", err
 	}
+	modelName = selected
 	var result struct {
 		OK        bool   `json:"ok"`
 		LatencyMs int64  `json:"latencyMs"`

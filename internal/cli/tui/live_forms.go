@@ -5,41 +5,35 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/charmbracelet/huh"
 )
 
 func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, output io.Writer) error {
 	if ui.useAccessible(input) {
 		return ui.promptProviderIO(item, edit, input, output)
 	}
-	apiType := item.APIType
-	if apiType == "" {
-		apiType = "openai"
+	if item.APIType == "" {
+		item.APIType = "openai"
 	}
 	result, err := ui.runTUIForm(ui.t("screen.providerForm"), []tuiField{
 		{label: ui.t("form.providerID"), kind: tuiInput, value: item.ID},
 		{label: ui.t("form.displayName"), kind: tuiInput, value: item.Name},
 		{label: ui.t("form.baseURL"), kind: tuiInput, value: item.BaseURL},
 		{label: ui.t("form.apiKey"), kind: tuiInput, value: item.APIKey, password: true},
-		{label: ui.t("form.apiType"), kind: tuiSelect, options: []string{"openai", "anthropic", "gemini"}, value: apiType},
 		{label: ui.t("form.finish"), kind: tuiSelect, options: []string{ui.t("common.save"), ui.t("common.back")}, value: ui.t("common.save")},
 	}, input, output)
 	if err != nil {
 		return err
 	}
-	if result.values[5] == ui.t("common.back") {
-		return huh.ErrUserAborted
+	if result.values[4] == ui.t("common.back") {
+		return errUserAborted
 	}
-	item.ID, item.Name, item.BaseURL, item.APIKey, item.APIType = result.values[0], result.values[1], result.values[2], result.values[3], result.values[4]
+	item.ID, item.Name, item.BaseURL, item.APIKey = result.values[0], result.values[1], result.values[2], result.values[3]
 	return ui.saveProvider(item, edit)
 }
 
 func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error) {
 	if ui.useAccessible(input) {
-		return promptAPIKeyIO(input, output, func(form *huh.Form) error {
-			return ui.runHuhIO(form, input, output)
-		}, ui.request, ui.Locale)
+		return promptAPIKeyIO(ui, input, output, ui.request, ui.Locale)
 	}
 	result, err := ui.runTUIForm(ui.t("keys.create"), []tuiField{
 		{label: ui.t("form.apiName"), kind: tuiInput},
@@ -49,7 +43,7 @@ func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error)
 		return apiKey{}, err
 	}
 	if result.values[1] == ui.t("common.back") {
-		return apiKey{}, huh.ErrUserAborted
+		return apiKey{}, errUserAborted
 	}
 	var created apiKey
 	err = ui.request(http.MethodPost, "/api/keys", map[string]string{"name": strings.TrimSpace(result.values[0])}, &created)
@@ -58,9 +52,7 @@ func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error)
 
 func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writer) error {
 	if ui.useAccessible(input) {
-		return ui.promptAPIKeyRenameIO(key, input, output, func(form *huh.Form) error {
-			return ui.runHuhIO(form, input, output)
-		}, ui.request, ui.Locale)
+		return ui.promptAPIKeyRenameIO(key, input, output, ui.request, ui.Locale)
 	}
 	result, err := ui.runTUIForm(ui.t("keys.rename"), []tuiField{
 		{label: ui.t("form.apiName"), kind: tuiInput, value: key.Name},
@@ -70,7 +62,7 @@ func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writ
 		return err
 	}
 	if result.values[1] == ui.t("common.back") {
-		return huh.ErrUserAborted
+		return errUserAborted
 	}
 	return ui.request(http.MethodPut, "/api/keys/"+key.ID, map[string]string{"name": strings.TrimSpace(result.values[0])}, nil)
 }
@@ -93,7 +85,7 @@ func (ui *UI) promptComboTUI(item *combo, edit bool, input io.Reader, output io.
 		return err
 	}
 	if result.values[2] == ui.t("common.back") {
-		return huh.ErrUserAborted
+		return errUserAborted
 	}
 	return ui.saveCombo(item, edit, result.selected[1])
 }

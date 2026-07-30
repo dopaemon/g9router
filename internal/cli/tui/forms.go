@@ -7,9 +7,12 @@ import (
 	"strings"
 
 	"g9router/internal/i18n"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
+
+var errUserAborted = errors.New("user aborted")
 
 type tuiFieldKind int
 
@@ -44,6 +47,15 @@ type tuiFormResult struct {
 	selected [][]string
 	confirms []bool
 }
+
+type tuiListItem struct {
+	title       string
+	description string
+}
+
+func (item tuiListItem) FilterValue() string { return item.title }
+func (item tuiListItem) Title() string       { return item.title }
+func (item tuiListItem) Description() string { return item.description }
 
 func (ui *UI) runTUIForm(title string, fields []tuiField, input io.Reader, output io.Writer) (tuiFormResult, error) {
 	model := &tuiForm{ui: ui, title: title, fields: fields}
@@ -90,7 +102,7 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if field.kind == tuiInput {
 		switch key.String() {
 		case "ctrl+c", "esc":
-			model.err = huh.ErrUserAborted
+			model.err = errUserAborted
 			return model, tea.Quit
 		case "tab":
 			model.next()
@@ -125,10 +137,10 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch key.String() {
 	case "ctrl+c", "esc":
-		model.err = huh.ErrUserAborted
+		model.err = errUserAborted
 		return model, tea.Quit
 	case "q":
-		model.err = huh.ErrUserAborted
+		model.err = errUserAborted
 		return model, tea.Quit
 	case "tab":
 		model.next()
@@ -152,7 +164,7 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		model.nextOption(field)
 	case "space", " ":
 		model.toggle(field)
-	case "enter":
+	case "enter", "ctrl+j", "ctrl+m":
 		if model.cursor+1 == len(model.fields) {
 			if err := model.validate(); err != nil {
 				model.err = err
@@ -161,6 +173,16 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model, tea.Quit
 		}
 		model.next()
+	default:
+		if len(key.Runes) == 1 && key.Runes[0] >= '1' && key.Runes[0] <= '9' {
+			option := int(key.Runes[0] - '1')
+			if (field.kind == tuiSelect || field.kind == tuiMultiSelect) && option < len(field.options) {
+				field.choice = option
+				if field.kind == tuiSelect {
+					field.value = field.options[option]
+				}
+			}
+		}
 	}
 	return model, nil
 }
@@ -237,8 +259,13 @@ func (model *tuiForm) View() string {
 	rows := make([]string, 0, len(model.fields))
 	for index := range model.fields {
 		field := &model.fields[index]
-		if field.kind == tuiMultiSelect {
-			rows = append(rows, cardTitleStyle.Render(field.label+":")+"\n"+multiSelectStyle.Width(model.ui.innerWidth()).Render(model.multiSelectRows(field)))
+		if field.kind == tuiMultiSelect || field.kind == tuiSelect || field.kind == tuiConfirm {
+			if index != model.cursor {
+				rows = append(rows, controlsStyle.Render(field.label+": "+model.fieldValue(field)))
+				continue
+			}
+			menu := model.optionRows(field)
+			rows = append(rows, cardTitleStyle.Render(field.label+":")+"\n"+multiSelectStyle.Width(model.ui.innerWidth()).Render(menu))
 			continue
 		}
 		label := field.label
@@ -252,10 +279,50 @@ func (model *tuiForm) View() string {
 		rows = append(rows, line)
 	}
 	content := cardTitleStyle.Render(model.title) + "\n\n" + strings.Join(rows, "\n") + "\n\n" + mutedStyle.Render(model.ui.t("form.controls"))
+	if model.ui.height > 0 && model.ui.height < 18 {
+		content = cardTitleStyle.Render(model.title) + "\n" + strings.Join(rows, "\n") + "\n" + mutedStyle.Render(model.ui.t("form.controls"))
+	}
 	if model.err != nil {
 		content += "\n\n" + errorStyle.Render(model.err.Error())
 	}
 	return model.ui.outerStyle().Render(content)
+}
+
+func (model *tuiForm) optionRows(field *tuiField) string {
+	options := field.options
+	selected := field.choice
+	if field.kind == tuiConfirm {
+		options = []string{i18n.T(model.ui.Locale, "common.no"), i18n.T(model.ui.Locale, "common.yes")}
+		if field.confirm {
+			selected = 1
+		} else {
+			selected = 0
+		}
+	}
+	items := make([]list.Item, len(options))
+	for index, option := range options {
+		items[index] = tuiListItem{title: option}
+	}
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.NormalTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Padding(0, 0, 0, 2)
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EE6FF8")).Padding(0, 0, 0, 2)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalTitle
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedTitle
+	delegate.ShowDescription = false
+	delegate.SetHeight(1)
+	delegate.SetSpacing(0)
+	visibleHeight := 8
+	if model.ui.height > 0 {
+		visibleHeight = max(1, min(8, model.ui.height-10))
+	}
+	menu := list.New(items, delegate, model.ui.innerWidth(), visibleHeight)
+	menu.SetShowTitle(false)
+	menu.SetShowStatusBar(false)
+	menu.SetShowPagination(false)
+	menu.SetShowHelp(false)
+	menu.SetFilteringEnabled(false)
+	menu.Select(selected)
+	return strings.TrimRight(menu.View(), "\n")
 }
 
 func (model *tuiForm) multiSelectRows(field *tuiField) string {

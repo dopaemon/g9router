@@ -8,7 +8,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 )
 
 type settingsRefreshMsg struct{}
@@ -92,7 +91,7 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, settingsRefresh()
 	case settingsActionDoneMsg:
 		model.actionRunning = false
-		if errors.Is(message.err, huh.ErrUserAborted) {
+		if errors.Is(message.err, errUserAborted) {
 			message.err = nil
 			message.notice = ""
 		}
