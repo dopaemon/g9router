@@ -6,8 +6,8 @@ import (
 
 	"g9router/internal/cli/tui"
 	"g9router/internal/server"
+	"github.com/charmbracelet/keygen"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
 )
 
 func New(app *server.Server, addr, baseURL string) (*ssh.Server, error) {
@@ -18,19 +18,27 @@ func New(app *server.Server, addr, baseURL string) (*ssh.Server, error) {
 	if hostKeyPath == "" {
 		hostKeyPath = "id_ed25519"
 	}
-	return wish.NewServer(
-		wish.WithAddress(addr),
-		wish.WithHostKeyPath(hostKeyPath),
-		wish.WithPasswordAuth(func(_ ssh.Context, password string) bool {
-			return app.ValidatePassword(password)
-		}),
-		wish.WithPublicKeyAuth(func(_ ssh.Context, _ ssh.PublicKey) bool { return false }),
-		wish.WithMiddleware(func(next ssh.Handler) ssh.Handler {
-			return func(session ssh.Session) {
-				if err := tui.RunAuthenticated(baseURL, session, session); err != nil {
-					_, _ = fmt.Fprintln(session.Stderr(), err)
-				}
+	if _, err := os.Stat(hostKeyPath); os.IsNotExist(err) {
+		if _, err := keygen.New(hostKeyPath, keygen.WithKeyType(keygen.Ed25519), keygen.WithWrite()); err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+	server := &ssh.Server{
+		Addr: addr,
+		Handler: func(session ssh.Session) {
+			if err := tui.RunAuthenticated(baseURL, session, session); err != nil {
+				_, _ = fmt.Fprintln(session.Stderr(), err)
 			}
-		}),
-	)
+		},
+		PasswordHandler: func(_ ssh.Context, password string) bool {
+			return app.ValidatePassword(password)
+		},
+		PublicKeyHandler: func(_ ssh.Context, _ ssh.PublicKey) bool { return false },
+	}
+	if err := ssh.HostKeyFile(hostKeyPath)(server); err != nil {
+		return nil, err
+	}
+	return server, nil
 }
