@@ -52,12 +52,12 @@ func run(baseURL string, in io.Reader, out io.Writer, requireLogin, forceTea boo
 		defer ui.sshInput.close()
 	}
 	EnableColors(out)
-	reader := bufio.NewReader(in)
 	if requireLogin {
-		if err := ui.login(reader, out); err != nil {
+		if err := ui.login(in, out); err != nil {
 			return err
 		}
 	}
+	reader := bufio.NewReader(in)
 	return ui.huhMenu(reader)
 }
 
