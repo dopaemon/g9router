@@ -847,6 +847,18 @@ func TestQuotaBarShowsRemainingPercentage(t *testing.T) {
 	}
 }
 
+func TestQuotaProgressAnimatesToRemainingPercentage(t *testing.T) {
+	model := &quotaModel{ui: &UI{width: 80, height: 30, Locale: i18n.English}, detail: -1}
+	updated, _ := model.Update(quotaDataMsg{items: []quotaItem{{ID: "codex", Quotas: map[string]quotaWindow{
+		"session": {Remaining: 75, Total: 100},
+	}}}})
+	model = updated.(*quotaModel)
+	bar, ok := model.progressBars[quotaProgressKey(model.items[0], "session")]
+	if !ok || bar.Percent() != 0.75 {
+		t.Fatalf("quota progress = %#v, found=%v", bar.Percent(), ok)
+	}
+}
+
 func TestQuotaCardsShowMiniInformation(t *testing.T) {
 	model := &quotaModel{
 		ui:     &UI{width: 80, height: 30, Locale: i18n.English},

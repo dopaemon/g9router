@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2/tree"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -26,20 +27,22 @@ type quotaDataMsg struct {
 }
 
 type quotaModel struct {
-	ui           *UI
-	items        []quotaItem
-	cursor       int
-	usageEnabled bool
-	autoRefresh  bool
-	loading      bool
-	refreshing   bool
-	err          error
-	detail       int
-	detailCursor int
-	itemsTop     int
-	itemsLeft    int
-	itemsWidth   int
-	itemsHeight  int
+	ui            *UI
+	items         []quotaItem
+	cursor        int
+	usageEnabled  bool
+	autoRefresh   bool
+	loading       bool
+	refreshing    bool
+	err           error
+	detail        int
+	detailCursor  int
+	itemsTop      int
+	itemsLeft     int
+	itemsWidth    int
+	itemsHeight   int
+	progressBars  map[string]progress.Model
+	progressReady map[string]bool
 }
 
 type quotaItem struct {
@@ -67,7 +70,7 @@ type quotaWindow struct {
 
 func (ui *UI) liveQuota() error {
 	EnableColors(ui.Out)
-	return ui.runTea(&quotaModel{ui: ui, loading: true, usageEnabled: true, autoRefresh: true, detail: -1})
+	return ui.runTea(&quotaModel{ui: ui, loading: true, usageEnabled: true, autoRefresh: true, detail: -1, progressBars: map[string]progress.Model{}, progressReady: map[string]bool{}})
 }
 
 func (model *quotaModel) Init() tea.Cmd {
@@ -91,7 +94,20 @@ func (model *quotaModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.detail = -1
 			model.detailCursor = 0
 		}
-		return model, nil
+		return model, model.setProgressTargets()
+	case progress.FrameMsg:
+		commands := make([]tea.Cmd, 0, len(model.progressBars))
+		for key, bar := range model.progressBars {
+			updated, command := bar.Update(message)
+			model.progressBars[key] = updated.(progress.Model)
+			if command != nil {
+				model.progressReady[key] = true
+			}
+			if command != nil {
+				commands = append(commands, command)
+			}
+		}
+		return model, tea.Batch(commands...)
 	case quotaActionDoneMsg:
 		model.refreshing = false
 		if errors.Is(message.err, huh.ErrUserAborted) {
@@ -256,7 +272,7 @@ func (model *quotaModel) View() string {
 		} else {
 			for _, name := range sortedQuotaNames(item.Quotas) {
 				quota := item.Quotas[name]
-				children = append(children, model.ui.t("quota.limit")+" ("+name+"): "+quotaBarWithoutReset("", quota, branchWidth))
+				children = append(children, model.ui.t("quota.limit")+" ("+name+"): "+model.animatedQuotaBar(item, "", quota, branchWidth, false))
 				children = append(children, model.ui.t("quota.resetTime")+": "+quotaResetValue(quota))
 			}
 		}
@@ -332,7 +348,7 @@ func (model *quotaModel) detailView(item quotaItem) string {
 	}
 	for _, name := range sortedQuotaNames(item.Quotas) {
 		quota := item.Quotas[name]
-		quotaRows = append(quotaRows, quotaBar(name, quota, model.ui.innerWidth()))
+		quotaRows = append(quotaRows, model.animatedQuotaBar(item, name, quota, model.ui.innerWidth(), true))
 	}
 	if len(quotaRows) > 10 {
 		quotaRows = quotaRows[:10]
@@ -396,6 +412,99 @@ func isCodexQuotaItem(item quotaItem) bool {
 func (model *quotaModel) refreshCmd() tea.Cmd {
 	ui, usageEnabled := model.ui, model.usageEnabled
 	return func() tea.Msg { return loadQuota(ui, usageEnabled) }
+}
+
+func (model *quotaModel) setProgressTargets() tea.Cmd {
+	if model.progressBars == nil {
+		model.progressBars = make(map[string]progress.Model)
+	}
+	if model.progressReady == nil {
+		model.progressReady = make(map[string]bool)
+	}
+	commands := make([]tea.Cmd, 0)
+	for _, item := range model.items {
+		for name, quota := range item.Quotas {
+			key := quotaProgressKey(item, name)
+			bar, ok := model.progressBars[key]
+			if !ok {
+				bar = newQuotaProgress(model.ui.innerWidth())
+				model.progressReady[key] = false
+			}
+			command := bar.SetPercent(quotaPercent(quota) / 100)
+			model.progressBars[key] = bar
+			commands = append(commands, command)
+		}
+	}
+	return tea.Batch(commands...)
+}
+
+func newQuotaProgress(width int) progress.Model {
+	return progress.New(
+		progress.WithWidth(quotaBarWidth(width)),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters('█', '░'),
+		progress.WithDefaultScaledGradient(),
+	)
+}
+
+func quotaProgressKey(item quotaItem, name string) string {
+	return item.ID + "\x00" + item.Email + "\x00" + name
+}
+
+func (model *quotaModel) animatedQuotaBar(item quotaItem, name string, quota quotaWindow, width int, includeReset bool) string {
+	if model.progressBars == nil {
+		model.progressBars = make(map[string]progress.Model)
+	}
+	if model.progressReady == nil {
+		model.progressReady = make(map[string]bool)
+	}
+	percent := quotaPercent(quota)
+	key := quotaProgressKey(item, name)
+	bar, ok := model.progressBars[key]
+	if !ok {
+		bar = newQuotaProgress(width)
+		bar.SetPercent(percent / 100)
+		model.progressReady[key] = false
+	}
+	bar.Width = quotaBarWidth(width)
+	model.progressBars[key] = bar
+	reset := ""
+	if includeReset {
+		reset = "  · reset " + quotaResetValue(quota)
+	}
+	namePrefix := ""
+	if name != "" {
+		namePrefix = fmt.Sprintf("%-8s ", name)
+	}
+	view := bar.View()
+	if !model.progressReady[key] {
+		view = bar.ViewAs(percent / 100)
+	}
+	return fmt.Sprintf("%s%s %3.0f%%%s", namePrefix, view, percent, mutedStyle.Render(reset))
+}
+
+func quotaBarWidth(width int) int {
+	if width < 32 {
+		return 4
+	}
+	if width < 42 {
+		return 8
+	}
+	if width < 60 {
+		return 12
+	}
+	return 20
+}
+
+func quotaPercent(quota quotaWindow) float64 {
+	remaining := quota.Remaining
+	if quota.Total > 0 && remaining == 0 && quota.Used < quota.Total {
+		remaining = quota.Total - quota.Used
+	}
+	if quota.Total > 0 && remaining > 1 {
+		remaining = remaining / quota.Total * 100
+	}
+	return math.Max(0, math.Min(100, remaining))
 }
 
 func loadQuota(ui *UI, usageEnabled bool) quotaDataMsg {
@@ -467,24 +576,8 @@ func quotaBarWithoutReset(name string, quota quotaWindow, width int) string {
 }
 
 func renderQuotaBar(name string, quota quotaWindow, width int, includeReset bool) string {
-	remaining := quota.Remaining
-	if quota.Total > 0 && remaining == 0 && quota.Used < quota.Total {
-		remaining = quota.Total - quota.Used
-	}
-	if quota.Total > 0 && remaining > 1 {
-		remaining = remaining / quota.Total * 100
-	}
-	remaining = math.Max(0, math.Min(100, remaining))
-	barWidth := 20
-	if width < 60 {
-		barWidth = 12
-	}
-	if width < 42 {
-		barWidth = 8
-	}
-	if width < 32 {
-		barWidth = 4
-	}
+	remaining := quotaPercent(quota)
+	barWidth := quotaBarWidth(width)
 	filled := int(math.Round(remaining / 100 * float64(barWidth)))
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
 	style := errorStyle

@@ -14,6 +14,7 @@ import (
 	"g9router/internal/cli/tray"
 	"g9router/internal/cli/tui"
 	"g9router/internal/cli/xai"
+	"g9router/internal/instance"
 	"g9router/internal/server"
 	"g9router/internal/sshserver"
 	"github.com/charmbracelet/fang"
@@ -106,23 +107,49 @@ func run(options runOptions) error {
 	if options.ssh && (options.sshPort < 1 || options.sshPort > 65535) {
 		return fmt.Errorf("invalid --ssh-port: %d", options.sshPort)
 	}
+	ports := []int{portNumber(addr)}
+	if options.ssh {
+		ports = append(ports, options.sshPort)
+	}
+	releaseInstance, err := instance.Acquire(ports...)
+	if err != nil {
+		return err
+	}
+	defer releaseInstance()
+	var sshListener net.Listener
+	var sshServe func(net.Listener) error
+	if options.ssh {
+		sshAddr := net.JoinHostPort("0.0.0.0", strconv.Itoa(options.sshPort))
+		var err error
+		sshListener, err = net.Listen("tcp", sshAddr)
+		if err != nil {
+			return fmt.Errorf("cannot listen on SSH %s: %w", sshAddr, err)
+		}
+		sshApp, err := sshserver.New(app, sshAddr, "http://127.0.0.1:"+portFromAddr(addr))
+		if err != nil {
+			_ = sshListener.Close()
+			return err
+		}
+		sshServe = sshApp.Serve
+	}
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
+		if sshListener != nil {
+			_ = sshListener.Close()
+		}
 		return fmt.Errorf("cannot listen on %s: %w", addr, err)
 	}
 	fmt.Fprintln(os.Stderr, tui.Info("g9router listening on "+addr))
-	errors := make(chan error, 1)
+	errors := make(chan error, 2)
 	go func() { errors <- http.Serve(listener, appHandler) }()
 	if options.ssh {
 		sshAddr := net.JoinHostPort("0.0.0.0", strconv.Itoa(options.sshPort))
-		sshApp, err := sshserver.New(app, sshAddr, "http://127.0.0.1:"+portFromAddr(addr))
-		if err != nil {
-			return err
-		}
 		go func() {
-			if err := sshApp.ListenAndServe(); err != nil {
+			if err := sshServe(sshListener); err != nil {
 				fmt.Fprintln(os.Stderr, tui.Error("SSH server stopped: "+err.Error()))
+				_ = listener.Close()
+				errors <- fmt.Errorf("SSH server stopped: %w", err)
 			}
 		}()
 		fmt.Fprintln(os.Stderr, tui.Info("g9router SSH listening on "+sshAddr))
