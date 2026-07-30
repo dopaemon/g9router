@@ -209,6 +209,9 @@ func (ui *UI) controlColumnsSelected(selected int, items ...string) string {
 }
 
 func (ui *UI) runTeaIO(model tea.Model, input io.Reader, output io.Writer) error {
+	if ui.forceTea {
+		return ui.runTea(model)
+	}
 	options := []tea.ProgramOption{tea.WithInput(input), tea.WithOutput(output), tea.WithAltScreen()}
 	if !accessibleMode(input) {
 		options = append(options, tea.WithMouseCellMotion())

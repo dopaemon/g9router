@@ -51,7 +51,7 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.loading = true
 			return model, model.refreshCmd()
 		}
-		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= 6 {
+		if index, err := strconv.Atoi(message.String()); err == nil && index >= 1 && index <= 5 {
 			if model.loading || model.actionRunning {
 				return model, nil
 			}
@@ -62,13 +62,13 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return model, tea.Quit
 		case "up", "k":
-			model.cursor = moveIndex(model.cursor, 6, -1)
+			model.cursor = moveIndex(model.cursor, 5, -1)
 		case "down", "j":
-			model.cursor = moveIndex(model.cursor, 6, 1)
+			model.cursor = moveIndex(model.cursor, 5, 1)
 		case "left", "h":
-			model.cursor = cycleIndex(model.cursor, 6, -1)
+			model.cursor = cycleIndex(model.cursor, 5, -1)
 		case "right", "l":
-			model.cursor = cycleIndex(model.cursor, 6, 1)
+			model.cursor = cycleIndex(model.cursor, 5, 1)
 		case "enter", " ":
 			if model.loading || model.actionRunning {
 				return model, nil
@@ -121,8 +121,7 @@ func (model *settingsModel) View() string {
 		settingsActionItem(model.ui, 2, model.ui.t("settings.enableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 2) + "\n" +
 		settingsActionItem(model.ui, 3, model.ui.t("settings.disableTunnel"), settingsEnabled(model.tunnel, "enabled"), model.cursor == 3))
 	securityCard := innerCardStyle.Width(cardWidth).Render(cardTitleStyle.Render(model.ui.t("screen.security")) + "\n" +
-		settingsActionItem(model.ui, 4, model.ui.t("settings.resetAuth"), false, model.cursor == 4) + "\n" +
-		settingsActionItem(model.ui, 5, model.ui.t("settings.resetPassword"), false, model.cursor == 5) + "\n\n" + mutedStyle.Render(model.ui.t("settings.passwordLabel")+": "+model.ui.t(map[bool]string{true: "settings.passwordConfigured", false: "settings.passwordMissing"}[settingsEnabled(model.values, "hasPassword")])))
+		settingsActionItem(model.ui, 4, model.ui.t("settings.resetAuth"), false, model.cursor == 4))
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
 		model.ui.t("controls.toolsMove"), model.ui.t("controls.toolsSwitch"),
 		model.ui.t("controls.languageSelect"), model.ui.t("controls.languageBack"),
@@ -181,12 +180,6 @@ func (model *settingsModel) runAction(input io.Reader, output io.Writer) (string
 			return "", err
 		}
 		return model.ui.t("notice.authReset"), model.ui.request(http.MethodPut, "/api/settings", map[string]string{"authMode": "password"}, nil)
-	case 5:
-		ok, err := model.ui.tuiConfirm(model.ui.t("confirm.resetPassword"), input, output)
-		if err != nil || !ok {
-			return "", err
-		}
-		return model.ui.t("notice.passwordReset"), model.ui.request(http.MethodPost, "/api/auth/reset-password", nil, nil)
 	}
 	return "", nil
 }

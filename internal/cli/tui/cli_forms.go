@@ -18,7 +18,11 @@ func (ui *UI) runHuh(form *huh.Form) error {
 
 func (ui *UI) runHuhIO(form *huh.Form, input io.Reader, output io.Writer) error {
 	EnableColors(output)
-	return form.WithAccessible(accessibleMode(input)).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(ui.huhWidth()).Run()
+	return form.WithAccessible(ui.useAccessible(input)).WithInput(input).WithOutput(output).WithTheme(huh.ThemeCharm()).WithWidth(ui.huhWidth()).Run()
+}
+
+func (ui *UI) useAccessible(input io.Reader) bool {
+	return !ui.forceTea && accessibleMode(input)
 }
 
 func accessibleMode(input io.Reader) bool {

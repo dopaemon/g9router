@@ -1091,3 +1091,48 @@ func TestTUIFormRecoversAfterValidationError(t *testing.T) {
 		t.Fatalf("valid input kept stale error: %v", model.err)
 	}
 }
+
+func TestTUIFormAcceptsNewAndConfirmPassword(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{
+		{label: "New password", kind: tuiInput, password: true},
+		{label: "Confirm password", kind: tuiInput, password: true},
+	}}
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.err != nil || model.fields[0].value != "a" || model.fields[1].value != "a" {
+		t.Fatalf("password form rejected filled fields: err=%v fields=%#v", model.err, model.fields)
+	}
+}
+
+func TestTUIFormInputArrowNavigation(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{
+		{label: "New password", kind: tuiInput},
+		{label: "Confirm password", kind: tuiInput},
+	}}
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if model.cursor != 1 || model.fields[0].value != "k" || model.fields[1].value != "k" {
+		t.Fatalf("input navigation failed: cursor=%d fields=%#v", model.cursor, model.fields)
+	}
+}
+
+func TestTUIFormAcceptsWhitespacePassword(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{
+		{label: "New password", kind: tuiInput, password: true, value: " "},
+		{label: "Confirm password", kind: tuiInput, password: true, value: " "},
+	}}
+	if err := model.validate(); err != nil {
+		t.Fatalf("whitespace password rejected: %v", err)
+	}
+}
+
+func TestTUIFormAcceptsControlEnter(t *testing.T) {
+	model := &tuiForm{ui: &UI{Locale: "en"}, fields: []tuiField{{label: "Password", kind: tuiInput, password: true, value: "secret"}}}
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if updated.(*tuiForm).err != nil || command == nil {
+		t.Fatalf("control-enter did not submit: err=%v command=%v", updated.(*tuiForm).err, command)
+	}
+}

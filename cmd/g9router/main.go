@@ -15,6 +15,7 @@ import (
 	"g9router/internal/cli/tui"
 	"g9router/internal/cli/xai"
 	"g9router/internal/server"
+	"g9router/internal/sshserver"
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,10 @@ func main() {
 	flags.BoolVar(&options.interactive, "interactive", false, "run the interactive Huh CLI")
 	flags.BoolVar(&options.log, "log", false, "show server logs")
 	flags.BoolVar(&options.tray, "tray", false, "run in system tray mode")
+	flags.BoolVar(&options.ssh, "ssh", false, "enable the SSH TUI server")
+	flags.IntVar(&options.sshPort, "ssh-port", 2222, "SSH server port")
+	flags.StringVar(&options.setPassword, "set-password", "", "set the G9Router password and exit")
+	flags.StringVar(&options.resetPassword, "reset-password", "", "reset the G9Router password using the current password and exit")
 	flags.BoolVar(&options.skipUpdate, "skip-update", false, "skip update check")
 	if err := fang.Execute(context.Background(), command, fang.WithVersion("9Router v0.5.40")); err != nil {
 		fmt.Fprintln(os.Stderr, tui.Error(err.Error()))
@@ -47,11 +52,13 @@ func main() {
 }
 
 type runOptions struct {
-	port                  int
-	host                  string
-	noBrowser, webUI      bool
-	interactive           bool
-	log, tray, skipUpdate bool
+	port                       int
+	host                       string
+	noBrowser, webUI           bool
+	interactive                bool
+	log, tray, ssh, skipUpdate bool
+	sshPort                    int
+	setPassword, resetPassword string
 }
 
 func run(options runOptions) error {
@@ -71,6 +78,34 @@ func run(options runOptions) error {
 		addr = ":20128"
 	}
 	app := server.New(server.Options{Addr: addr, Upstream: os.Getenv("G9ROUTER_UPSTREAM"), APIKey: os.Getenv("G9ROUTER_API_KEY"), WebUI: options.webUI})
+	if options.setPassword != "" || options.resetPassword != "" {
+		if options.setPassword != "" && options.resetPassword != "" {
+			return fmt.Errorf("use only one of --set-password or --reset-password")
+		}
+		if options.setPassword != "" {
+			if app.PasswordConfigured() {
+				return fmt.Errorf("password already configured; use --reset-password")
+			}
+			return app.SetPassword(options.setPassword)
+		}
+		if os.Getenv("G9ROUTER_PASSWORD") != "" {
+			return fmt.Errorf("G9ROUTER_PASSWORD is set; change the environment variable instead")
+		}
+		if !app.ValidatePassword(options.resetPassword) {
+			return fmt.Errorf("invalid current password")
+		}
+		password, err := tui.ResetPasswordForm(os.Stdin, os.Stdout)
+		if err != nil {
+			return err
+		}
+		return app.SetPassword(password)
+	}
+	if options.ssh && !app.PasswordConfigured() {
+		return fmt.Errorf("--ssh requires a configured G9Router password")
+	}
+	if options.ssh && (options.sshPort < 1 || options.sshPort > 65535) {
+		return fmt.Errorf("invalid --ssh-port: %d", options.sshPort)
+	}
 	appHandler := auth.Middleware(app.Handler(), os.Getenv("G9ROUTER_ADMIN_KEY"))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -79,6 +114,19 @@ func run(options runOptions) error {
 	fmt.Fprintln(os.Stderr, tui.Info("g9router listening on "+addr))
 	errors := make(chan error, 1)
 	go func() { errors <- http.Serve(listener, appHandler) }()
+	if options.ssh {
+		sshAddr := net.JoinHostPort("0.0.0.0", strconv.Itoa(options.sshPort))
+		sshApp, err := sshserver.New(app, sshAddr, "http://127.0.0.1:"+portFromAddr(addr))
+		if err != nil {
+			return err
+		}
+		go func() {
+			if err := sshApp.ListenAndServe(); err != nil {
+				fmt.Fprintln(os.Stderr, tui.Error("SSH server stopped: "+err.Error()))
+			}
+		}()
+		fmt.Fprintln(os.Stderr, tui.Info("g9router SSH listening on "+sshAddr))
+	}
 	ready := true
 	if ready && options.tray {
 		executable, _ := os.Executable()
@@ -87,7 +135,7 @@ func run(options runOptions) error {
 		}
 		return <-errors
 	}
-	if ready && (tui.IsTerminal(os.Stdin) || options.interactive) {
+	if ready && !options.ssh && (tui.IsTerminal(os.Stdin) || options.interactive) {
 		if err := tui.Run(tui.PortURL("127.0.0.1", portNumber(addr)), os.Stdin, os.Stdout); err != nil {
 			return fmt.Errorf("interactive CLI: %w", err)
 		}

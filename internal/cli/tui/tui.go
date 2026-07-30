@@ -30,14 +30,52 @@ type UI struct {
 	height      int
 	viewClipped bool
 	forceHuh    bool
+	forceTea    bool
+	sshInput    *sshInput
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {
-	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: http.DefaultClient, Locale: i18n.Normalize(os.Getenv("G9ROUTER_LOCALE")), forceHuh: true}
+	return run(baseURL, in, out, true, false)
+}
+
+func RunAuthenticated(baseURL string, in io.Reader, out io.Writer) error {
+	return run(baseURL, in, out, false, true)
+}
+
+func run(baseURL string, in io.Reader, out io.Writer, requireLogin, forceTea bool) error {
+	ui := &UI{BaseURL: strings.TrimRight(baseURL, "/"), In: in, Out: out, Client: &http.Client{Timeout: 10 * time.Second}, Locale: i18n.Normalize(os.Getenv("G9ROUTER_LOCALE")), forceHuh: true, forceTea: forceTea}
 	ui.loadStoredLocale()
+	if forceTea {
+		ui.sshInput = newSSHInput(in)
+		defer ui.sshInput.close()
+	}
 	EnableColors(out)
 	reader := bufio.NewReader(in)
+	if requireLogin {
+		if err := ui.login(reader, out); err != nil {
+			return err
+		}
+	}
 	return ui.huhMenu(reader)
+}
+
+func (ui *UI) login(input io.Reader, output io.Writer) error {
+	var status struct {
+		PasswordConfigured bool `json:"passwordConfigured"`
+	}
+	if err := ui.request(http.MethodGet, "/api/auth/status", nil, &status); err != nil || !status.PasswordConfigured {
+		return err
+	}
+	for {
+		password, err := ui.tuiInput(ui.t("auth.title"), ui.t("form.currentPassword"), "", true, input, output)
+		if err != nil {
+			return err
+		}
+		if err := ui.request(http.MethodPost, "/api/auth/login", map[string]string{"password": password}, nil); err == nil {
+			return nil
+		}
+		fmt.Fprintln(output, errorStyle.Render(ui.t("error.auth")))
+	}
 }
 
 func (ui *UI) loadStoredLocale() {

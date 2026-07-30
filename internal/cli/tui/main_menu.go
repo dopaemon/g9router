@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	ssh "github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 type mainMenuModel struct {
@@ -28,7 +31,7 @@ const g9routerBanner = `██████╗  █████╗ ████�
  ╚═════╝  ╚════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝`
 
 func (ui *UI) mainMenuChoice(items []string) (string, error) {
-	if !isInteractiveWriter(ui.Out) {
+	if !ui.forceTea && !isInteractiveWriter(ui.Out) {
 		return "", nil
 	}
 	model := &mainMenuModel{ui: ui, items: items}
@@ -38,10 +41,55 @@ func (ui *UI) mainMenuChoice(items []string) (string, error) {
 
 func (ui *UI) runTea(model tea.Model) error {
 	options := []tea.ProgramOption{tea.WithInput(ui.In), tea.WithOutput(ui.Out), tea.WithAltScreen()}
-	if !accessibleMode(ui.In) {
+	var session ssh.Session
+	if value, ok := ui.In.(ssh.Session); ok {
+		session = value
+		pty, _, ok := session.Pty()
+		if !ok {
+			return fmt.Errorf("SSH session requires a PTY; reconnect with ssh -t")
+		}
+		input := io.Reader(session)
+		var release func()
+		if ui.sshInput != nil {
+			input, release = ui.sshInput.reader()
+			defer release()
+		}
+		options = []tea.ProgramOption{tea.WithInput(input), tea.WithOutput(session), tea.WithAltScreen()}
+		if pty.Term != "" {
+			options = append(options, tea.WithEnvironment(append(session.Environ(), "TERM="+pty.Term)))
+		}
+		profile := termenv.Ascii
+		if pty.Term != "" && pty.Term != "dumb" {
+			profile = termenv.ANSI256
+		}
+		lipgloss.SetColorProfile(profile)
+		ui.width, ui.height = pty.Window.Width, pty.Window.Height
+	} else if !accessibleMode(ui.In) {
 		options = append(options, tea.WithMouseCellMotion())
 	}
-	_, err := tea.NewProgram(sizedModel{ui: ui, model: model}, options...).Run()
+	program := tea.NewProgram(sizedModel{ui: ui, model: model}, options...)
+	var done chan struct{}
+	if session != nil {
+		_, windows, _ := session.Pty()
+		done = make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case window, ok := <-windows:
+					if !ok {
+						return
+					}
+					program.Send(tea.WindowSizeMsg{Width: window.Width, Height: window.Height})
+				}
+			}
+		}()
+	}
+	_, err := program.Run()
+	if done != nil {
+		close(done)
+	}
 	return err
 }
 

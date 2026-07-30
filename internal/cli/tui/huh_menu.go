@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"g9router/internal/i18n"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 )
 
@@ -22,6 +23,9 @@ func (ui *UI) huhMode() bool {
 }
 
 func (ui *UI) liveMode() bool {
+	if ui.forceTea {
+		return true
+	}
 	return ui.huhMode() && !accessibleMode(ui.In)
 }
 
@@ -121,7 +125,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		exit := ui.t("menu.exit")
 		items := []string{endpoint, providers, combos, statistics, quota, cliTools, logs, settings, language, credits, exit}
 		choice, err := ui.mainMenuChoice(items)
-		if !isInteractiveWriter(ui.Out) || accessibleMode(ui.In) {
+		if !ui.forceTea && (!isInteractiveWriter(ui.Out) || accessibleMode(ui.In)) {
 			choice, err = ui.huhChoice(ui.t("menu.title"), items)
 		}
 		if err != nil {
@@ -130,7 +134,7 @@ func (ui *UI) huhMenu(reader *bufio.Reader) error {
 		run := func(name string, action func() error) {
 			for {
 				err := action()
-				if err == nil || errors.Is(err, huh.ErrUserAborted) {
+				if err == nil || errors.Is(err, huh.ErrUserAborted) || errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, tea.ErrInterrupted) {
 					return
 				}
 				fmt.Fprintln(ui.Out, Error(err.Error()))

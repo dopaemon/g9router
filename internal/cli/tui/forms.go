@@ -96,6 +96,10 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			model.next()
 		case "shift+tab":
 			model.previous()
+		case "up":
+			model.previous()
+		case "down":
+			model.next()
 		case "backspace", "ctrl+h":
 			value := []rune(field.value)
 			if len(value) > 0 {
@@ -103,7 +107,7 @@ func (model *tuiForm) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+u":
 			field.value = ""
-		case "enter":
+		case "enter", "ctrl+j", "ctrl+m":
 			if model.cursor+1 == len(model.fields) {
 				if err := model.validate(); err != nil {
 					model.err = err
@@ -213,7 +217,7 @@ func (model *tuiForm) toggle(field *tuiField) {
 
 func (model *tuiForm) validate() error {
 	for _, field := range model.fields {
-		if field.kind == tuiInput && strings.TrimSpace(field.value) == "" {
+		if field.kind == tuiInput && ((!field.password && strings.TrimSpace(field.value) == "") || (field.password && field.value == "")) {
 			return errors.New(fmt.Sprintf(model.ui.t("form.required"), field.label))
 		}
 		if field.kind == tuiMultiSelect && len(field.options) > 0 {

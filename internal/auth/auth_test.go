@@ -70,3 +70,29 @@ func TestMiddlewareAcceptsLocalCLI(t *testing.T) {
 		t.Fatalf("status = %d", response.Code)
 	}
 }
+
+func TestMiddlewareLeavesWebShellPublic(t *testing.T) {
+	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "required")
+	for _, path := range []string{"/", "/login", "/dashboard", "/dashboard/providers", "/favicon.svg"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("path %s status = %d", path, response.Code)
+		}
+	}
+}
+
+func TestMiddlewareStillProtectsAPIs(t *testing.T) {
+	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "required")
+	request := httptest.NewRequest(http.MethodGet, "/api/providers", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("API status = %d", response.Code)
+	}
+}

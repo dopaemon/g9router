@@ -45,7 +45,7 @@ func middleware(next http.Handler, key string, validator func(string) bool, enab
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/api/auth/status" || r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/logout" {
+		if isPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -73,6 +73,21 @@ func middleware(next http.Handler, key string, validator func(string) bool, enab
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isPublicPath(path string) bool {
+	if path == "/healthz" || path == "/api/auth/status" || path == "/api/auth/login" || path == "/api/auth/logout" {
+		return true
+	}
+	if path == "/" || path == "/login" || path == "/dashboard" || strings.HasPrefix(path, "/dashboard/") {
+		return true
+	}
+	switch path {
+	case "/favicon.svg", "/manifest.json", "/icon-192.svg", "/icon-512.svg":
+		return true
+	default:
+		return false
+	}
 }
 
 func isLoopback(address string) bool {

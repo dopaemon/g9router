@@ -883,9 +883,39 @@ func (s *Server) providerModelsAPI(w http.ResponseWriter, r *http.Request, id st
 
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	token, _ := r.Cookie("g9router_session")
-	_, stored := s.settings.Secret("password")
-	writeJSON(w, 200, map[string]any{"authenticated": token != nil && s.sessions.Valid(token.Value), "passwordConfigured": os.Getenv("G9ROUTER_PASSWORD") != "" || stored})
+	writeJSON(w, 200, map[string]any{"authenticated": token != nil && s.sessions.Valid(token.Value), "passwordConfigured": s.PasswordConfigured()})
 }
+
+func (s *Server) PasswordConfigured() bool {
+	if os.Getenv("G9ROUTER_PASSWORD") != "" {
+		return true
+	}
+	_, ok := s.settings.Secret("password")
+	return ok
+}
+
+func (s *Server) ValidatePassword(password string) bool {
+	if expected := os.Getenv("G9ROUTER_PASSWORD"); expected != "" && password == expected {
+		return true
+	}
+	hash, ok := s.settings.Secret("password")
+	return ok && bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+func (s *Server) SetPassword(password string) error {
+	if password == "" {
+		return errors.New("password is required")
+	}
+	if os.Getenv("G9ROUTER_PASSWORD") != "" {
+		return errors.New("G9ROUTER_PASSWORD is set; change the environment variable instead")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return s.settings.Update(map[string]any{"password": string(hash)})
+}
+
 func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
@@ -898,14 +928,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "password is required"})
 		return
 	}
-	expected := os.Getenv("G9ROUTER_PASSWORD")
-	valid := expected != "" && input.Password == expected
-	if !valid {
-		if hash, ok := s.settings.Secret("password"); ok {
-			valid = bcrypt.CompareHashAndPassword([]byte(hash), []byte(input.Password)) == nil
-		}
-	}
-	if !valid {
+	if !s.ValidatePassword(input.Password) {
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
 	}
@@ -983,7 +1006,7 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		delete(values, "oidcClientSecret")
 		delete(values, "mitmSudoEncrypted")
 		values["oidcConfigured"] = anyString(values["oidcIssuerUrl"]) != "" && anyString(values["oidcClientId"]) != "" && func() bool { _, ok := s.settings.Secret("oidcClientSecret"); return ok }()
-		values["hasPassword"] = func() bool { _, ok := s.settings.Secret("password"); return ok }()
+		values["hasPassword"] = s.PasswordConfigured()
 		values["enableRequestLogs"] = os.Getenv("ENABLE_REQUEST_LOGS") == "true"
 		values["enableTranslator"] = os.Getenv("ENABLE_TRANSLATOR") == "true"
 		writeJSON(w, 200, values)
@@ -999,7 +1022,12 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if raw, ok := input["newPassword"].(string); ok && raw != "" {
 			current, _ := input["currentPassword"].(string)
-			if hash, exists := s.settings.Secret("password"); exists {
+			if expected := os.Getenv("G9ROUTER_PASSWORD"); expected != "" {
+				if current != expected {
+					writeJSON(w, 401, map[string]string{"error": "Invalid current password"})
+					return
+				}
+			} else if hash, exists := s.settings.Secret("password"); exists {
 				if bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
 					writeJSON(w, 401, map[string]string{"error": "Invalid current password"})
 					return

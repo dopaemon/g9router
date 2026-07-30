@@ -10,7 +10,7 @@ import (
 )
 
 func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, output io.Writer) error {
-	if accessibleMode(input) {
+	if ui.useAccessible(input) {
 		return ui.promptProviderIO(item, edit, input, output)
 	}
 	apiType := item.APIType
@@ -36,7 +36,7 @@ func (ui *UI) promptProviderTUI(item *provider, edit bool, input io.Reader, outp
 }
 
 func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error) {
-	if accessibleMode(input) {
+	if ui.useAccessible(input) {
 		return promptAPIKeyIO(input, output, func(form *huh.Form) error {
 			return ui.runHuhIO(form, input, output)
 		}, ui.request, ui.Locale)
@@ -57,7 +57,7 @@ func (ui *UI) promptAPIKeyTUI(input io.Reader, output io.Writer) (apiKey, error)
 }
 
 func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writer) error {
-	if accessibleMode(input) {
+	if ui.useAccessible(input) {
 		return ui.promptAPIKeyRenameIO(key, input, output, func(form *huh.Form) error {
 			return ui.runHuhIO(form, input, output)
 		}, ui.request, ui.Locale)
@@ -76,7 +76,7 @@ func (ui *UI) promptAPIKeyRenameTUI(key *apiKey, input io.Reader, output io.Writ
 }
 
 func (ui *UI) promptComboTUI(item *combo, edit bool, input io.Reader, output io.Writer) error {
-	if accessibleMode(input) {
+	if ui.useAccessible(input) {
 		return ui.promptComboIO(item, edit, input, output)
 	}
 	options, err := ui.comboModelValues()
@@ -137,7 +137,7 @@ func (ui *UI) tuiSelectKey(keys []apiKey, input io.Reader, output io.Writer) (ap
 	}
 	var selected string
 	var err error
-	if accessibleMode(input) {
+	if ui.useAccessible(input) {
 		selected, err = ui.huhChoiceIO(ui.t("form.chooseKey"), options, input, output)
 	} else {
 		selected, err = ui.tuiSelect(ui.t("form.chooseKey"), ui.t("form.chooseKey"), options, input, output)
