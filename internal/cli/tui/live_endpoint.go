@@ -141,7 +141,7 @@ func (model *endpointLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *endpointLiveModel) View() string {
 	if model.loading {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("endpoint.title")) + "\n\n" + model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	if model.err != nil && !model.hasData {
 		return model.ui.errorView(model.ui.t("endpoint.title"), model.err)

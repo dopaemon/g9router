@@ -143,7 +143,7 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *cliToolsModel) View() string {
 	if model.loading || model.actionRunning {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	if model.err != nil && len(model.statuses) == 0 {
 		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)

@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -25,9 +26,15 @@ func (region tuiRegion) contains(x, y int) bool {
 	return x >= region.left && x < region.left+region.width && y >= region.top && y < region.top+region.height
 }
 
-func (model sizedModel) Init() tea.Cmd { return model.model.Init() }
+func (model sizedModel) Init() tea.Cmd {
+	model.ui.ensureLoadingSpinner()
+	return tea.Batch(model.model.Init(), func() tea.Msg { return model.ui.loadingSpinner.Tick() })
+}
 
 func (model sizedModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	model.ui.ensureLoadingSpinner()
+	var spinnerCommand tea.Cmd
+	model.ui.loadingSpinner, spinnerCommand = model.ui.loadingSpinner.Update(message)
 	resized := false
 	if size, ok := message.(tea.WindowSizeMsg); ok {
 		resized = model.ui.width != size.Width || model.ui.height != size.Height
@@ -39,7 +46,7 @@ func (model sizedModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if resized {
 		command = tea.Batch(command, func() tea.Msg { return tea.ClearScreen() })
 	}
-	return model, command
+	return model, tea.Batch(command, spinnerCommand)
 }
 
 func (model sizedModel) View() string { return model.ui.fitView(model.model.View()) }
@@ -96,6 +103,19 @@ func (ui *UI) joinResponsiveCards(cards []string, columns int) string {
 }
 
 func (ui *UI) compact() bool { return ui.innerWidth() < 56 }
+
+func (ui *UI) ensureLoadingSpinner() {
+	if len(ui.loadingSpinner.Spinner.Frames) > 0 {
+		return
+	}
+	ui.loadingSpinner = spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	ui.loadingSpinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA"))
+}
+
+func (ui *UI) loadingText(label string) string {
+	ui.ensureLoadingSpinner()
+	return mutedStyle.Render(ui.loadingSpinner.View() + " " + label)
+}
 
 func (ui *UI) viewportHeight(reserved, fallback int) int {
 	if ui.height <= 0 {

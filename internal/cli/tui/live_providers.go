@@ -256,7 +256,7 @@ func (model *providerLiveModel) View() string {
 			controlItems = append(controlItems, model.ui.t("controls.providerSelect"), model.ui.t("controls.providerAddAction"))
 		}
 	} else {
-		controlItems = append(controlItems, model.ui.t("common.loading"))
+		controlItems = append(controlItems, model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	controls := model.ui.controlColumns(controlItems...)
 	if hint := model.ui.mouseHint(); hint != "" {
@@ -294,7 +294,7 @@ func (model *providerLiveModel) View() string {
 
 func (model *providerLiveModel) cardContent() string {
 	if model.loading {
-		return model.ui.innerStyle().Render(mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.innerStyle().Render(model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	var title string
 	var rows []string

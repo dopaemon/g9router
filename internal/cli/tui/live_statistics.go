@@ -111,7 +111,7 @@ func (model *statisticsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *statisticsModel) View() string {
 	if model.loading {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.statistics")) + "\n\n" + model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	periods := make([]string, len(statisticsPeriods))
 	for index, period := range statisticsPeriods {

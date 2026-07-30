@@ -310,7 +310,7 @@ func (model *quotaModel) View() string {
 
 func (model *quotaModel) loadingView() string {
 	line := mutedStyle.Render(truncateText("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░", max(1, model.ui.innerWidth()-4)))
-	rows := strings.Join([]string{line, line, line}, "\n")
+	rows := strings.Join([]string{model.ui.loadingText(""), line, line, line}, "\n")
 	content := model.ui.innerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.quota")) + "\n" + rows)
 	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
 		"↑↓/jk move", "Enter select", "r refresh", "a auto-refresh", "q back",

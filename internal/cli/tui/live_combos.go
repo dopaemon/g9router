@@ -169,7 +169,7 @@ func (model *comboLiveModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *comboLiveModel) View() string {
 	if model.loading || model.actionRunning {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.combos")) + "\n\n" + model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	if model.err != nil && len(model.combos) == 0 && model.draft.Name == "" && len(model.draft.Models) == 0 {
 		return model.ui.errorView(model.ui.t("menu.combos"), model.err)

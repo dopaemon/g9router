@@ -18,20 +18,22 @@ import (
 
 	"g9router/internal/i18n"
 	"g9router/internal/providers"
+	"github.com/charmbracelet/bubbles/spinner"
 )
 
 type UI struct {
-	BaseURL     string
-	In          io.Reader
-	Out         io.Writer
-	Client      *http.Client
-	Locale      string
-	width       int
-	height      int
-	viewClipped bool
-	forceHuh    bool
-	forceTea    bool
-	sshInput    *sshInput
+	BaseURL        string
+	In             io.Reader
+	Out            io.Writer
+	Client         *http.Client
+	Locale         string
+	width          int
+	height         int
+	viewClipped    bool
+	forceHuh       bool
+	forceTea       bool
+	sshInput       *sshInput
+	loadingSpinner spinner.Model
 }
 
 func Run(baseURL string, in io.Reader, out io.Writer) error {

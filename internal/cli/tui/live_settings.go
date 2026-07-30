@@ -108,7 +108,7 @@ func (model *settingsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *settingsModel) View() string {
 	if model.loading || model.actionRunning {
-		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + mutedStyle.Render(model.ui.t("common.loading")))
+		return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.settings")) + "\n\n" + model.ui.loadingText(model.ui.t("common.loading")))
 	}
 	if model.err != nil && len(model.values) == 0 && len(model.tunnel) == 0 {
 		return model.ui.errorView(model.ui.t("menu.settings"), model.err)

@@ -223,7 +223,7 @@ func (model *logsModel) currentError() error {
 
 func (model *logsModel) currentContent() string {
 	if model.loading {
-		return mutedStyle.Render(model.ui.t("common.loading"))
+		return model.ui.loadingText(model.ui.t("common.loading"))
 	}
 	if err := model.currentError(); err != nil {
 		message := errorStyle.Render(model.ui.t("common.error") + ": " + model.ui.errorSummary(err))

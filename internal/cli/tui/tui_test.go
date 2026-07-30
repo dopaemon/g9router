@@ -732,6 +732,14 @@ func TestQuotaLoadingUsesSkeleton(t *testing.T) {
 	}
 }
 
+func TestLoadingTextUsesBubbleSpinner(t *testing.T) {
+	ui := &UI{Locale: i18n.English}
+	text := ui.loadingText("Loading")
+	if !strings.Contains(text, "⠋") || !strings.Contains(text, "Loading") {
+		t.Fatalf("loading text = %q", text)
+	}
+}
+
 func TestProviderViewportKeepsLongListBounded(t *testing.T) {
 	items := make([]provider, 20)
 	for index := range items {
