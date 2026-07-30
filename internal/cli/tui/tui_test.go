@@ -401,6 +401,19 @@ func TestResponsiveCardGridFitsTerminalWidths(t *testing.T) {
 	}
 }
 
+func TestCLIToolCardsFitTheirColumns(t *testing.T) {
+	ui := &UI{width: 120, height: 40, Locale: i18n.English}
+	width := ui.responsiveCardWidth(len(cliToolOrder), 30)
+	for index, id := range cliToolOrder {
+		card := cliToolCard(ui, width, index, id, cliToolStatus{}, index == 1)
+		for lineIndex, line := range strings.Split(card, "\n") {
+			if got := lipgloss.Width(line); got > width {
+				t.Fatalf("tool %s line %d width=%d, want <=%d: %q", id, lineIndex, got, width, line)
+			}
+		}
+	}
+}
+
 func TestTUIResizeUpdatesLayoutImmediately(t *testing.T) {
 	ui := &UI{width: 80, height: 24}
 	model := sizedModel{ui: ui, model: &mainMenuModel{ui: ui, items: []string{"Providers", "Settings"}}}

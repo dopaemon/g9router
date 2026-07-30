@@ -153,10 +153,11 @@ func (model *cliToolsModel) View() string {
 		visible := max(1, min(5, model.ui.viewportHeight(8, 10)/2))
 		start, end := viewportWindow(model.cursor, len(cliToolOrder), visible)
 		for index := start; index < end; index++ {
-			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
+			cards = append(cards, lipgloss.NewStyle().Width(model.ui.innerWidth()).Render(cliToolCard(model.ui, model.ui.innerWidth(), index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 		}
 	} else {
-		column := lipgloss.NewStyle().Width(model.ui.responsiveCardWidth(len(cliToolOrder), 30))
+		cardWidth := model.ui.responsiveCardWidth(len(cliToolOrder), 30)
+		column := lipgloss.NewStyle().Width(cardWidth)
 		rowCount := (len(cliToolOrder) + columns - 1) / columns
 		visibleRows := max(1, min(3, model.ui.viewportHeight(8, 6)/2))
 		startRow, endRow := viewportWindow(model.cursor/columns, rowCount, visibleRows)
@@ -167,7 +168,7 @@ func (model *cliToolsModel) View() string {
 				if index >= len(cliToolOrder) {
 					break
 				}
-				rowCards = append(rowCards, column.Render(cliToolCard(model.ui, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
+				rowCards = append(rowCards, column.Render(cliToolCard(model.ui, cardWidth, index, cliToolOrder[index], model.statuses[cliToolOrder[index]], index == model.cursor)))
 			}
 			cards = append(cards, lipgloss.JoinHorizontal(lipgloss.Top, rowCards...))
 		}
@@ -187,7 +188,7 @@ func (model *cliToolsModel) columns() int {
 	return model.ui.responsiveColumns(len(cliToolOrder), 30)
 }
 
-func cliToolCard(ui *UI, index int, id string, status cliToolStatus, selected bool) string {
+func cliToolCard(ui *UI, width, index int, id string, status cliToolStatus, selected bool) string {
 	label := cliToolLabels[id]
 	state := ui.t("status.notInstalled")
 	color := "#94A3B8"
@@ -203,7 +204,7 @@ func cliToolCard(ui *UI, index int, id string, status cliToolStatus, selected bo
 	} else {
 		title = cardTitleStyle.Render(title)
 	}
-	return innerCardStyle.Padding(0, 1).Render(title + "\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color)).Render(state))
+	return innerCardStyle.Width(max(1, width-2)).Padding(0, 1).Render(title + "\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color)).Render(state))
 }
 
 func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
