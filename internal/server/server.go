@@ -1459,10 +1459,11 @@ func (s *Server) codexSettingsAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		raw, readErr := os.ReadFile(configPath)
+		authRaw, _ := os.ReadFile(authPath)
 		_, cliErr := exec.LookPath("codex")
 		installed := cliErr == nil || readErr == nil
 		config := string(raw)
-		writeJSON(w, 200, map[string]any{"installed": installed, "config": config, "has9Router": strings.Contains(config, `model_provider = "9router"`) || strings.Contains(config, "[model_providers.9router]"), "configPath": configPath})
+		writeJSON(w, 200, map[string]any{"installed": installed, "config": config, "auth": string(authRaw), "has9Router": strings.Contains(config, `model_provider = "9router"`) || strings.Contains(config, "[model_providers.9router]"), "configPath": configPath, "authPath": authPath})
 	case http.MethodPost:
 		var input struct {
 			BaseURL       string `json:"baseUrl"`

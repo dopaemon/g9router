@@ -107,31 +107,14 @@ const cliBanner = ` ██████╗  █████╗ ██████
  ╚═════╝  ╚════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝`
 
 func (ui *UI) showJSON(reader *bufio.Reader, path string) error {
-	request, err := http.NewRequest(http.MethodGet, ui.BaseURL+path, nil)
-	if err != nil {
-		return err
-	}
-	response, err := ui.Client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
-	if err != nil {
-		return err
-	}
 	var value any
-	if json.Unmarshal(data, &value) == nil {
-		pretty, _ := json.MarshalIndent(redactSecrets(value), "", "  ")
-		fmt.Fprintln(ui.Out, string(pretty))
-	} else {
-		fmt.Fprintln(ui.Out, string(data))
+	if err := ui.request(http.MethodGet, path, nil, &value); err != nil {
+		return err
 	}
+	pretty, _ := json.MarshalIndent(redactSecrets(value), "", "  ")
+	fmt.Fprintln(ui.Out, string(pretty))
 	fmt.Fprint(ui.Out, "Press Enter to continue...")
 	_, _ = reader.ReadString('\n')
-	if response.StatusCode >= 400 {
-		return fmt.Errorf("HTTP %s", response.Status)
-	}
 	return nil
 }
 

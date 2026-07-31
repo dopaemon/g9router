@@ -37,6 +37,70 @@ func TestRunCLIToolsBack(t *testing.T) {
 	}
 }
 
+func TestShowJSONUsesLocalCLIAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-G9Router-Local-CLI") != "1" {
+			t.Fatal("missing local CLI auth header")
+		}
+		_, _ = fmt.Fprint(w, `{"model":"cc/test","token":"secret"}`)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	ui := &UI{BaseURL: server.URL, Out: &output, Client: server.Client()}
+	if err := ui.showJSON(bufio.NewReader(strings.NewReader("\n")), "/api/cli-tools/codex-settings"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "cc/test") || strings.Contains(output.String(), "secret") {
+		t.Fatalf("show output = %q", output.String())
+	}
+}
+
+func TestCodexModelOptionsOnlyShowLoggedCodexModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/providers":
+			_, _ = fmt.Fprint(w, `{"connections":[{"id":"codex","enabled":true,"accounts":[{"id":"codex","enabled":true}]}]}`)
+		case "/api/models":
+			_, _ = fmt.Fprint(w, `{"models":[{"provider":"codex","routedModel":"cx/gpt-5.5","name":"GPT 5.5"},{"provider":"openai","routedModel":"openai/gpt-5.5","name":"GPT 5.5"}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	ui := &UI{BaseURL: server.URL, Client: server.Client()}
+	options, err := ui.codexModelOptions()
+	if err != nil || len(options) != 1 || !strings.HasPrefix(options[0], "cx/") {
+		t.Fatalf("options=%v err=%v", options, err)
+	}
+}
+
+func TestShowCodexFilesGeneratesCurrentConfig(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/keys":
+			_, _ = fmt.Fprint(w, `{"keys":[{"id":"key-1","name":"default"}]}`)
+		case "/api/keys/key-1":
+			_, _ = fmt.Fprint(w, `{"key":{"id":"key-1","key":"sk-router"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	ui := &UI{BaseURL: server.URL, Out: &output, Client: server.Client()}
+	if err := ui.showCodexFiles(strings.NewReader("\n"), &output, "cx/gpt-5.6-luna · GPT 5.6 Luna"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"model = \"cx/gpt-5.6-luna\"", `base_url = "` + server.URL + `/v1"`, `"OPENAI_API_KEY": "sk-router"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("generated config missing %q: %s", want, output.String())
+		}
+	}
+}
+
 func TestQuickSetupOpenCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

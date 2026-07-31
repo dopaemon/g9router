@@ -7,9 +7,7 @@ import (
 	"strings"
 
 	"g9router/internal/i18n"
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 var errUserAborted = errors.New("user aborted")
@@ -47,15 +45,6 @@ type tuiFormResult struct {
 	selected [][]string
 	confirms []bool
 }
-
-type tuiListItem struct {
-	title       string
-	description string
-}
-
-func (item tuiListItem) FilterValue() string { return item.title }
-func (item tuiListItem) Title() string       { return item.title }
-func (item tuiListItem) Description() string { return item.description }
 
 func (ui *UI) runTUIForm(title string, fields []tuiField, input io.Reader, output io.Writer) (tuiFormResult, error) {
 	model := &tuiForm{ui: ui, title: title, fields: fields}
@@ -299,30 +288,17 @@ func (model *tuiForm) optionRows(field *tuiField) string {
 			selected = 0
 		}
 	}
-	items := make([]list.Item, len(options))
-	for index, option := range options {
-		items[index] = tuiListItem{title: option}
+	start, end := viewportWindow(selected, len(options), model.ui.viewportHeight(9, 10))
+	rows := make([]string, 0, end-start)
+	for index := start; index < end; index++ {
+		marker := " "
+		if index == selected {
+			marker = ">"
+		}
+		line := fmt.Sprintf("%s %d  %s", marker, index+1, options[index])
+		rows = append(rows, truncateText(line, model.ui.innerWidth()-2))
 	}
-	delegate := list.NewDefaultDelegate()
-	delegate.Styles.NormalTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E2E8F0")).Padding(0, 0, 0, 2)
-	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EE6FF8")).Padding(0, 0, 0, 2)
-	delegate.Styles.NormalDesc = delegate.Styles.NormalTitle
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedTitle
-	delegate.ShowDescription = false
-	delegate.SetHeight(1)
-	delegate.SetSpacing(0)
-	visibleHeight := 8
-	if model.ui.height > 0 {
-		visibleHeight = max(1, min(8, model.ui.height-10))
-	}
-	menu := list.New(items, delegate, model.ui.innerWidth(), visibleHeight)
-	menu.SetShowTitle(false)
-	menu.SetShowStatusBar(false)
-	menu.SetShowPagination(false)
-	menu.SetShowHelp(false)
-	menu.SetFilteringEnabled(false)
-	menu.Select(selected)
-	return strings.TrimRight(menu.View(), "\n")
+	return strings.Join(rows, "\n")
 }
 
 func (model *tuiForm) multiSelectRows(field *tuiField) string {

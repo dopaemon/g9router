@@ -2,11 +2,14 @@ package tui
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -126,14 +129,19 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, cliToolsRefresh()
 	case cliToolsActionDoneMsg:
 		model.actionRunning = false
-		if errors.Is(message.err, errUserAborted) {
+		aborted := errors.Is(message.err, errUserAborted)
+		if aborted {
 			message.err = nil
 			message.notice = ""
 		}
 		model.err, model.notice = message.err, message.notice
 		if model.err == nil {
 			model.refreshing = true
-			return model, model.refreshCmd()
+			refresh := model.refreshCmd()
+			if aborted {
+				return model, tea.Batch(func() tea.Msg { return tea.ClearScreen() }, refresh)
+			}
+			return model, refresh
 		}
 		return model, cliToolsRefresh()
 	}
@@ -218,6 +226,9 @@ func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error
 }
 
 func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, error) {
+	if cliToolOrder[model.cursor] == "codex" {
+		return "", model.codexSetup(input, output)
+	}
 	path := cliToolPaths[cliToolOrder[model.cursor]]
 	if path == "" {
 		return "settings unavailable", nil
@@ -228,6 +239,137 @@ func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, err
 	model.ui.In, model.ui.Out = oldIn, oldOut
 	return "", err
 }
+
+func (model *cliToolsModel) codexSetup(input io.Reader, output io.Writer) error {
+	mode, err := model.ui.tuiSelect("Codex setup", "Mode", []string{"Manual", "Auto"}, input, output)
+	if err != nil {
+		return err
+	}
+	models, err := model.ui.codexModelOptions()
+	if err != nil {
+		return err
+	}
+	selected, err := model.ui.tuiSelect("Codex setup", "Model", models, input, output)
+	if err != nil {
+		return err
+	}
+	if mode == "Manual" {
+		return model.ui.showCodexFiles(input, output, selected)
+	}
+	return model.ui.applyCodexSettings(selected)
+}
+
+func (ui *UI) codexModelOptions() ([]string, error) {
+	var connections providersResponse
+	if err := ui.request(http.MethodGet, "/api/providers", nil, &connections); err != nil {
+		return nil, err
+	}
+	loggedIn := false
+	for _, connection := range connections.Connections {
+		if !strings.EqualFold(connection.ID, "codex") && !strings.EqualFold(connection.OAuthID, "codex") {
+			continue
+		}
+		if connection.Enabled && len(connection.Accounts) == 0 {
+			loggedIn = true
+		}
+		for _, account := range connection.Accounts {
+			loggedIn = loggedIn || account.Enabled
+		}
+	}
+	if !loggedIn {
+		return nil, errors.New("no logged-in Codex account")
+	}
+	var payload struct {
+		Models []struct {
+			Provider    string `json:"provider"`
+			RoutedModel string `json:"routedModel"`
+			FullModel   string `json:"fullModel"`
+			Model       string `json:"model"`
+			Name        string `json:"name"`
+		} `json:"models"`
+	}
+	if err := ui.request(http.MethodGet, "/api/models", nil, &payload); err != nil {
+		return nil, err
+	}
+	options := make([]string, 0, len(payload.Models))
+	for _, model := range payload.Models {
+		if !strings.EqualFold(model.Provider, "codex") && !strings.HasPrefix(model.RoutedModel, "cx/") && !strings.HasPrefix(model.FullModel, "codex/") {
+			continue
+		}
+		value := model.RoutedModel
+		if value == "" {
+			value = model.FullModel
+		}
+		if value == "" {
+			value = model.Model
+		}
+		if value == "" {
+			continue
+		}
+		if model.Name != "" && model.Name != value {
+			value += " · " + model.Name
+		}
+		options = append(options, value)
+	}
+	if len(options) == 0 {
+		return nil, errors.New("no models available")
+	}
+	return options, nil
+}
+
+func (ui *UI) showCodexFiles(input io.Reader, output io.Writer, model string) error {
+	key, err := ui.firstAPIKey()
+	if err != nil {
+		return err
+	}
+	modelID := codexModelID(model)
+	config := fmt.Sprintf("model = %q\nmodel_provider = \"9router\"\nmodel_reasoning_effort = \"medium\"\n\n[model_providers.9router]\nname = \"9Router\"\nbase_url = %q\nwire_api = \"responses\"\n\n[agents.subagent]\nmodel = %q\n", modelID, strings.TrimRight(ui.BaseURL, "/")+"/v1", modelID)
+	auth, _ := json.MarshalIndent(map[string]string{"auth_mode": "apikey", "OPENAI_API_KEY": key}, "", "  ")
+	fmt.Fprintf(output, "\n=== New ~/.codex/config.toml ===\n%s\n=== New ~/.codex/auth.json ===\n%s\n", config, auth)
+	fmt.Fprint(output, "Press Enter to continue...")
+	_, _ = bufio.NewReader(input).ReadString('\n')
+	return nil
+}
+
+func (ui *UI) applyCodexSettings(model string) error {
+	key, err := ui.firstAPIKey()
+	if err != nil {
+		return err
+	}
+	return ui.request(http.MethodPost, "/api/cli-tools/codex-settings", map[string]any{
+		"baseUrl": strings.TrimRight(ui.BaseURL, "/") + "/v1",
+		"apiKey":  key,
+		"model":   codexModelID(model),
+	}, nil)
+}
+
+func (ui *UI) firstAPIKey() (string, error) {
+	var payload struct {
+		Keys []apiKey `json:"keys"`
+	}
+	if err := ui.request(http.MethodGet, "/api/keys", nil, &payload); err != nil {
+		return "", err
+	}
+	if len(payload.Keys) == 0 {
+		return "", errors.New("no API keys available")
+	}
+	key := payload.Keys[0].Key
+	if strings.TrimSpace(key) == "" {
+		var detail struct {
+			Key apiKey `json:"key"`
+		}
+		if err := ui.request(http.MethodGet, "/api/keys/"+url.PathEscape(payload.Keys[0].ID), nil, &detail); err != nil {
+			return "", err
+		}
+		key = detail.Key.Key
+	}
+	if strings.TrimSpace(key) == "" {
+		return "", errors.New("selected API key is empty")
+	}
+	return key, nil
+}
+
+func codexModelID(value string) string { return strings.TrimSpace(strings.SplitN(value, " · ", 2)[0]) }
 
 func (model *cliToolsModel) reset(input io.Reader, output io.Writer) (string, error) {
 	id := cliToolOrder[model.cursor]
