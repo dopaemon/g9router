@@ -1382,7 +1382,8 @@ func (s *Server) claudeSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"installed": installed, "settings": settings, "has9Router": hasRouter, "exaMcpEnabled": false, "settingsPath": settingsPath})
 	case http.MethodPost:
 		var input struct {
-			Env map[string]any `json:"env"`
+			Env              map[string]any `json:"env"`
+			MaxContextTokens string         `json:"maxContextTokens"`
 		}
 		if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input) != nil || input.Env == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid env object"})
@@ -1402,6 +1403,11 @@ func (s *Server) claudeSettingsAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		for key, value := range input.Env {
 			env[key] = value
+		}
+		if input.MaxContextTokens != "" {
+			env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = input.MaxContextTokens
+		} else {
+			delete(env, "CLAUDE_CODE_MAX_CONTEXT_TOKENS")
 		}
 		current["env"] = env
 		if err := os.MkdirAll(filepath.Dir(settingsPath), 0700); err != nil {
@@ -1430,7 +1436,7 @@ func (s *Server) claudeSettingsAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if env, ok := current["env"].(map[string]any); ok {
-			for _, key := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "API_TIMEOUT_MS"} {
+			for _, key := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "API_TIMEOUT_MS", "CLAUDE_CODE_MAX_CONTEXT_TOKENS"} {
 				delete(env, key)
 			}
 			if len(env) == 0 {

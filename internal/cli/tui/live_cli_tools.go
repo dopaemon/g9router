@@ -21,6 +21,15 @@ type cliToolsActionDoneMsg struct {
 	notice string
 	err    error
 }
+type cliToolsCodexModelsMsg struct {
+	models []string
+	err    error
+}
+type cliToolsCodexDoneMsg struct {
+	detail string
+	err    error
+}
+type cliToolsCodexOutputDoneMsg struct{ err error }
 type cliToolsDataMsg struct {
 	statuses map[string]cliToolStatus
 	err      error
@@ -37,7 +46,13 @@ type cliToolsModel struct {
 	cursor        int
 	statuses      map[string]cliToolStatus
 	notice        string
+	detail        string
 	err           error
+	codexStage    int
+	codexMode     int
+	codexCursor   int
+	codexModels   []string
+	codexLoading  bool
 	loading       bool
 	refreshing    bool
 	actionRunning bool
@@ -78,6 +93,9 @@ func (model *cliToolsModel) Init() tea.Cmd {
 func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.KeyMsg:
+		if model.codexStage > 0 {
+			return model.updateCodex(message)
+		}
 		if model.err != nil && message.String() == "r" {
 			model.err = nil
 			model.loading = true
@@ -88,7 +106,7 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return model, nil
 			}
 			model.cursor = index - 1
-			return model, model.action(model.show)
+			return model, model.selectTool()
 		}
 		switch message.String() {
 		case "q", "esc", "ctrl+c":
@@ -105,7 +123,7 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if model.loading || model.actionRunning {
 				return model, nil
 			}
-			return model, model.action(model.show)
+			return model, model.selectTool()
 		case "r":
 			if model.loading || model.actionRunning {
 				return model, nil
@@ -143,7 +161,32 @@ func (model *cliToolsModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return model, refresh
 		}
-		return model, cliToolsRefresh()
+		return model, nil
+	case cliToolsCodexModelsMsg:
+		model.codexLoading = false
+		if message.err != nil {
+			model.codexStage, model.err = 0, message.err
+			return model, cliToolsRefresh()
+		}
+		model.codexModels, model.codexCursor = message.models, 0
+		model.codexStage = 2
+		return model, nil
+	case cliToolsCodexDoneMsg:
+		model.codexLoading = false
+		model.codexStage = 0
+		if message.err != nil {
+			model.err = message.err
+			return model, nil
+		}
+		return model, model.codexOutputCmd(message.detail)
+	case cliToolsCodexOutputDoneMsg:
+		model.detail = ""
+		if message.err != nil {
+			model.err = message.err
+			return model, cliToolsRefresh()
+		}
+		model.refreshing = true
+		return model, model.refreshCmd()
 	}
 	return model, nil
 }
@@ -154,6 +197,9 @@ func (model *cliToolsModel) View() string {
 	}
 	if model.err != nil && len(model.statuses) == 0 {
 		return model.ui.errorView(model.ui.t("menu.cliTools"), model.err)
+	}
+	if model.codexStage > 0 {
+		return model.codexView()
 	}
 	columns := model.columns()
 	cards := make([]string, 0, (len(cliToolOrder)+columns-1)/columns)
@@ -189,7 +235,112 @@ func (model *cliToolsModel) View() string {
 		controlsText += "\n" + successStyle.Render(model.notice)
 	}
 	controls := model.ui.controlCard(model.ui.t("common.controls"), controlsText)
-	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, cards...) + "\n\n" + controls)
+	content := lipgloss.JoinVertical(lipgloss.Left, cards...)
+	if model.err != nil {
+		content = errorStyle.Render(model.ui.t("common.error")+": "+model.ui.errorSummary(model.err)) + "\n\n" + content
+	}
+	if model.detail != "" {
+		content += "\n\n" + model.ui.innerStyle().Render(cardTitleStyle.Render("New Codex configuration")+"\n"+model.detail)
+	}
+	return model.ui.outerStyle().Render(cardTitleStyle.Render(model.ui.t("menu.cliTools")) + "\n\n" + content + "\n\n" + controls)
+}
+
+func (model *cliToolsModel) selectTool() tea.Cmd {
+	if cliToolOrder[model.cursor] != "codex" {
+		return model.action(model.show)
+	}
+	model.detail = ""
+	model.err = nil
+	model.codexStage, model.codexMode, model.codexCursor = 1, 0, 0
+	model.codexModels = nil
+	return nil
+}
+
+func (model *cliToolsModel) updateCodex(message tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if model.codexLoading {
+		return model, nil
+	}
+	switch message.String() {
+	case "q", "esc", "ctrl+c":
+		model.codexStage = 0
+		return model, nil
+	case "up", "k":
+		model.codexCursor = cycleIndex(model.codexCursor, model.codexOptionCount(), -1)
+	case "down", "j":
+		model.codexCursor = cycleIndex(model.codexCursor, model.codexOptionCount(), 1)
+	case "enter", " ":
+		if model.codexStage == 1 {
+			model.codexMode = model.codexCursor
+			model.codexStage = 2
+			model.codexLoading = true
+			return model, model.codexModelsCmd()
+		}
+		model.codexLoading = true
+		return model, model.codexApplyCmd()
+	default:
+		if len(message.Runes) == 1 && message.Runes[0] >= '1' && int(message.Runes[0]-'1') < model.codexOptionCount() {
+			model.codexCursor = int(message.Runes[0] - '1')
+		}
+	}
+	return model, nil
+}
+
+func (model *cliToolsModel) codexOptionCount() int {
+	if model.codexStage == 1 {
+		return 2
+	}
+	return len(model.codexModels)
+}
+
+func (model *cliToolsModel) codexView() string {
+	options := []string{"Manual", "Auto"}
+	label := "Mode"
+	if model.codexStage == 2 {
+		options, label = model.codexModels, "Model"
+	}
+	rows := make([]string, 0, len(options))
+	for index, option := range options {
+		marker := " "
+		if index == model.codexCursor {
+			marker = ">"
+		}
+		rows = append(rows, truncateText(fmt.Sprintf("%s %d  %s", marker, index+1, option), model.ui.innerWidth()-2))
+	}
+	if model.codexLoading {
+		rows = append(rows, "", model.ui.loadingText(model.ui.t("common.loading")))
+	}
+	controls := model.ui.controlCard(model.ui.t("common.controls"), model.ui.controlColumns(
+		"↑↓/jk move", "Enter select", "q back",
+	))
+	return model.ui.outerStyle().Render(cardTitleStyle.Render("Codex setup") + "\n\n" + cardTitleStyle.Render(label) + "\n" + strings.Join(rows, "\n") + "\n\n" + controls)
+}
+
+func (model *cliToolsModel) codexModelsCmd() tea.Cmd {
+	ui := model.ui
+	return func() tea.Msg {
+		models, err := ui.codexModelOptions()
+		return cliToolsCodexModelsMsg{models: models, err: err}
+	}
+}
+
+func (model *cliToolsModel) codexApplyCmd() tea.Cmd {
+	ui, selected, mode := model.ui, model.codexModels[model.codexCursor], model.codexMode
+	return func() tea.Msg {
+		if mode == 1 {
+			return cliToolsCodexDoneMsg{err: ui.applyCodexSettings(selected)}
+		}
+		detail, err := ui.showCodexFiles(selected)
+		return cliToolsCodexDoneMsg{detail: detail, err: err}
+	}
+}
+
+func (model *cliToolsModel) codexOutputCmd(detail string) tea.Cmd {
+	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
+		fmt.Fprintln(output, detail)
+		fmt.Fprintln(output, "\nPress Enter to return to CLI Tools...")
+		_, _ = bufio.NewReader(input).ReadString('\n')
+		return nil
+	}}, func(err error) tea.Msg { return cliToolsCodexOutputDoneMsg{err: err} })
 }
 
 func (model *cliToolsModel) columns() int {
@@ -217,6 +368,7 @@ func cliToolCard(ui *UI, width, index int, id string, status cliToolStatus, sele
 
 func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error)) tea.Cmd {
 	model.actionRunning = true
+	model.detail = ""
 	var notice string
 	return tea.Exec(&endpointExecCommand{run: func(input io.Reader, output io.Writer) error {
 		var err error
@@ -226,8 +378,8 @@ func (model *cliToolsModel) action(run func(io.Reader, io.Writer) (string, error
 }
 
 func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, error) {
-	if cliToolOrder[model.cursor] == "codex" {
-		return "", model.codexSetup(input, output)
+	if cliToolOrder[model.cursor] == "claude" {
+		return "", model.ui.claudeSetup(input, output)
 	}
 	path := cliToolPaths[cliToolOrder[model.cursor]]
 	if path == "" {
@@ -240,23 +392,19 @@ func (model *cliToolsModel) show(input io.Reader, output io.Writer) (string, err
 	return "", err
 }
 
-func (model *cliToolsModel) codexSetup(input io.Reader, output io.Writer) error {
-	mode, err := model.ui.tuiSelect("Codex setup", "Mode", []string{"Manual", "Auto"}, input, output)
+func (ui *UI) claudeSetup(input io.Reader, output io.Writer) error {
+	selected, err := ui.tuiSelect("Claude Code", "Context window", []string{"Default", "200K", "300K", "500K", "1M"}, input, output)
 	if err != nil {
 		return err
 	}
-	models, err := model.ui.codexModelOptions()
-	if err != nil {
-		return err
-	}
-	selected, err := model.ui.tuiSelect("Codex setup", "Model", models, input, output)
-	if err != nil {
-		return err
-	}
-	if mode == "Manual" {
-		return model.ui.showCodexFiles(input, output, selected)
-	}
-	return model.ui.applyCodexSettings(selected)
+	return ui.request(http.MethodPost, "/api/cli-tools/claude-settings", map[string]any{
+		"env":              map[string]string{},
+		"maxContextTokens": claudeContextTokens(selected),
+	}, nil)
+}
+
+func claudeContextTokens(value string) string {
+	return map[string]string{"200K": "198000", "300K": "298000", "500K": "498000", "1M": "998000"}[value]
 }
 
 func (ui *UI) codexModelOptions() ([]string, error) {
@@ -317,18 +465,15 @@ func (ui *UI) codexModelOptions() ([]string, error) {
 	return options, nil
 }
 
-func (ui *UI) showCodexFiles(input io.Reader, output io.Writer, model string) error {
+func (ui *UI) showCodexFiles(model string) (string, error) {
 	key, err := ui.firstAPIKey()
 	if err != nil {
-		return err
+		return "", err
 	}
 	modelID := codexModelID(model)
 	config := fmt.Sprintf("model = %q\nmodel_provider = \"9router\"\nmodel_reasoning_effort = \"medium\"\n\n[model_providers.9router]\nname = \"9Router\"\nbase_url = %q\nwire_api = \"responses\"\n\n[agents.subagent]\nmodel = %q\n", modelID, strings.TrimRight(ui.BaseURL, "/")+"/v1", modelID)
 	auth, _ := json.MarshalIndent(map[string]string{"auth_mode": "apikey", "OPENAI_API_KEY": key}, "", "  ")
-	fmt.Fprintf(output, "\n=== New ~/.codex/config.toml ===\n%s\n=== New ~/.codex/auth.json ===\n%s\n", config, auth)
-	fmt.Fprint(output, "Press Enter to continue...")
-	_, _ = bufio.NewReader(input).ReadString('\n')
-	return nil
+	return fmt.Sprintf("=== New ~/.codex/config.toml ===\n%s\n=== New ~/.codex/auth.json ===\n%s", config, auth), nil
 }
 
 func (ui *UI) applyCodexSettings(model string) error {

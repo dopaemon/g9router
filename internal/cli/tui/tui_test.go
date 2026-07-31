@@ -91,13 +91,47 @@ func TestShowCodexFilesGeneratesCurrentConfig(t *testing.T) {
 
 	var output bytes.Buffer
 	ui := &UI{BaseURL: server.URL, Out: &output, Client: server.Client()}
-	if err := ui.showCodexFiles(strings.NewReader("\n"), &output, "cx/gpt-5.6-luna · GPT 5.6 Luna"); err != nil {
+	config, err := ui.showCodexFiles("cx/gpt-5.6-luna · GPT 5.6 Luna")
+	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"model = \"cx/gpt-5.6-luna\"", `base_url = "` + server.URL + `/v1"`, `"OPENAI_API_KEY": "sk-router"`} {
-		if !strings.Contains(output.String(), want) {
-			t.Fatalf("generated config missing %q: %s", want, output.String())
+		if !strings.Contains(config, want) {
+			t.Fatalf("generated config missing %q: %s", want, config)
 		}
+	}
+}
+
+func TestClaudeContextTokens(t *testing.T) {
+	for value, want := range map[string]string{"Default": "", "200K": "198000", "300K": "298000", "500K": "498000", "1M": "998000"} {
+		if got := claudeContextTokens(value); got != want {
+			t.Fatalf("claudeContextTokens(%q) = %q, want %q", value, got, want)
+		}
+	}
+}
+
+func TestCLIToolsCodexSetupUsesParentState(t *testing.T) {
+	model := &cliToolsModel{
+		ui:       &UI{width: 100, height: 40, Locale: i18n.English},
+		cursor:   1,
+		statuses: map[string]cliToolStatus{},
+	}
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(*cliToolsModel)
+	if model.codexStage != 1 {
+		t.Fatalf("stage after selecting Codex = %d, want mode stage", model.codexStage)
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(*cliToolsModel)
+	if model.codexStage != 2 || !model.codexLoading {
+		t.Fatalf("stage after selecting Manual = %d loading=%v", model.codexStage, model.codexLoading)
+	}
+	updated, _ = model.Update(cliToolsCodexModelsMsg{models: []string{"cx/test"}})
+	model = updated.(*cliToolsModel)
+	updated, command := model.Update(cliToolsCodexDoneMsg{detail: "=== New ~/.codex/config.toml ===\nmodel = \"cx/test\""})
+	model = updated.(*cliToolsModel)
+	if model.codexStage != 0 || command == nil {
+		t.Fatalf("Codex output command missing after model selection: stage=%d command=%v", model.codexStage, command != nil)
 	}
 }
 
